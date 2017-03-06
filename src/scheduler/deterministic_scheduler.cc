@@ -15,7 +15,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
-#include <unordered_map>
+#include <tr1/unordered_map>
 #include <utility>
 #include <sched.h>
 #include <map>
@@ -37,7 +37,7 @@
 
 using std::pair;
 using std::string;
-using std::unordered_map;
+using std::tr1::unordered_map;
 using zmq::socket_t;
 using std::map;
 

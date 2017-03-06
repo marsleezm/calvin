@@ -14,15 +14,13 @@
 #include <string>
 #include <cmath>
 #include <vector>
-//#include <tr1/unordered_map>
-#include <unordered_map>
+#include <tr1/unordered_map>
 
 #include "common/types.h"
 
 using std::string;
 using std::vector;
-//using std::tr1::unordered_map;
-using std::unordered_map;
+using std::tr1::unordered_map;
 
 #define ASSERTS_ON true
 

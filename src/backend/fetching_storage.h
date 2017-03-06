@@ -14,7 +14,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
-#include <csignal>
 
 #include "common/utils.h"
 #include "backend/storage.h"

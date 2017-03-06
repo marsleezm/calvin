@@ -10,7 +10,6 @@
 #include <set>
 #include <string>
 #include <queue>
-#include "pthread.h"
 
 //#define PAXOS
 //#define PREFETCHING

@@ -181,9 +181,9 @@ bool FetchingStorage::Unfetch(const Key& key) {
 
 ///////////////// Asynchronous Callbacks ////////////////////////
 
-void FetchingStorage::PrefetchCompletionHandler(sigval l_sigval) {
+void FetchingStorage::PrefetchCompletionHandler(sigval_t sigval) {
   struct aiocb *req;
-  req = (struct aiocb *)l_sigval.sival_ptr;
+  req = (struct aiocb *)sigval.sival_ptr;
   /* Did the request complete? */
   if (aio_error(req) == 0) {
     /* Request completed successfully, get the return status */
@@ -208,9 +208,9 @@ void FetchingStorage::PrefetchCompletionHandler(sigval l_sigval) {
   }
 }
 
-void FetchingStorage::UnfetchCompletionHandler(sigval l_sigval) {
+void FetchingStorage::UnfetchCompletionHandler(sigval_t sigval) {
   struct aiocb *req;
-  req = (struct aiocb *)l_sigval.sival_ptr;
+  req = (struct aiocb *)sigval.sival_ptr;
   /* Did the request complete? */
   if (aio_error(req) == 0) {
     /* Request completed successfully, get the return status */

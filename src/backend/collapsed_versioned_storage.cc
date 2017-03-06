@@ -4,7 +4,6 @@
 
 #include "backend/collapsed_versioned_storage.h"
 
-#include <pthread.h>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -146,7 +145,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
 
   // First, we open the file for writing
   char log_name[200];
-  snprintf(log_name, sizeof(log_name), "%s/%ld.checkpoint", CHKPNTDIR, (long)stable_);
+  snprintf(log_name, sizeof(log_name), "%s/%ld.checkpoint", CHKPNTDIR, stable_);
   FILE* checkpoint = fopen(log_name, "w");
 
   // Next we iterate through all of the objects and write the stable version
@@ -182,7 +181,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
   for (int64 i = 0; i < MAXARRAYSIZE; i++) {
     if (NewOrderStore[i] != NULL) {
       fprintf(checkpoint, "%ld%s",
-              static_cast<long>((*NewOrderStore[i]).length()),
+              static_cast<int64>((*NewOrderStore[i]).length()),
               (*NewOrderStore[i]).c_str());
     }
   }
@@ -191,7 +190,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
   for (int64 i = 0; i < MAXARRAYSIZE; i++) {
     if (OrderStore[i] != NULL) {
       fprintf(checkpoint, "%ld%s",
-              static_cast<long>((*OrderStore[i]).length()),
+              static_cast<int64>((*OrderStore[i]).length()),
               (*OrderStore[i]).c_str());
     }
   }
@@ -200,7 +199,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
   for (int64 i = 0; i < MAXARRAYSIZE * 15; i++) {
     if (OrderLineStore[i] != NULL) {
       fprintf(checkpoint, "%ld%s",
-              static_cast<long>((*OrderLineStore[i]).length()),
+              static_cast<int64>((*OrderLineStore[i]).length()),
               (*OrderLineStore[i]).c_str());
     }
   }
@@ -209,7 +208,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
   for (int64 i = 0; i < MAXARRAYSIZE; i++) {
     if (HistoryStore[i] != NULL) {
       fprintf(checkpoint, "%ld%s",
-              static_cast<long>((*HistoryStore[i]).length()),
+              static_cast<int64>((*HistoryStore[i]).length()),
               (*HistoryStore[i]).c_str());
     }
   }

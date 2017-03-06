@@ -22,15 +22,13 @@
 
 #include <ucontext.h>
 
-//#include <tr1/unordered_map>
-#include <unordered_map>
+#include <tr1/unordered_map>
 #include <vector>
 
 #include "common/types.h"
 
 using std::vector;
-//using std::tr1::unordered_map;
-using std::unordered_map;
+using std::tr1::unordered_map;
 
 class Configuration;
 class Connection;

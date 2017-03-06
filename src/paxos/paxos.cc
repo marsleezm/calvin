@@ -69,7 +69,7 @@ Paxos::Paxos(const string& zookeeper_config_file, bool reader) {
     for (uint64 i = 0; i < CONCURRENT_GETS; i++) {
       char current_read_batch_path[23];
       snprintf(current_read_batch_path, sizeof(current_read_batch_path),
-               "%s%010lu", "/root/batch-", (unsigned long)i);
+               "%s%010lu", "/root/batch-", i);
       int get_rc = zoo_aget(zh_, current_read_batch_path, 0,
                             get_data_completion,
                             reinterpret_cast<const void *>(
@@ -159,7 +159,7 @@ void Paxos::get_data_completion(int rc, const char *value, int value_len,
   // Continue to get a batch from zookeeper.
   char current_read_batch_path[23];
   snprintf(current_read_batch_path, sizeof(current_read_batch_path),
-           "%s%010lu", "/root/batch-", (unsigned long)next_index_for_aget);
+           "%s%010lu", "/root/batch-", next_index_for_aget);
   previous_data->first = next_index_for_aget;
   int get_rc = zoo_aget(paxos->zh_, current_read_batch_path, 0,
                         get_data_completion,
