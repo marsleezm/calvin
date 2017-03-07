@@ -34,7 +34,7 @@ class DeterministicLockManager;
 class Storage;
 class TxnProto;
 
-#define NUM_THREADS 4
+#define NUM_THREADS 5
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
