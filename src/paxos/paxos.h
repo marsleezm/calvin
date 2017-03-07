@@ -12,6 +12,8 @@
 #include <string>
 
 #include "common/types.h"
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 
 using std::map;
 using std::string;

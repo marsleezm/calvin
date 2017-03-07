@@ -66,10 +66,10 @@ Paxos::Paxos(const string& zookeeper_config_file, bool reader) {
 
   // Get batches from the zookeeper concurrently if 'reader' is set to true.
   if (reader) {
-    for (uint64 i = 0; i < CONCURRENT_GETS; i++) {
+    for (uint64_t i = 0; i < CONCURRENT_GETS; i++) {
       char current_read_batch_path[23];
       snprintf(current_read_batch_path, sizeof(current_read_batch_path),
-               "%s%010lu", "/root/batch-", i);
+               "%s%" PRIu64, "/root/batch-", i);
       int get_rc = zoo_aget(zh_, current_read_batch_path, 0,
                             get_data_completion,
                             reinterpret_cast<const void *>(
@@ -135,7 +135,7 @@ void Paxos::get_data_completion(int rc, const char *value, int value_len,
   uint64 previous_index_for_aget = previous_data->first;
   Paxos* paxos = previous_data->second;
   string batch_data(value, value_len);
-  uint64 next_index_for_aget;
+  uint64_t next_index_for_aget;
   // If zoo_aget function completed successfully, insert the batch into the
   // corresponding batch_tables_.
   if (rc == ZOK) {
@@ -159,7 +159,7 @@ void Paxos::get_data_completion(int rc, const char *value, int value_len,
   // Continue to get a batch from zookeeper.
   char current_read_batch_path[23];
   snprintf(current_read_batch_path, sizeof(current_read_batch_path),
-           "%s%010lu", "/root/batch-", next_index_for_aget);
+           "%s%" PRIu64, "/root/batch-", next_index_for_aget);
   previous_data->first = next_index_for_aget;
   int get_rc = zoo_aget(paxos->zh_, current_read_batch_path, 0,
                         get_data_completion,

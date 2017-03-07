@@ -32,7 +32,7 @@ class DeterministicLockManager {
 
  private:
   int Hash(const Key& key) {
-    uint64 hash = 2166136261;
+    uint64_t hash = 2166136261u;
     for (size_t i = 0; i < key.size(); i++) {
       hash = hash ^ (key[i]);
       hash = hash * 16777619;

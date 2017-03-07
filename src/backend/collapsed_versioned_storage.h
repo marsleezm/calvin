@@ -11,6 +11,8 @@
 #include <tr1/unordered_map>
 
 #include "backend/versioned_storage.h"
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 
 #define CHKPNTDIR "../db/checkpoints"
 
@@ -70,7 +72,7 @@ class CollapsedVersionedStorage : public VersionedStorage {
   // The stable and frozen int64 represent which transaction ID's are stable
   // to write out to storage, and which should be the latest to be overwritten
   // in the current database execution cycle, respectively.
-  int64 stable_;
+  int64_t stable_;
 };
 
 static inline void* RunCheckpointer(void* storage) {

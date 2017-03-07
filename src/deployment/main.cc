@@ -6,6 +6,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 
 #include "applications/microbenchmark.h"
 #include "applications/tpcc.h"
@@ -21,6 +22,7 @@
 
 #define HOT 100
 
+using namespace std;
 map<Key, Key> latest_order_id_for_customer;
 map<Key, int> latest_order_id_for_district;
 map<Key, int> smallest_order_id_for_district;
@@ -151,6 +153,7 @@ pthread_mutex_init(&mutex_, NULL);
 pthread_mutex_init(&mutex_for_item, NULL);
 involed_customers = new vector<Key>;
 
+  cout << "Trying to start storage" << endl;
   Storage* storage;
   if (!useFetching) {
     storage = new SimpleStorage();
@@ -164,10 +167,12 @@ storage->Initmutex();
     TPCC().InitializeStorage(storage, &config);
   }
 
+  cout << "Trying to start sequencer" << endl;
   // Initialize sequencer component and start sequencer thread running.
   Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), client,
                       storage);
 
+  cout << "Trying to start scheduler" << endl;
   // Run scheduler in main thread.
   if (argv[2][0] == 'm') {
     DeterministicScheduler scheduler(&config,

@@ -2,6 +2,10 @@
 // Author: Thaddeus Diamond (diamond@cs.yale.edu)
 //
 // A concrete implementation of TPC-C (application subclass)
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+#endif
 
 #ifndef _DB_APPLICATIONS_TPCC_H_
 #define _DB_APPLICATIONS_TPCC_H_
@@ -11,6 +15,7 @@
 #include "applications/application.h"
 #include "proto/txn.pb.h"
 #include "common/configuration.h"
+
 
 #define WAREHOUSES_PER_NODE 12
 #define DISTRICTS_PER_WAREHOUSE 10

@@ -208,8 +208,8 @@ TxnProto* TPCC::NewTxn(int64 txn_id, int txn_type, string args,
 
       // Add history key to write set
       char history_key[128];
-      snprintf(history_key, sizeof(history_key), "w%dh%ld",
-               warehouse_id, txn->txn_id());
+      snprintf(history_key, sizeof(history_key), "w%dh%" PRId64,
+               warehouse_id, static_cast<int64_t>(txn->txn_id()));
       txn->add_write_set(history_key);
 
       // Next, we find the customer as a local one
