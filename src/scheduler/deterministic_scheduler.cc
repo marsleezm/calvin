@@ -61,22 +61,17 @@ TxnProto* DeterministicScheduler::GetTxnPtr(socket_t* socket,
 DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                Connection* batch_connection,
                                                Storage* storage,
+											   AtomicQueue<TxnProto*>* txns_queue,
                                                const Application* application)
     : configuration_(conf), batch_connection_(batch_connection),
-      storage_(storage), application_(application) {
-      ready_txns_ = new std::deque<TxnProto*>();
-  lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
-  
-  txns_queue = new AtomicQueue<TxnProto*>();
-  done_queue = new AtomicQueue<TxnProto*>();
+      storage_(storage), application_(application), txns_queue_(txns_queue) {
+  lock_manager_ = new DeterministicLockManager(configuration_);
 
   for (int i = 0; i < NUM_THREADS; i++) {
     message_queues[i] = new AtomicQueue<MessageProto>();
   }
 
 Spin(2);
-
-
 
 //  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
@@ -140,12 +135,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
         active_txns.erase(message.destination_channel());
         // Respond to scheduler;
         //scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
-        scheduler->done_queue->Push(txn);
       }
     } else {
       // No remote read result found, start on next txn if one is waiting.
      TxnProto* txn;
-     bool got_it = scheduler->txns_queue->Pop(&txn);
+     bool got_it = scheduler->txns_queue_->Pop(&txn);
       if (got_it == true) {
         // Create manager.
         StorageManager* manager =
@@ -161,7 +155,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
             // Respond to scheduler;
             //scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
-            scheduler->done_queue->Push(txn);
           } else {
         scheduler->thread_connections_[thread]->
             LinkChannel(IntToString(txn->txn_id()));
@@ -177,111 +170,3 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 DeterministicScheduler::~DeterministicScheduler() {
 }
 
-// Returns ptr to heap-allocated
-unordered_map<int, MessageProto*> batches;
-MessageProto* GetBatch(int batch_id, Connection* connection) {
-  if (batches.count(batch_id) > 0) {
-    // Requested batch has already been received.
-    MessageProto* batch = batches[batch_id];
-    batches.erase(batch_id);
-    return batch;
-  } else {
-    MessageProto* message = new MessageProto();
-    while (connection->GetMessage(message)) {
-      assert(message->type() == MessageProto::TXN_BATCH);
-      if (message->batch_number() == batch_id) {
-        return message;
-      } else {
-        batches[message->batch_number()] = message;
-        message = new MessageProto();
-      }
-    }
-    delete message;
-    return NULL;
-  }
-}
-
-//void* DeterministicScheduler::LockManagerThread(void* arg) {
-  DeterministicScheduler* scheduler = reinterpret_cast<DeterministicScheduler*>(arg);
-
-  // Run main loop.
-  MessageProto message;
-  MessageProto* batch_message = NULL;
-  int txns = 0;
-  double time = GetTime();
-  int executing_txns = 0;
-  int pending_txns = 0;
-  int batch_offset = 0;
-  int batch_number = 0;
-//int test = 0;
-  while (true) {
-    TxnProto* done_txn;
-    bool got_it = scheduler->done_queue->Pop(&done_txn);
-    if (got_it == true) {
-      // We have received a finished transaction back, release the lock
-      scheduler->lock_manager_->Release(done_txn);
-      executing_txns--;
-
-      if(done_txn->writers_size() == 0 || rand() % done_txn->writers_size() == 0)
-        txns++;       
-      delete done_txn;
-
-    } else {
-      // Have we run out of txns in our batch? Let's get some new ones.
-      if (batch_message == NULL) {
-        batch_message = GetBatch(batch_number, scheduler->batch_connection_);
-
-      // Done with current batch, get next.
-      } else if (batch_offset >= batch_message->data_size()) {
-        batch_offset = 0;
-        batch_number++;
-        delete batch_message;
-        batch_message = GetBatch(batch_number, scheduler->batch_connection_);
-
-      // Current batch has remaining txns, grab up to 10.
-      } else if (executing_txns + pending_txns < 2000) {
-
-        for (int i = 0; i < 100; i++) {
-          if (batch_offset >= batch_message->data_size()) {
-            // Oops we ran out of txns in this batch. Stop adding txns for now.
-            break;
-          }
-          TxnProto* txn = new TxnProto();
-          txn->ParseFromString(batch_message->data(batch_offset));
-          batch_offset++;
-
-          scheduler->lock_manager_->Lock(txn);
-          pending_txns++;
-        }
-
-      }
-    }
-
-    // Start executing any and all ready transactions to get them off our plate
-    while (!scheduler->ready_txns_->empty()) {
-      TxnProto* txn = scheduler->ready_txns_->front();
-      scheduler->ready_txns_->pop_front();
-      pending_txns--;
-      executing_txns++;
-
-      scheduler->txns_queue->Push(txn);
-      //scheduler->SendTxnPtr(scheduler->requests_out_, txn);
-
-    }
-
-    // Report throughput.
-    if (GetTime() > time + 1) {
-      double total_time = GetTime() - time;
-      std::cout << "Completed " << (static_cast<double>(txns) / total_time)
-                << " txns/sec, "
-                //<< test<< " for drop speed , " 
-                << executing_txns << " executing, "
-                << pending_txns << " pending\n" << std::flush;
-      // Reset txn count.
-      time = GetTime();
-      txns = 0;
-      //test ++;
-    }
-  }
-  return NULL;
-}

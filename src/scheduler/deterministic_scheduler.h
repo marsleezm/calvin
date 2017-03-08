@@ -40,7 +40,8 @@ class TxnProto;
 class DeterministicScheduler : public Scheduler {
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-                         Storage* storage, const Application* application);
+                         Storage* storage, AtomicQueue<TxnProto*>* txns_queue,
+						 const Application* application);
   virtual ~DeterministicScheduler();
 
  private:
@@ -74,18 +75,13 @@ class DeterministicScheduler : public Scheduler {
   // and enforce equivalence to transaction orders.
   DeterministicLockManager* lock_manager_;
 
-  // Queue of transaction ids of transactions that have acquired all locks that
-  // they have requested.
-  std::deque<TxnProto*>* ready_txns_;
-
   // Sockets for communication between main scheduler thread and worker threads.
 //  socket_t* requests_out_;
 //  socket_t* requests_in_;
 //  socket_t* responses_out_[NUM_THREADS];
 //  socket_t* responses_in_;
-  
-  AtomicQueue<TxnProto*>* txns_queue;
-  AtomicQueue<TxnProto*>* done_queue;
+  // The queue of fetched transactions
+  AtomicQueue<TxnProto*>* txns_queue_;
   
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
   

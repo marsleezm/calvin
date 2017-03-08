@@ -13,7 +13,7 @@ mv zookeeper-3.4.6/src/c zookeeper
 rm -fr zookeeper-3.4.6
 cd zookeeper
 ./configure --prefix=$PWD
-make -j
+make -j6
 cd ..
 
 # protobuf
@@ -21,7 +21,7 @@ git clone https://github.com/google/protobuf.git
 cd protobuf
 ./autogen.sh
 ./configure --prefix=$PWD
-make -j
+make -j6
 cd ..
 
 # googletest
@@ -31,7 +31,7 @@ rm gtest-1.6.0.zip
 mv gtest-1.6.0 googletest
 cd googletest
 ./configure --prefix=$PWD
-make -j
+make -j6
 cd ..
 
 
@@ -43,7 +43,7 @@ mv zeromq-2.1.11 zeromq
 cd zeromq
 ./autogen.sh
 ./configure --prefix=$PWD
-make -j
+make -j6
 make install
 cd ..
 

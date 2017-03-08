@@ -153,7 +153,6 @@ pthread_mutex_init(&mutex_, NULL);
 pthread_mutex_init(&mutex_for_item, NULL);
 involed_customers = new vector<Key>;
 
-  cout << "Trying to start storage" << endl;
   Storage* storage;
   if (!useFetching) {
     storage = new SimpleStorage();
@@ -167,22 +166,22 @@ storage->Initmutex();
     TPCC().InitializeStorage(storage, &config);
   }
 
-  cout << "Trying to start sequencer" << endl;
-  // Initialize sequencer component and start sequencer thread running.
-  Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), client,
-                      storage);
-
-  cout << "Trying to start scheduler" << endl;
+  Connection* batch_connection = multiplexer.NewConnection("scheduler_");
+  			// Initialize sequencer component and start sequencer thread running.
+  Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), batch_connection,
+		  	  client, storage);
   // Run scheduler in main thread.
   if (argv[2][0] == 'm') {
     DeterministicScheduler scheduler(&config,
-                                     multiplexer.NewConnection("scheduler_"),
+    								 batch_connection,
                                      storage,
+									 sequencer.GetTxnsQueue(),
                                      new Microbenchmark(config.all_nodes.size(), HOT));
   } else {
     DeterministicScheduler scheduler(&config,
-                                     multiplexer.NewConnection("scheduler_"),
+    								 batch_connection,
                                      storage,
+									 sequencer.GetTxnsQueue(),
                                      new TPCC());
   }
 

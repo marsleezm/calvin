@@ -53,11 +53,16 @@ class Sequencer {
  public:
   // The constructor creates background threads and starts the Sequencer's main
   // loops running.
-  Sequencer(Configuration* conf, Connection* connection, Client* client,
-            Storage* storage);
+  Sequencer(Configuration* conf, Connection* connection, Connection* batch_connection,
+		  Client* client, Storage* storage);
 
   // Halts the main loops.
   ~Sequencer();
+
+  // Get the transaction queue
+  inline AtomicQueue<TxnProto*>* GetTxnsQueue(){
+	  return txns_queue;
+  }
 
  private:
   // Sequencer's main loops:
@@ -79,9 +84,12 @@ class Sequencer {
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerReader(void *arg);
+  static void* FetchMessage();
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
+
+  MessageProto* GetBatch(int batch_id, Connection* connection);
 
   // Length of time spent collecting client requests before they are ordered,
   // batched, and sent out to schedulers.
@@ -92,6 +100,9 @@ class Sequencer {
 
   // Connection for sending and receiving protocol messages.
   Connection* connection_;
+
+  // Connection for receiving txn batches from sequencer.
+  Connection* batch_connection_;
 
   // Client from which to get incoming txns.
   Client* client_;
@@ -110,5 +121,14 @@ class Sequencer {
   // Queue for sending batches from writer to reader if not in paxos mode.
   queue<string> batch_queue_;
   pthread_mutex_t mutex_;
+
+  // The number of fetched batches
+  int fetched_batch_num_;
+
+  // Returns ptr to heap-allocated
+  unordered_map<int, MessageProto*> batches;
+
+  // The queue of fetched transactions
+  AtomicQueue<TxnProto*>* txns_queue;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
