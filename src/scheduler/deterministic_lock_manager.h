@@ -23,8 +23,7 @@ class TxnProto;
 
 class DeterministicLockManager {
  public:
-  DeterministicLockManager(deque<TxnProto*>* ready_txns,
-                           Configuration* config);
+  DeterministicLockManager(Configuration* config);
   virtual ~DeterministicLockManager() {}
   virtual int Lock(TxnProto* txn);
   virtual void Release(const Key& key, TxnProto* txn);
@@ -75,7 +74,7 @@ class DeterministicLockManager {
   // for a specified key.
   //
   // Owned by the DeterministicScheduler.
-  deque<TxnProto*>* ready_txns_;
+  // deque<TxnProto*>* ready_txns_;
 
   // Tracks all txns still waiting on acquiring at least one lock. Entries in
   // 'txn_waits_' are invalided by any call to Release() with the entry's

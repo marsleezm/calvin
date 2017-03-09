@@ -9,8 +9,8 @@
 #include <set>
 #include <string>
 
+#include "../backend/txn_manager.h"
 #include "backend/storage.h"
-#include "backend/storage_manager.h"
 #include "common/configuration.h"
 #include "common/utils.h"
 #include "proto/tpcc.pb.h"
@@ -400,7 +400,7 @@ TxnProto* TPCC::NewTxn(int64 txn_id, int txn_type, string args,
 
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
-int TPCC::Execute(TxnProto* txn, StorageManager* storage) const {
+int TPCC::Execute(TxnProto* txn, TxnManager* storage) const {
   switch (txn->txn_type()) {
     // Initialize
     case INITIALIZE:
@@ -441,7 +441,7 @@ int TPCC::Execute(TxnProto* txn, StorageManager* storage) const {
 
 // The new order function is executed when the application receives a new order
 // transaction.  This follows the TPC-C standard.
-int TPCC::NewOrderTransaction(TxnProto* txn, StorageManager* storage) const {
+int TPCC::NewOrderTransaction(TxnProto* txn, TxnManager* storage) const {
   // First, we retrieve the warehouse from storage
   Value* warehouse_value;
   Warehouse* warehouse = new Warehouse();
@@ -608,7 +608,7 @@ int TPCC::NewOrderTransaction(TxnProto* txn, StorageManager* storage) const {
 
 // The payment function is executed when the application receives a
 // payment transaction.  This follows the TPC-C standard.
-int TPCC::PaymentTransaction(TxnProto* txn, StorageManager* storage) const {
+int TPCC::PaymentTransaction(TxnProto* txn, TxnManager* storage) const {
   // First, we parse out the transaction args from the TPCC proto
   TPCCArgs* tpcc_args = new TPCCArgs();
   tpcc_args->ParseFromString(txn->arg());
@@ -726,7 +726,7 @@ int TPCC::PaymentTransaction(TxnProto* txn, StorageManager* storage) const {
 }
 
 
-int TPCC::OrderStatusTransaction(TxnProto* txn, StorageManager* storage) const {
+int TPCC::OrderStatusTransaction(TxnProto* txn, TxnManager* storage) const {
   TPCCArgs* tpcc_args = new TPCCArgs();
   tpcc_args->ParseFromString(txn->arg());
   int order_line_count = tpcc_args->order_line_count(0);
@@ -778,7 +778,7 @@ int TPCC::OrderStatusTransaction(TxnProto* txn, StorageManager* storage) const {
   return SUCCESS;
 }
 
-int TPCC::StockLevelTransaction(TxnProto* txn, StorageManager* storage) const { 
+int TPCC::StockLevelTransaction(TxnProto* txn, TxnManager* storage) const {
   int low_stock = 0;
   TPCCArgs* tpcc_args = new TPCCArgs();
   tpcc_args->ParseFromString(txn->arg());
@@ -820,7 +820,7 @@ int TPCC::StockLevelTransaction(TxnProto* txn, StorageManager* storage) const {
   return SUCCESS;
 }
 
-int TPCC::DeliveryTransaction(TxnProto* txn, StorageManager* storage) const {      
+int TPCC::DeliveryTransaction(TxnProto* txn, TxnManager* storage) const {
   TPCCArgs* tpcc_args = new TPCCArgs();
   tpcc_args->ParseFromString(txn->arg());
 

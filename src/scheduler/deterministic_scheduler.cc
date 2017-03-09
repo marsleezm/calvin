@@ -20,12 +20,12 @@
 #include <sched.h>
 #include <map>
 
+#include "../backend/txn_manager.h"
 #include "applications/application.h"
 #include "common/utils.h"
 #include "common/zmq.hpp"
 #include "common/connection.h"
 #include "backend/storage.h"
-#include "backend/storage_manager.h"
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
 #include "scheduler/deterministic_lock_manager.h"
@@ -95,17 +95,17 @@ Spin(2);
 
 }
 
-void UnfetchAll(Storage* storage, TxnProto* txn) {
-  for (int i = 0; i < txn->read_set_size(); i++)
-    if (StringToInt(txn->read_set(i)) > COLD_CUTOFF)
-      storage->Unfetch(txn->read_set(i));
-  for (int i = 0; i < txn->read_write_set_size(); i++)
-    if (StringToInt(txn->read_write_set(i)) > COLD_CUTOFF)
-      storage->Unfetch(txn->read_write_set(i));
-  for (int i = 0; i < txn->write_set_size(); i++)
-    if (StringToInt(txn->write_set(i)) > COLD_CUTOFF)
-      storage->Unfetch(txn->write_set(i));
-}
+//void UnfetchAll(Storage* storage, TxnProto* txn) {
+//  for (int i = 0; i < txn->read_set_size(); i++)
+//    if (StringToInt(txn->read_set(i)) > COLD_CUTOFF)
+//      storage->Unfetch(txn->read_set(i));
+//  for (int i = 0; i < txn->read_write_set_size(); i++)
+//    if (StringToInt(txn->read_write_set(i)) > COLD_CUTOFF)
+//      storage->Unfetch(txn->read_write_set(i));
+//  for (int i = 0; i < txn->write_set_size(); i++)
+//    if (StringToInt(txn->write_set(i)) > COLD_CUTOFF)
+//      storage->Unfetch(txn->write_set(i));
+//}
 
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
   int thread =

@@ -7,8 +7,8 @@
 // actual data objects, applications can be written without paying any attention
 // to partitioning at all.
 //
-// StorageManager use:
-//  - Each transaction execution creates a new StorageManager and deletes it
+// TxnManager use:
+//  - Each transaction execution creates a new TxnManager and deletes it
 //    upon completion.
 //  - No ReadObject call takes as an argument any value that depends on the
 //    result of a previous ReadObject call.
@@ -27,6 +27,8 @@
 
 #include "common/types.h"
 
+#define READ_BLOCKED 0
+
 using std::vector;
 using std::tr1::unordered_map;
 
@@ -37,13 +39,14 @@ class Scheduler;
 class Storage;
 class TxnProto;
 
-class StorageManager {
+
+class TxnManager {
  public:
   // TODO(alex): Document this class correctly.
-  StorageManager(Configuration* config, Connection* connection,
+  TxnManager(Configuration* config, Connection* connection,
                  Storage* actual_storage, TxnProto* txn);
 
-  ~StorageManager();
+  ~TxnManager();
 
   Value* ReadObject(const Key& key);
   bool PutObject(const Key& key, Value* value);
@@ -61,6 +64,9 @@ class StorageManager {
 // private:
   friend class DeterministicScheduler;
 
+  // The counter of how many transaction steps have been executed
+  int exec_counter_;
+
   // Pointer to the configuration object for this node.
   Configuration* configuration_;
 
@@ -70,17 +76,22 @@ class StorageManager {
   // Storage layer that *actually* stores data objects on this node.
   Storage* actual_storage_;
 
-  // Transaction that corresponds to this instance of a StorageManager.
+  // Transaction that corresponds to this instance of a TxnManager.
   TxnProto* txn_;
 
   // Local copy of all data objects read/written by 'txn_', populated at
-  // StorageManager construction time.
+  // TxnManager construction time.
   //
   // TODO(alex): Should these be pointers to reduce object copying overhead?
   unordered_map<Key, Value*> objects_;
 
   vector<Value*> remote_reads_;
 
+  // The message containing read results that should be sent to remote nodes
+  MessageProto message_;
+
+  // Indicate whether the message contains any value that should be sent
+  bool message_has_value;
 };
 
 #endif  // _DB_BACKEND_STORAGE_MANAGER_H_

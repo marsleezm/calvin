@@ -10,11 +10,11 @@
 
 #include <iostream>
 
+#include "../backend/txn_manager.h"
 #include "applications/application.h"
 #include "common/configuration.h"
 #include "common/connection.h"
 #include "common/utils.h"
-#include "backend/storage_manager.h"
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
 

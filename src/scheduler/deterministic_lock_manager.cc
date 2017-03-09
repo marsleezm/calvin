@@ -13,10 +13,8 @@
 using std::vector;
 
 DeterministicLockManager::DeterministicLockManager(
-    deque<TxnProto*>* ready_txns,
     Configuration* config)
-  : configuration_(config),
-    ready_txns_(ready_txns) {
+  : configuration_(config) {
   for (int i = 0; i < TABLE_SIZE; i++)
     lock_table_[i] = new deque<KeysList>();
 }

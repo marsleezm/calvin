@@ -2,8 +2,8 @@
 
 #include "applications/tpcc.h"
 
+#include "../backend/txn_manager.h"
 #include "backend/simple_storage.h"
-#include "backend/storage_manager.h"
 #include "common/configuration.h"
 #include "common/connection.h"
 #include "common/testing.h"

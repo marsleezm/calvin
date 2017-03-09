@@ -15,7 +15,7 @@ using std::string;
 
 class Configuration;
 class Storage;
-class StorageManager;
+class TransactionManager;
 class TxnProto;
 
 enum TxnStatus {

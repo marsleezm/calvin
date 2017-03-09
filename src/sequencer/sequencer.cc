@@ -308,32 +308,40 @@ void Sequencer::RunReader() {
 #endif
 
       // Compute readers & writers; store in txn proto.
-      set<int> readers;
-      set<int> writers;
-      for (int i = 0; i < txn.read_set_size(); i++)
-        readers.insert(configuration_->LookupPartition(txn.read_set(i)));
-      for (int i = 0; i < txn.write_set_size(); i++)
-        writers.insert(configuration_->LookupPartition(txn.write_set(i)));
-      for (int i = 0; i < txn.read_write_set_size(); i++) {
-        writers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
-        readers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
-      }
 
-      for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
-        txn.add_readers(*it);
-      for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
-        txn.add_writers(*it);
+      //set<int> readers;
+      //set<int> writers;
+      //for (int i = 0; i < txn.read_set_size(); i++)
+      //  readers.insert(configuration_->LookupPartition(txn.read_set(i)));
+      //for (int i = 0; i < txn.write_set_size(); i++)
+      //  writers.insert(configuration_->LookupPartition(txn.write_set(i)));
+      //for (int i = 0; i < txn.read_write_set_size(); i++) {
+      //  writers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
+      //  readers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
+      //}
 
-      bytes txn_data;
-      txn.SerializeToString(&txn_data);
+      //for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
+      //  txn.add_readers(*it);
+      //for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
+      //  txn.add_writers(*it);
+
+      //bytes txn_data;
+      //txn.SerializeToString(&txn_data);
 
       // Compute union of 'readers' and 'writers' (store in 'readers').
-      for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
-        readers.insert(*it);
+      //for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
+      //  readers.insert(*it);
+      set<int> to_send;
+      google::protobuf::RepeatedField<int>::const_iterator  it;
+
+      for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
+      	  to_send.insert(*it);
+      for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
+          to_send.insert(*it);
 
       // Insert txn into appropriate batches.
-      for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
-        batches[*it].add_data(txn_data);
+      for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it)
+        batches[*it].add_data(batch_message.data(i));
 
       txn_count++;
     }
@@ -388,7 +396,7 @@ void* Sequencer::FetchMessage() {
 	  {
 		  TxnProto* txn = new TxnProto();
 		  txn->ParseFromString(batch_message->data(i));
-		  txns_queue->push(txn);
+		  txns_queue->Push(txn);
 	  }
 	  delete batch_message;
 	  ++fetched_batch_num_;
