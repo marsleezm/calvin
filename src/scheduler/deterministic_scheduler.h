@@ -59,6 +59,8 @@ class DeterministicScheduler : public Scheduler {
   // Thread contexts and their associated Connection objects.
   pthread_t threads_[NUM_THREADS];
   Connection* thread_connections_[NUM_THREADS];
+  // Thread-independent random number generators
+  Rand* rands[NUM_THREADS];
 
   pthread_t lock_manager_thread_;
   // Connection for receiving txn batches from sequencer.

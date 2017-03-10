@@ -69,6 +69,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
   for (int i = 0; i < NUM_THREADS; i++) {
     message_queues[i] = new AtomicQueue<MessageProto>();
+    rands[i] = new Rand();
   }
 
 Spin(2);
@@ -127,7 +128,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
       if (manager->ReadyToExecute()) {
         // Execute and clean up.
         TxnProto* txn = manager->txn_;
-        scheduler->application_->Execute(txn, manager);
+        scheduler->application_->Execute(txn, manager, rand);
         delete manager;
 
         scheduler->thread_connections_[thread]->
@@ -150,7 +151,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
           // Writes occur at this node.
           if (manager->ReadyToExecute()) {
             // No remote reads. Execute and clean up.
-            scheduler->application_->Execute(txn, manager);
+            scheduler->application_->Execute(txn, manager, rand());
             delete manager;
 
             // Respond to scheduler;

@@ -257,6 +257,21 @@ class AtomicQueue {
   AtomicQueue& operator=(const AtomicQueue<T>&);
 };
 
+class Rand {
+	uint64_t x;
+public:
+	void seed(uint64_t seed){
+		x = seed;
+	}
+
+	uint64_t next(){
+	    x ^= x >> 12; // a
+	    x ^= x << 25; // b
+	    x ^= x >> 27; // c
+	    return x * 0x2545F4914F6CDD1D;
+	}
+};
+
 class MutexRW {
  public:
   // Mutexes come into the world unlocked.

@@ -134,46 +134,33 @@ TxnProto* Microbenchmark::NewTxn(int64 txn_id, int txn_type,
   return NULL;
 }
 
-int Microbenchmark::Execute(TxnProto* txn, TransactionManager* storage) const {
+int Microbenchmark::Execute(TxnProto* txn, TransactionManager* storage, Rand* rand) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 
-  int64 seed = 0;
-  int hotkey1 = part1 + nparts * (rand() % hot_records);
-  int hotkey2 = part2 + nparts * (rand() % hot_records);
-  int hotkey3 = part3 + nparts * (rand() % hot_records);
+	if (storage->should_exec(0))
+	{
+		rand->seed(txn->get_seed());
+		set<int> keys = new Set<int>();
 
-	  // Insert set of kRWSetSize/2 - 1 random cold keys from each partition into
-	  // read/write set.
-	  set<int> keys;
-	  GetRandomKeys(&keys,
-					3,
-					nparts * hot_records,
-					nparts * kDBSize,
-					part1);
-	  for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-		txn->add_read_write_set(IntToString(*it));
+		for (int i = 0; i< txn->writers().size(); ++i)
+			keys.insert(txn->writers(i) + nparts * (rand() % hot_records));
+	  		if (i == 0)
+	  			GetRandomKeys(&keys, 3, nparts * hot_records, nparts * kDBSize, txn->writers(i));
+	  		else
+	  			GetRandomKeys(&keys, 2, nparts * hot_records, nparts * kDBSize, txn->writers(i));
 
-	  GetRandomKeys(&keys,
-					2,
-					nparts * hot_records,
-					nparts * kDBSize,
-					part2);
-	  for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-		txn->add_read_write_set(IntToString(*it));
-
-	  GetRandomKeys(&keys,
-					2,
-					nparts * hot_records,
-					nparts * kDBSize,
-					part3);
-
+	  	storage->addkeys()
+	}
 
   for (int i = 0; i < kRWSetSize; i++) {
-    Value* val = storage->ReadObject(txn->read_write_set(i));
-    if	(val == READ_BLOCKED)
-    	return READ_BLOCKED;
-    *val = IntToString(StringToInt(*val) + 1);
+	  if (storage->should_exec(i+1))
+	  	  {
+		  	  Value* val = storage->ReadObject(txn->read_write_set(i));
+		      if (val == READ_BLOCKED)
+		    	  return READ_BLOCKED;
+		      *val = IntToString(StringToInt(*val) + 1);
+	  	}
     // Not necessary since storage already has a pointer to val.
     //   storage->PutObject(txn->read_write_set(i), val);
 
