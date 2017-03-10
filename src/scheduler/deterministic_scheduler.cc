@@ -28,8 +28,6 @@
 #include "backend/storage.h"
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
-#include "scheduler/deterministic_lock_manager.h"
-#include "applications/tpcc.h"
 
 // XXX(scw): why the F do we include from a separate component
 //           to get COLD_CUTOFF
@@ -65,7 +63,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                const Application* application)
     : configuration_(conf), batch_connection_(batch_connection),
       storage_(storage), application_(application), txns_queue_(txns_queue) {
-  lock_manager_ = new DeterministicLockManager(configuration_);
+  //lock_manager_ = new DeterministicLockManager(configuration_);
 
   for (int i = 0; i < NUM_THREADS; i++) {
     message_queues[i] = new AtomicQueue<MessageProto>();
@@ -114,54 +112,63 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   DeterministicScheduler* scheduler =
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
-  unordered_map<string, StorageManager*> active_txns;
+  unordered_map<string, TxnManager*> active_txns;
+
+  Rand* myrand = scheduler->rands[thread];
 
   // Begin main loop.
   MessageProto message;
   while (true) {
     bool got_message = scheduler->message_queues[thread]->Pop(&message);
     if (got_message == true) {
+
+      std::cout << "Got remote read message!" << std::endl;
       // Remote read result.
       assert(message.type() == MessageProto::READ_RESULT);
-      StorageManager* manager = active_txns[message.destination_channel()];
+      TxnManager* manager = active_txns[message.destination_channel()];
       manager->HandleReadResult(message);
-      if (manager->ReadyToExecute()) {
-        // Execute and clean up.
-        TxnProto* txn = manager->txn_;
-        scheduler->application_->Execute(txn, manager, rand);
-        delete manager;
 
-        scheduler->thread_connections_[thread]->
-            UnlinkChannel(IntToString(txn->txn_id()));
-        active_txns.erase(message.destination_channel());
-        // Respond to scheduler;
-        //scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
+      // Execute and clean up.
+      TxnProto* txn = manager->txn_;
+
+      if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
+    	  std::cout << "Sending " << txn->txn_id() << " for remote read again!!!" << std::endl;
+    	  scheduler->thread_connections_[thread]->
+		  LinkChannel(IntToString(txn->txn_id()));
+          // There are outstanding remote reads.
+    	  active_txns[IntToString(txn->txn_id())] = manager;
       }
+      else{
+    	  std::cout << "Tx " << txn->txn_id() << " finished after remote read!" << std::endl;
+    	  delete manager;
+          scheduler->thread_connections_[thread]->
+    			UnlinkChannel(IntToString(txn->txn_id()));
+          active_txns.erase(message.destination_channel());
+      }
+		// Respond to scheduler;
+		//scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
     } else {
       // No remote read result found, start on next txn if one is waiting.
      TxnProto* txn;
      bool got_it = scheduler->txns_queue_->Pop(&txn);
       if (got_it == true) {
         // Create manager.
-        StorageManager* manager =
-            new StorageManager(scheduler->configuration_,
+    	  TxnManager* manager =
+            new TxnManager(scheduler->configuration_,
                                scheduler->thread_connections_[thread],
                                scheduler->storage_, txn);
 
-          // Writes occur at this node.
-          if (manager->ReadyToExecute()) {
-            // No remote reads. Execute and clean up.
-            scheduler->application_->Execute(txn, manager, rand());
-            delete manager;
-
-            // Respond to scheduler;
-            //scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
-          } else {
-        scheduler->thread_connections_[thread]->
-            LinkChannel(IntToString(txn->txn_id()));
-            // There are outstanding remote reads.
-            active_txns[IntToString(txn->txn_id())] = manager;
-          }
+    	  if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
+    		  std::cout << "Sending "<<txn->txn_id() <<" for remote read" << std::endl;
+    		  scheduler->thread_connections_[thread]->
+              	  LinkChannel(IntToString(txn->txn_id()));
+              // There are outstanding remote reads.
+              active_txns[IntToString(txn->txn_id())] = manager;
+    	  }
+    	  else{
+    		  std::cout << "Tx " << txn->txn_id() <<" finished!" << std::endl;
+    		  delete manager;
+    	  }
       }
     }
   }

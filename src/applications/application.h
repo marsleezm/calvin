@@ -9,13 +9,14 @@
 
 #include <string>
 
+#include "common/utils.h"
 #include "common/types.h"
 
 using std::string;
 
 class Configuration;
 class Storage;
-class TransactionManager;
+class TxnManager;
 class TxnProto;
 
 enum TxnStatus {
@@ -36,7 +37,7 @@ class Application {
   static int CheckpointID(Key key);
 
   // Execute a transaction's application logic given the input 'txn'.
-  virtual int Execute(TxnProto* txn, StorageManager* storage) const = 0;
+  virtual int Execute(TxnProto* txn, TxnManager* storage, Rand* rand) const = 0;
 
   // Storage initialization method.
   virtual void InitializeStorage(Storage* storage,

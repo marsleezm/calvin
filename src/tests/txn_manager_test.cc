@@ -14,7 +14,7 @@ TEST(SingleNode) {
   Configuration config(0, "common/configuration_test_one_node.conf");
   ConnectionMultiplexer* multiplexer = new ConnectionMultiplexer(&config);
   Spin(0.1);
-  Connection* connection = multiplexer->NewConnection("storage_manager");
+  Connection* connection = multiplexer->NewConnection("txn_manager");
   SimpleStorage storage;
 
   string a = "a";
@@ -28,17 +28,17 @@ TEST(SingleNode) {
   txn.add_readers(1);
   txn.add_writers(1);
 
-  StorageManager* storage_manager =
-      new StorageManager(&config, connection, &storage, &txn);
+  TxnManager* txn_manager =
+      new TxnManager(&config, connection, &storage, &txn);
 
   Value* result_x;
-  result_x = storage_manager->ReadObject("0");
-  EXPECT_TRUE(storage_manager->PutObject("2", result_x));
+  result_x = txn_manager->ReadObject("0");
+  EXPECT_TRUE(txn_manager->PutObject("2", result_x));
 
   result_x = storage.ReadObject("2");
   EXPECT_EQ("a", *result_x);
 
-  delete storage_manager;
+  delete txn_manager;
   delete connection;
   delete multiplexer;
 
@@ -60,11 +60,11 @@ TxnProto txn;
 void* ExecuteTxn(void* arg) {
   int node = *reinterpret_cast<int*>(arg);
 
-  StorageManager* manager;
+  TxnManager* manager;
   if (node == 1)
-    manager = new StorageManager(&config1, c1, &storage1, &txn);
+    manager = new TxnManager(&config1, c1, &storage1, &txn);
   else
-    manager = new StorageManager(&config2, c2, &storage2, &txn);
+    manager = new TxnManager(&config2, c2, &storage2, &txn);
 
   Value* result_x;
   Value* result_xy;

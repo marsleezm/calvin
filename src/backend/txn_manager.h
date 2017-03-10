@@ -27,17 +27,18 @@
 
 #include "common/types.h"
 
-#define READ_BLOCKED 0
+#define READ_BLOCKED 1
+#define FINISHED 0
 
 using std::vector;
 using std::tr1::unordered_map;
 
 class Configuration;
 class Connection;
-class MessageProto;
 class Scheduler;
 class Storage;
 class TxnProto;
+class MessageProto;
 
 
 class TxnManager {
@@ -53,9 +54,16 @@ class TxnManager {
   bool DeleteObject(const Key& key);
 
   void HandleReadResult(const MessageProto& message);
-  bool ReadyToExecute();
 
   Storage* GetStorage() { return actual_storage_; }
+
+  void Init(){ exec_counter_ = 0;}
+  bool ShouldExec();
+
+  void AddKeys(vector<string> keys) {keys_ = keys;}
+  vector<string> GetKeys() { return keys_;}
+
+ private:
 
   // Set by the constructor, indicating whether 'txn' involves any writes at
   // this node.
@@ -63,9 +71,6 @@ class TxnManager {
 
 // private:
   friend class DeterministicScheduler;
-
-  // The counter of how many transaction steps have been executed
-  int exec_counter_;
 
   // Pointer to the configuration object for this node.
   Configuration* configuration_;
@@ -87,11 +92,20 @@ class TxnManager {
 
   vector<Value*> remote_reads_;
 
+  // The keys the transaction should access
+  vector<string> keys_;
+
   // The message containing read results that should be sent to remote nodes
-  MessageProto message_;
+  MessageProto* message_;
 
   // Indicate whether the message contains any value that should be sent
-  bool message_has_value;
+  bool message_has_value_;
+
+  // Counting how many transaction steps the current tranasction is executing
+  int exec_counter_;
+
+  // Counting how many transaction steps have been executed the last time
+  int max_counter_;
 };
 
 #endif  // _DB_BACKEND_STORAGE_MANAGER_H_

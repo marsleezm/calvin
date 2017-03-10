@@ -38,7 +38,7 @@ TEST(MicrobenchmarkTest) {
   txn->add_readers(0);
   txn->add_writers(0);
 
-  StorageManager* storage = new StorageManager(config, connection,
+  TxnManager* storage = new TxnManager(config, connection,
                                                actual_storage, txn);
   microbenchmark.Execute(txn, storage);
 

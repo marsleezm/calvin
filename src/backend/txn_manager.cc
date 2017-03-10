@@ -14,8 +14,9 @@
 
 TxnManager::TxnManager(Configuration* config, Connection* connection,
                                Storage* actual_storage, TxnProto* txn)
-    : configuration_(config), connection_(connection), message_has_value(false),
-      actual_storage_(actual_storage), txn_(txn), exec_counter_(0) {
+    : configuration_(config), connection_(connection), actual_storage_(actual_storage),
+	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0) {
+	message_ = new MessageProto();
   //MessageProto message;
 
   // If reads are performed at this node, execute local reads and broadcast
@@ -73,6 +74,18 @@ TxnManager::TxnManager(Configuration* config, Connection* connection,
   // Scheduler is responsible for calling HandleReadResponse. We're done here.
 }
 
+bool TxnManager::ShouldExec(){
+	if (exec_counter_ == max_counter_){
+		++exec_counter_;
+		++max_counter_;
+		return true;
+	}
+	else{
+		++exec_counter_;
+		return false;
+	}
+}
+
 void TxnManager::HandleReadResult(const MessageProto& message) {
   assert(message.type() == MessageProto::READ_RESULT);
   for (int i = 0; i < message.keys_size(); i++) {
@@ -82,16 +95,13 @@ void TxnManager::HandleReadResult(const MessageProto& message) {
   }
 }
 
-//bool TxnManager::ReadyToExecute() {
-//  return static_cast<int>(objects_.size()) ==
-//         txn_->read_set_size() + txn_->read_write_set_size();
-//}
-
 TxnManager::~TxnManager() {
-  for (vector<Value*>::iterator it = remote_reads_.begin();
-       it != remote_reads_.end(); ++it) {
-    delete *it;
-  }
+	delete message_;
+	for (vector<Value*>::iterator it = remote_reads_.begin();
+       it != remote_reads_.end(); ++it)
+	{
+		delete *it;
+	}
 }
 
 Value* TxnManager::ReadObject(const Key& key) {
@@ -99,24 +109,32 @@ Value* TxnManager::ReadObject(const Key& key) {
 	// !TODO: only send the value when all previous txns finish
 	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
 		Value* val = objects_[key];
-		message_.add_keys(key);
-		message_.add_values(val == NULL ? "" : *val);
-		message_has_value = true;
+		message_->add_keys(key);
+		message_->add_values(val == NULL ? "" : *val);
+		message_has_value_ = true;
 		return val;
 	}
 	else // The key is not replicated locally, the writer should wait
 	{
-		if (message_has_value){
-			for (int i = 0; i < txn->writers.size(); i++) {
-			  if (txn->writers(i) != configuration_->this_node_id) {
-				  message_.set_destination_node(txn->writers(i));
-				connection_->Send1(message_);
-			  }
-			}
-			message_ = new MessageProto();
-			message_has_value = false;
+		if (objects_.count(key) > 0){
+			return objects_[key];
 		}
-		return READ_BLOCKED;
+		else{ //Should be blocked
+			if (message_has_value_){
+				for (int i = 0; i < txn_->writers().size(); i++) {
+				  if (txn_->writers(i) != configuration_->this_node_id) {
+					  message_->set_destination_node(txn_->writers(i));
+					connection_->Send(*message_);
+				  }
+				}
+				message_ = new MessageProto();
+				message_has_value_ = false;
+			}
+
+			// The tranasction will perform the read again
+			--max_counter_;
+			return NULL;
+		}
 	}
 }
 

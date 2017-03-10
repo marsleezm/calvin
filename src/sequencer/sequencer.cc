@@ -58,7 +58,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	  deconstructor_invoked_(false), fetched_batch_num_(0) {
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
-  txns_queue = new AtomicQueue<TxnProto*>();
+  txns_queue_ = new AtomicQueue<TxnProto*>();
 
 cpu_set_t cpuset;
 pthread_attr_t attr_writer;
@@ -92,21 +92,19 @@ pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
 
 Sequencer::~Sequencer() {
   deconstructor_invoked_ = true;
-  delete batches;
-  delete txns_queue;
+  delete txns_queue_;
   pthread_join(writer_thread_, NULL);
   pthread_join(reader_thread_, NULL);
 }
 
-void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
-  nodes->clear();
-  for (int i = 0; i < txn.read_set_size(); i++)
-    nodes->insert(configuration_->LookupPartition(txn.read_set(i)));
-  for (int i = 0; i < txn.write_set_size(); i++)
-    nodes->insert(configuration_->LookupPartition(txn.write_set(i)));
-  for (int i = 0; i < txn.read_write_set_size(); i++)
-    nodes->insert(configuration_->LookupPartition(txn.read_write_set(i)));
-}
+//void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
+//  nodes->clear();
+//    nodes->insert(configuration_->LookupPartition(txn.read_set(i)));
+//  for (int i = 0; i < txn.write_set_size(); i++)
+//    nodes->insert(configuration_->LookupPartition(txn.write_set(i)));
+//  for (int i = 0; i < txn.read_write_set_size(); i++)
+//    nodes->insert(configuration_->LookupPartition(txn.read_write_set(i)));
+//}
 
 #ifdef PREFETCHING
 double PrefetchAll(Storage* storage, TxnProto* txn) {
@@ -383,11 +381,11 @@ void Sequencer::RunReader() {
 
 void* Sequencer::FetchMessage() {
   MessageProto* batch_message = NULL;
-  double time = GetTime();
-  int executing_txns = 0;
-  int pending_txns = 0;
+  //double time = GetTime();
+  //int executing_txns = 0;
+  //int pending_txns = 0;
 
-  TxnProto* done_txn;
+  //TxnProto* done_txn;
 
   batch_message = GetBatch(fetched_batch_num_, batch_connection_);
   // Have we run out of txns in our batch? Let's get some new ones.
@@ -396,7 +394,7 @@ void* Sequencer::FetchMessage() {
 	  {
 		  TxnProto* txn = new TxnProto();
 		  txn->ParseFromString(batch_message->data(i));
-		  txns_queue->Push(txn);
+		  txns_queue_->Push(txn);
 	  }
 	  delete batch_message;
 	  ++fetched_batch_num_;
@@ -422,10 +420,10 @@ void* Sequencer::FetchMessage() {
 }
 
 MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
-  if (batches.count(batch_id) > 0) {
+  if (batches_.count(batch_id) > 0) {
     // Requested batch has already been received.
-    MessageProto* batch = batches[batch_id];
-    batches.erase(batch_id);
+    MessageProto* batch = batches_[batch_id];
+    batches_.erase(batch_id);
     return batch;
   } else {
     MessageProto* message = new MessageProto();
@@ -434,7 +432,7 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
       if (message->batch_number() == batch_id) {
         return message;
       } else {
-        batches[message->batch_number()] = message;
+        batches_[message->batch_number()] = message;
         message = new MessageProto();
       }
     }

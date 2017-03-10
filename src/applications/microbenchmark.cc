@@ -22,7 +22,7 @@
 // 'key_start' <= k < 'key_limit', and k == part (mod nparts).
 // Requires: key_start % nparts == 0
 void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
-                                   int key_limit, int part) {
+                                   int key_limit, int part) const {
   assert(key_start % nparts == 0);
   keys->clear();
   for (int i = 0; i < num_keys; i++) {
@@ -36,6 +36,14 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
   }
 }
 
+
+string to_str(vector<string> s){
+	string str = "";
+	for(uint i = 0; i < s.size(); ++i){
+		str += s[i] +",";
+	}
+	return str;
+}
 
 // Create a non-dependent single-partition transaction
 TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
@@ -134,33 +142,56 @@ TxnProto* Microbenchmark::NewTxn(int64 txn_id, int txn_type,
   return NULL;
 }
 
-int Microbenchmark::Execute(TxnProto* txn, TransactionManager* storage, Rand* rand) const {
+int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
-
-	if (storage->should_exec(0))
+	storage->Init();
+	vector<string> str_keys;
+	rand->seed(txn->seed());
+	if (storage->ShouldExec())
 	{
-		rand->seed(txn->get_seed());
-		set<int> keys = new Set<int>();
+		set<int> keys;
 
-		for (int i = 0; i< txn->writers().size(); ++i)
-			keys.insert(txn->writers(i) + nparts * (rand() % hot_records));
-	  		if (i == 0)
-	  			GetRandomKeys(&keys, 3, nparts * hot_records, nparts * kDBSize, txn->writers(i));
-	  		else
-	  			GetRandomKeys(&keys, 2, nparts * hot_records, nparts * kDBSize, txn->writers(i));
+		if (txn->txn_type() == MICROTXN_SP){
+			int hotkey = txn->writers(0) + nparts * (rand->next() % hot_records);
+			keys.insert(hotkey);
+			GetRandomKeys(&keys,
+			                kRWSetSize - 1,
+			                nparts * hot_records,
+			                nparts * kDBSize,
+							txn->writers(0));
+		}
+		else{
+			for (int i = 0; i< txn->writers().size(); ++i) {
+						keys.insert(txn->writers(i) + nparts * (rand->next() % hot_records));
+				  		if (i == 0){
+				  			set<int> keys;
+				  			GetRandomKeys(&keys, 3, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i));
+				  		}
+				  		else
+				  			GetRandomKeys(&keys, 2, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i));
+					}
+		}
 
-	  	storage->addkeys()
+		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+			str_keys.push_back(IntToString(*it));
+	  	storage->AddKeys(str_keys);
 	}
+	else
+		str_keys = storage->GetKeys();
 
-  for (int i = 0; i < kRWSetSize; i++) {
-	  if (storage->should_exec(i+1))
-	  	  {
-		  	  Value* val = storage->ReadObject(txn->read_write_set(i));
-		      if (val == READ_BLOCKED)
-		    	  return READ_BLOCKED;
-		      *val = IntToString(StringToInt(*val) + 1);
-	  	}
+
+	//<< txn->txn_id() << " has " << s
+	std::cout << "Txn " << txn->txn_id() << " has " << to_str(str_keys)  << std::endl;
+	for (int i = 0; i < kRWSetSize; i++) {
+		if (storage->ShouldExec()) {
+			Value* val = storage->ReadObject(str_keys[i]);
+			std::cout << "Blocked when trying to read " << str_keys[i] << std::endl;
+			if (val == NULL)
+				return READ_BLOCKED;
+			else
+		    	*val = IntToString(StringToInt(*val) + 1);
+  }
     // Not necessary since storage already has a pointer to val.
     //   storage->PutObject(txn->read_write_set(i), val);
 
@@ -173,7 +204,7 @@ int Microbenchmark::Execute(TxnProto* txn, TransactionManager* storage, Rand* ra
        }**/
 
   }
-  return 0;
+  return SUCCESS;
 }
 
 void Microbenchmark::InitializeStorage(Storage* storage,

@@ -1,0 +1,12 @@
++ cxx applications/microbenchmark.cc
++ cxx scheduler/serial_scheduler.cc
++ cxx scheduler/deterministic_scheduler.cc
++ cxx scheduler/deterministic_lock_manager.cc
++ cxx deployment/main.cc
++ cxx sequencer/sequencer.cc
+Makefile.template:30: recipe for target '../obj/deployment/main.o' failed
+Makefile.template:30: recipe for target '../obj/scheduler/deterministic_scheduler.o' failed
+Makefile.template:30: recipe for target '../obj/scheduler/serial_scheduler.o' failed
+Makefile.template:30: recipe for target '../obj/applications/microbenchmark.o' failed
+Makefile.template:30: recipe for target '../obj/scheduler/deterministic_lock_manager.o' failed
+Makefile.template:30: recipe for target '../obj/sequencer/sequencer.o' failed

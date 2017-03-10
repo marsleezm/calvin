@@ -10,6 +10,8 @@
 #include <set>
 #include <string>
 #include <queue>
+#include "common/utils.h"
+#include <tr1/unordered_map>
 
 //#define PAXOS
 //#define PREFETCHING
@@ -25,11 +27,13 @@
 using std::set;
 using std::string;
 using std::queue;
+using std::tr1::unordered_map;
 
 class Configuration;
 class Connection;
 class Storage;
 class TxnProto;
+class MessageProto;
 
 #ifdef LATENCY_TEST
 extern double sequencer_recv[SAMPLES];
@@ -61,7 +65,7 @@ class Sequencer {
 
   // Get the transaction queue
   inline AtomicQueue<TxnProto*>* GetTxnsQueue(){
-	  return txns_queue;
+	  return txns_queue_;
   }
 
  private:
@@ -84,10 +88,10 @@ class Sequencer {
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerReader(void *arg);
-  static void* FetchMessage();
+  void* FetchMessage();
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
-  void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
+  //void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
 
   MessageProto* GetBatch(int batch_id, Connection* connection);
 
@@ -126,9 +130,9 @@ class Sequencer {
   int fetched_batch_num_;
 
   // Returns ptr to heap-allocated
-  unordered_map<int, MessageProto*> batches;
+  unordered_map<int, MessageProto*> batches_;
 
   // The queue of fetched transactions
-  AtomicQueue<TxnProto*>* txns_queue;
+  AtomicQueue<TxnProto*>* txns_queue_;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

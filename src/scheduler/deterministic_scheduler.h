@@ -62,7 +62,7 @@ class DeterministicScheduler : public Scheduler {
   // Thread-independent random number generators
   Rand* rands[NUM_THREADS];
 
-  pthread_t lock_manager_thread_;
+  //pthread_t lock_manager_thread_;
   // Connection for receiving txn batches from sequencer.
   Connection* batch_connection_;
 
@@ -75,7 +75,7 @@ class DeterministicScheduler : public Scheduler {
   // The per-node lock manager tracks what transactions have temporary ownership
   // of what database objects, allowing the scheduler to track LOCAL conflicts
   // and enforce equivalence to transaction orders.
-  DeterministicLockManager* lock_manager_;
+  // DeterministicLockManager* lock_manager_;
 
   // Sockets for communication between main scheduler thread and worker threads.
 //  socket_t* requests_out_;

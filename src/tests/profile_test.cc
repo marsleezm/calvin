@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     txn->add_readers(0);
     txn->add_writers(0);
 
-    StorageManager* manager = new StorageManager(config, NULL, storage, txn);
+    TxnManager* manager = new TxnManager(config, NULL, storage, txn);
 
     tpcc->Execute(txn, manager);
 

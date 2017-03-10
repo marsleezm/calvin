@@ -9,13 +9,13 @@
 #include <iostream>
 
 #include "applications/microbenchmark.h"
-#include "applications/tpcc.h"
+//#include "applications/tpcc.h"
 #include "common/configuration.h"
 #include "common/connection.h"
 #include "backend/simple_storage.h"
 #include "backend/fetching_storage.h"
 #include "backend/collapsed_versioned_storage.h"
-#include "scheduler/serial_scheduler.h"
+//#include "scheduler/serial_scheduler.h"
 #include "scheduler/deterministic_scheduler.h"
 #include "sequencer/sequencer.h"
 #include "proto/tpcc_args.pb.h"
@@ -71,48 +71,82 @@ class MClient : public Client {
   int percent_mp_;
 };
 
-// TPCC load generation client.
 class TClient : public Client {
  public:
-  TClient(Configuration* config, int mp) : config_(config), percent_mp_(mp) {}
+	TClient(Configuration* config, int mp)
+      : microbenchmark(config->all_nodes.size(), HOT), config_(config),
+        percent_mp_(mp) {
+  }
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id) {
-    TPCC tpcc;
-    TPCCArgs args;
+    if (config_->all_nodes.size() > 1 && rand() % 100 < percent_mp_) {
+      // Multipartition txn.
+      int other1;
+      int other2;
+      do {
+        other1 = rand() % config_->all_nodes.size();
+      } while (other1 == config_->this_node_id);
 
-    args.set_system_time(GetTime());
-    if (rand() % 100 < percent_mp_)
-      args.set_multipartition(true);
-    else
-      args.set_multipartition(false);
+      do {
+        other2 = rand() % config_->all_nodes.size();
+      } while (other2 == config_->this_node_id || other2 == other1);
 
-    string args_string;
-    args.SerializeToString(&args_string);
 
-    // New order txn
-   int random_txn_type = rand() % 100;
-    // New order txn
-    if (random_txn_type < 45)  {
-      *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
-    } else if(random_txn_type < 88) {
-      *txn = tpcc.NewTxn(txn_id, TPCC::PAYMENT, args_string, config_);
-    } else if(random_txn_type < 92) {
-      *txn = tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, args_string, config_);
-      args.set_multipartition(false);
-    } else if(random_txn_type < 96){
-      *txn = tpcc.NewTxn(txn_id, TPCC::DELIVERY, args_string, config_);
-      args.set_multipartition(false);
+      *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
     } else {
-      *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
-      args.set_multipartition(false);
+      // Single-partition txn.
+      *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
     }
-
   }
 
  private:
+  Microbenchmark microbenchmark;
   Configuration* config_;
   int percent_mp_;
 };
+
+// TPCC load generation client.
+//class TClient : public Client {
+// public:
+//  TClient(Configuration* config, int mp) : config_(config), percent_mp_(mp) {}
+//  virtual ~TClient() {}
+//  virtual void GetTxn(TxnProto** txn, int txn_id) {
+//    TPCC tpcc;
+//    TPCCArgs args;
+//
+//    args.set_system_time(GetTime());
+//    if (rand() % 100 < percent_mp_)
+//      args.set_multipartition(true);
+//    else
+//      args.set_multipartition(false);
+//
+//    string args_string;
+//    args.SerializeToString(&args_string);
+//
+//    // New order txn
+//   int random_txn_type = rand() % 100;
+//    // New order txn
+//    if (random_txn_type < 45)  {
+//      *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
+//    } else if(random_txn_type < 88) {
+//      *txn = tpcc.NewTxn(txn_id, TPCC::PAYMENT, args_string, config_);
+//    } else if(random_txn_type < 92) {
+//      *txn = tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, args_string, config_);
+//      args.set_multipartition(false);
+//    } else if(random_txn_type < 96){
+//      *txn = tpcc.NewTxn(txn_id, TPCC::DELIVERY, args_string, config_);
+//      args.set_multipartition(false);
+//    } else {
+//      *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
+//      args.set_multipartition(false);
+//    }
+//
+//  }
+//
+// private:
+//  Configuration* config_;
+//  int percent_mp_;
+//};
 
 void stop(int sig) {
 // #ifdef PAXOS
@@ -163,7 +197,8 @@ storage->Initmutex();
   if (argv[2][0] == 'm') {
     Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
   } else {
-    TPCC().InitializeStorage(storage, &config);
+    //TPCC().InitializeStorage(storage, &config);
+	 Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
   }
 
   Connection* batch_connection = multiplexer.NewConnection("scheduler_");
@@ -178,11 +213,16 @@ storage->Initmutex();
 									 sequencer.GetTxnsQueue(),
                                      new Microbenchmark(config.all_nodes.size(), HOT));
   } else {
-    DeterministicScheduler scheduler(&config,
-    								 batch_connection,
-                                     storage,
-									 sequencer.GetTxnsQueue(),
-                                     new TPCC());
+//    DeterministicScheduler scheduler(&config,
+//    								 batch_connection,
+//                                     storage,
+//									 sequencer.GetTxnsQueue(),
+//                                     new TPCC());
+	    DeterministicScheduler scheduler(&config,
+	    								 batch_connection,
+	                                     storage,
+										 sequencer.GetTxnsQueue(),
+	                                     new Microbenchmark(config.all_nodes.size(), HOT));
   }
 
   Spin(180);

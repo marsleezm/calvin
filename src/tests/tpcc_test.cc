@@ -292,7 +292,7 @@ TEST(NewOrderTest) {
 
   txn->add_readers(0);
   txn->add_writers(0);
-  StorageManager* storage = new StorageManager(config, connection, simple_store,
+  TxnManager* storage = new TxnManager(config, connection, simple_store,
                                                txn);
 
   // Prefetch some values in order to ensure our ACIDity after
@@ -329,7 +329,7 @@ TEST(NewOrderTest) {
     txn->add_read_set(txn->write_set(i));
   }
   delete storage;
-  storage = new StorageManager(config, connection, simple_store, txn);
+  storage = new TxnManager(config, connection, simple_store, txn);
 
   // Ensure that D_NEXT_O_ID is incremented for district
   district_value = storage->ReadObject(district_key);
@@ -447,7 +447,7 @@ TEST(PaymentTest) {
   txn->add_read_set(txn->write_set(0));
   txn->add_readers(0);
   txn->add_writers(0);
-  StorageManager* storage = new StorageManager(config, connection, simple_store,
+  TxnManager* storage = new TxnManager(config, connection, simple_store,
                                                txn);
 
   // Prefetch some values in order to ensure our ACIDity after
@@ -478,7 +478,7 @@ TEST(PaymentTest) {
 
   // Get the data back from the database
   delete storage;
-  storage = new StorageManager(config, connection, simple_store, txn);
+  storage = new TxnManager(config, connection, simple_store, txn);
 
   warehouse_value = storage->ReadObject(txn->read_write_set(0));
   assert(warehouse->ParseFromString(*warehouse_value));
@@ -521,7 +521,7 @@ TEST(PaymentTest) {
 }
 
 TEST(MultipleTxnTest) {
-  StorageManager* storage;
+  TxnManager* storage;
   TPCCArgs args;
   args.set_system_time(GetTime());
   args.set_multipartition(false);
@@ -529,13 +529,13 @@ TEST(MultipleTxnTest) {
   args.SerializeToString(&args_string);
 
   TxnProto* txn = tpcc->NewTxn(0, TPCC::INITIALIZE, args_string, config);
-  storage = new StorageManager(config, connection, simple_store, txn);
+  storage = new TxnManager(config, connection, simple_store, txn);
   tpcc->Execute(txn, storage);
   delete storage;
   delete txn;
 
   txn = tpcc->NewTxn(1, TPCC::NEW_ORDER, args_string, config);
-  storage = new StorageManager(config, connection, simple_store, txn);
+  storage = new TxnManager(config, connection, simple_store, txn);
   tpcc->Execute(txn, storage);
   delete storage;
   delete txn;
