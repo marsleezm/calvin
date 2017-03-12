@@ -14,7 +14,6 @@
 #include <cerrno>
 #include <csignal>
 #include <ctime>
-#include <sstream>
 
 #include <map>
 #include <vector>
@@ -57,7 +56,7 @@ char* db_args;
 bool do_valgrind;
 bool do_quite;
 
-// TODO(scw): move to deployer class; should avoid non-POD global variable
+// TODO(scw): move to deplayer class; should avoid non-POD global variable
 // Type: fd -> nodeID
 map<int, int> children_pipes;
 vector<int> children_pids;
@@ -206,12 +205,8 @@ void DeployOne(int nodeID,
   const char* remote_opt2 = node->host.c_str();
 
   char copy_config[1024];
-
-  std::stringstream ss;
-  ss << "scp -i ~/.ssh/id_rsa -rp deploy-run.conf %s:" << cwd << "/deploy-run.conf";
-  std::string s = ss.str();
   snprintf(copy_config, sizeof(copy_config),
-           s.c_str(),
+           "scp -rp deploy-run.conf %s:db3/deploy-run.conf",
            node->host.c_str());
   system(copy_config);
 
@@ -236,7 +231,7 @@ void DeployOne(int nodeID,
     dup2(pipefd[1], 1);
     dup2(pipefd[1], 2);
     close(pipefd[1]);
-    execlp("ssh", "ssh", "-i", "~/.ssh/id_rsa", remote_opt1, remote_opt2, remote_opt3, NULL);
+    execlp("ssh", "ssh", remote_opt1, remote_opt2, remote_opt3, NULL);
     printf("Node %d spawning failed\n", nodeID);
     exit(-1);
   } else if (pid < 0) {
