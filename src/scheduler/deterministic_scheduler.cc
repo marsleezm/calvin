@@ -122,7 +122,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     bool got_message = scheduler->message_queues[thread]->Pop(&message);
     if (got_message == true) {
 
-      std::cout << "Got remote read message!" << std::endl;
+      //std::cout << "Got remote read message!" << std::endl;
       // Remote read result.
       assert(message.type() == MessageProto::READ_RESULT);
       TxnManager* manager = active_txns[message.destination_channel()];

@@ -154,27 +154,30 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
 
 		if (txn->txn_type() == MICROTXN_SP){
 			int hotkey = txn->writers(0) + nparts * (rand->next() % hot_records);
-			keys.insert(hotkey);
+			str_keys.push_back(IntToString(hotkey));
 			GetRandomKeys(&keys,
 			                kRWSetSize - 1,
 			                nparts * hot_records,
 			                nparts * kDBSize,
 							txn->writers(0));
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+				str_keys.push_back(IntToString(*it));
 		}
 		else{
 			for (int i = 0; i< txn->writers().size(); ++i) {
-						keys.insert(txn->writers(i) + nparts * (rand->next() % hot_records));
-				  		if (i == 0){
-				  			set<int> keys;
-				  			GetRandomKeys(&keys, 3, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i));
-				  		}
-				  		else
-				  			GetRandomKeys(&keys, 2, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i));
-					}
+				str_keys.push_back(IntToString(txn->writers(i) + nparts * (rand->next() % hot_records)));
+				if (i == 0){
+					set<int> keys;
+				  	GetRandomKeys(&keys, 3, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i));
+				}
+				else
+				  	GetRandomKeys(&keys, 2, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i));
+				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+					str_keys.push_back(IntToString(*it));
+			}
 		}
 
-		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-			str_keys.push_back(IntToString(*it));
+
 	  	storage->AddKeys(str_keys);
 	}
 	else
@@ -182,16 +185,18 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
 
 
 	//<< txn->txn_id() << " has " << s
-	std::cout << "Txn " << txn->txn_id() << " has " << to_str(str_keys)  << std::endl;
+	//std::cout << "Txn " << txn->txn_id() << " has " << to_str(str_keys)  << std::endl;
 	for (int i = 0; i < kRWSetSize; i++) {
 		if (storage->ShouldExec()) {
 			Value* val = storage->ReadObject(str_keys[i]);
-			std::cout << "Blocked when trying to read " << str_keys[i] << std::endl;
-			if (val == NULL)
+			if (val == NULL){
+				std::cout << "Blocked when trying to read " << str_keys[i] << std::endl;
 				return READ_BLOCKED;
+			}
 			else
 		    	*val = IntToString(StringToInt(*val) + 1);
-  }
+		}
+	}
     // Not necessary since storage already has a pointer to val.
     //   storage->PutObject(txn->read_write_set(i), val);
 
@@ -203,7 +208,7 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
          x = x-2;
        }**/
 
-  }
+
   return SUCCESS;
 }
 

@@ -108,10 +108,17 @@ Value* TxnManager::ReadObject(const Key& key) {
 	// The key is replicated locally, should broadcast to all readers
 	// !TODO: only send the value when all previous txns finish
 	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
+		//        Value* val = actual_storage_->ReadObject(key);
+		//        objects_[key] = val;
+
 		Value* val = objects_[key];
-		message_->add_keys(key);
-		message_->add_values(val == NULL ? "" : *val);
-		message_has_value_ = true;
+		if (val == NULL){
+			val = actual_storage_->ReadObject(key);
+			objects_[key] = val;
+			message_->add_keys(key);
+			message_->add_values(val == NULL ? "" : *val);
+			message_has_value_ = true;
+		}
 		return val;
 	}
 	else // The key is not replicated locally, the writer should wait
