@@ -17,11 +17,7 @@ using std::string;
 
 class Microbenchmark : public Application {
  public:
-  enum TxnType {
-    INITIALIZE = 0,
-    MICROTXN_SP = 1,
-    MICROTXN_MP = 2,
-  };
+
 
   Microbenchmark(int nodecount, int hotcount) {
     nparts = nodecount;

@@ -25,6 +25,12 @@ enum TxnStatus {
   REDO = 2,
 };
 
+enum TxnType {
+  INITIALIZE = 0,
+  SINGLE_PART = 1,
+  MULTI_PART = 2,
+};
+
 class Application {
  public:
   virtual ~Application() {}

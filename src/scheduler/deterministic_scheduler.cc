@@ -115,61 +115,85 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   unordered_map<string, TxnManager*> active_txns;
 
   Rand* myrand = scheduler->rands[thread];
+  int txns = 0, last_txns = 0, pending_txns = 0;
+  double time = GetTime();
+  double now_time;
 
   // Begin main loop.
   MessageProto message;
   while (true) {
-    bool got_message = scheduler->message_queues[thread]->Pop(&message);
-    if (got_message == true) {
+	  bool got_message = scheduler->message_queues[thread]->Pop(&message);
+	  if (got_message == true) {
 
-      //std::cout << "Got remote read message!" << std::endl;
-      // Remote read result.
-      assert(message.type() == MessageProto::READ_RESULT);
-      TxnManager* manager = active_txns[message.destination_channel()];
-      manager->HandleReadResult(message);
+		  std::cout << "Got remote read message!" << std::endl;
+		  // Remote read result.
+		  assert(message.type() == MessageProto::READ_RESULT);
+		  TxnManager* manager = active_txns[message.destination_channel()];
+		  manager->HandleReadResult(message);
 
-      // Execute and clean up.
-      TxnProto* txn = manager->txn_;
+		  // Execute and clean up.
+		  TxnProto* txn = manager->txn_;
 
-      if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
-    	  std::cout << "Sending " << txn->txn_id() << " for remote read again!!!" << std::endl;
-    	  scheduler->thread_connections_[thread]->
-		  LinkChannel(IntToString(txn->txn_id()));
-          // There are outstanding remote reads.
-    	  active_txns[IntToString(txn->txn_id())] = manager;
-      }
-      else{
-    	  std::cout << "Tx " << txn->txn_id() << " finished after remote read!" << std::endl;
-    	  delete manager;
-          scheduler->thread_connections_[thread]->
-    			UnlinkChannel(IntToString(txn->txn_id()));
-          active_txns.erase(message.destination_channel());
-      }
-		// Respond to scheduler;
-		//scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
-    } else {
-      // No remote read result found, start on next txn if one is waiting.
-     TxnProto* txn;
-     bool got_it = scheduler->txns_queue_->Pop(&txn);
-      if (got_it == true) {
-        // Create manager.
-    	  TxnManager* manager =
-            new TxnManager(scheduler->configuration_,
-                               scheduler->thread_connections_[thread],
-                               scheduler->storage_, txn);
+		  if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
+			  std::cout << "Sending " << txn->txn_id() << " for remote read again!!!";
+			  std::cout << std::endl;
+			  scheduler->thread_connections_[thread]->
+			  LinkChannel(IntToString(txn->txn_id()));
+			  // There are outstanding remote reads.
+			  active_txns[IntToString(txn->txn_id())] = manager;
+		  }
+		  else{
+			  //--pending_txns;
+			  //++txns;
+			  delete manager;
+			  scheduler->thread_connections_[thread]->
+					UnlinkChannel(IntToString(txn->txn_id()));
+			  active_txns.erase(message.destination_channel());
+		  }
+			// Respond to scheduler;
+			//scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
+		}
+	  else {
+		  // No remote read result found, start on next txn if one is waiting.
+		  TxnProto* txn;
+		  bool got_it = scheduler->txns_queue_->Pop(&txn);
+		  if (got_it == true) {
+			  // Create manager.
+			  TxnManager* manager =
+					new TxnManager(scheduler->configuration_,
+								   scheduler->thread_connections_[thread],
+								   scheduler->storage_, txn);
 
-    	  if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
-    		  std::cout << "Sending "<<txn->txn_id() <<" for remote read" << std::endl;
-    		  scheduler->thread_connections_[thread]->
-              	  LinkChannel(IntToString(txn->txn_id()));
-              // There are outstanding remote reads.
-              active_txns[IntToString(txn->txn_id())] = manager;
-    	  }
-    	  else{
-    		  std::cout << "Tx " << txn->txn_id() <<" finished!" << std::endl;
-    		  delete manager;
-    	  }
-      }
+			  if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
+					std::cout << "Sending "<<txn->txn_id() <<" for remote read" << std::endl;
+					scheduler->thread_connections_[thread]->
+						  LinkChannel(IntToString(txn->txn_id()));
+					// There are outstanding remote reads.
+					active_txns[IntToString(txn->txn_id())] = manager;
+					//++pending_txns;
+			  }
+			  else{
+					//++txns;
+					//std::cout << "Tx " << txn->txn_id() <<" finished!" << std::endl;
+				  txns = txn->txn_id();
+				  delete manager;
+			  }
+		  }
+	  }
+
+	  if (thread == 1){
+		  now_time = GetTime();
+		  if (now_time > time + 1) {
+			  std::cout << "Completed " << (static_cast<double>(txns-last_txns) / (now_time- time))
+						<< " txns/sec, "
+						//<< test<< " for drop speed , "
+						//<< executing_txns << " executing, "
+						<< pending_txns << " pending\n" << std::flush;
+			  // Reset txn count.
+			  time = GetTime();
+			  last_txns = txns;
+			  //test ++;
+		}
     }
   }
   return NULL;

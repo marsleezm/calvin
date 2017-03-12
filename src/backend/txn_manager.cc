@@ -11,12 +11,15 @@
 #include "common/utils.h"
 #include "proto/txn.pb.h"
 #include "proto/message.pb.h"
+#include "applications/application.h"
 
 TxnManager::TxnManager(Configuration* config, Connection* connection,
                                Storage* actual_storage, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
-	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0) {
-	message_ = new MessageProto();
+	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0){
+	if (txn->multipartition() != SINGLE_PART){
+		message_ = new MessageProto();
+	}
   //MessageProto message;
 
   // If reads are performed at this node, execute local reads and broadcast
@@ -115,9 +118,11 @@ Value* TxnManager::ReadObject(const Key& key) {
 		if (val == NULL){
 			val = actual_storage_->ReadObject(key);
 			objects_[key] = val;
-			message_->add_keys(key);
-			message_->add_values(val == NULL ? "" : *val);
-			message_has_value_ = true;
+			if (txn_->multipartition()){
+				message_->add_keys(key);
+				message_->add_values(val == NULL ? "" : *val);
+				message_has_value_ = true;
+			}
 		}
 		return val;
 	}

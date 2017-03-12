@@ -52,7 +52,7 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
 
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
-  txn->set_txn_type(MICROTXN_SP);
+  txn->set_txn_type(SINGLE_PART);
 
   txn->set_seed(time(NULL));
 
@@ -85,7 +85,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int part1, int part2, int par
 
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
-  txn->set_txn_type(MICROTXN_MP);
+  txn->set_txn_type(MULTI_PART);
 
   txn->set_seed(time(NULL));
 
@@ -152,7 +152,7 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
 	{
 		set<int> keys;
 
-		if (txn->txn_type() == MICROTXN_SP){
+		if (txn->txn_type() == SINGLE_PART){
 			int hotkey = txn->writers(0) + nparts * (rand->next() % hot_records);
 			str_keys.push_back(IntToString(hotkey));
 			GetRandomKeys(&keys,
@@ -176,8 +176,6 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
 					str_keys.push_back(IntToString(*it));
 			}
 		}
-
-
 	  	storage->AddKeys(str_keys);
 	}
 	else
