@@ -20,6 +20,7 @@ TxnManager::TxnManager(Configuration* config, Connection* connection,
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
+	message_ = NULL;
 	if (txn->txn_type() != SINGLE_PART){
 		message_ = new MessageProto();
 		message_->set_destination_channel(IntToString(txn_->txn_id()));

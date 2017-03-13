@@ -134,7 +134,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  // Execute and clean up.
 		  TxnProto* txn = manager->txn_;
 
-		  //std::cout << "Got remote msg for txn: " << txn->txn_id() << ", with "<< message.keys().data() << std::endl;
+		  //std::cout << "Got remote msg for txn: " << txn->txn_id() << std::endl;
 		  if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
 			  //std::cout << "Sending for " << txn->txn_id() << " for remote read again!" << std::endl;
 			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
@@ -178,7 +178,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  else{
 					//++txns;
-					//std::cout << "Tx " << txn->txn_id() <<" finished!" << std::endl;
+				  //std::cout << "Tx " << txn->txn_id() <<" finished!" << std::endl;
 				  txns = std::max(txns, (int)txn->txn_id());
 				  finished = true;
 				  delete manager;
