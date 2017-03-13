@@ -79,13 +79,14 @@ bool CollapsedVersionedStorage::PutObject(const Key& key, Value* value,
   if (objects_.count(key) != 0 && (current = objects_[key]) != NULL) {
     int64 most_recent = current->txn_id;
 
-    if ((most_recent > stable_ && txn_id > stable_) ||
-        (most_recent <= stable_ && txn_id <= stable_)) {
-      item->next = current->next;
-      delete current;
-    } else {
+    //TODO: does not delete any old version for the moment
+    //if ((most_recent > stable_ && txn_id > stable_) ||
+    //    (most_recent <= stable_ && txn_id <= stable_)) {
+    //  item->next = current->next;
+    //  delete current;
+    //} else {
       item->next = current;
-    }
+    //}
   }
   objects_[key] = item;
 
