@@ -118,6 +118,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   int txns = 0, last_txns = 0, pending_txns = 0;
   double time = GetTime();
   double now_time;
+  bool finished = true;
 
   // Begin main loop.
   MessageProto message;
@@ -125,7 +126,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  bool got_message = scheduler->message_queues[thread]->Pop(&message);
 	  if (got_message == true) {
 
-		  std::cout << "Got remote read message!" << std::endl;
 		  // Remote read result.
 		  assert(message.type() == MessageProto::READ_RESULT);
 		  TxnManager* manager = active_txns[message.destination_channel()];
@@ -134,27 +134,30 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  // Execute and clean up.
 		  TxnProto* txn = manager->txn_;
 
+		  //std::cout << "Got remote msg for txn: " << txn->txn_id() << ", with "<< message.keys().data() << std::endl;
 		  if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
-			  std::cout << "Sending " << txn->txn_id() << " for remote read again!!!";
-			  std::cout << std::endl;
-			  scheduler->thread_connections_[thread]->
-			  LinkChannel(IntToString(txn->txn_id()));
+			  //std::cout << "Sending for " << txn->txn_id() << " for remote read again!" << std::endl;
+			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
 			  // There are outstanding remote reads.
 			  active_txns[IntToString(txn->txn_id())] = manager;
+			  finished = true;
 		  }
 		  else{
-			  //--pending_txns;
+			  --pending_txns;
 			  //++txns;
+			  //std::cout << txn->txn_id() << " finished" << std::endl;
+			  txns = std::max(txns, (int)txn->txn_id());
 			  delete manager;
 			  scheduler->thread_connections_[thread]->
 					UnlinkChannel(IntToString(txn->txn_id()));
 			  active_txns.erase(message.destination_channel());
+			  finished = true;
 		  }
 			// Respond to scheduler;
 			//scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
 		}
-	  else {
-		  // No remote read result found, start on next txn if one is waiting.
+	  else if (finished){
+		  // No remote read result found, start next txn if one is waiting.
 		  TxnProto* txn;
 		  bool got_it = scheduler->txns_queue_->Pop(&txn);
 		  if (got_it == true) {
@@ -165,17 +168,19 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 								   scheduler->storage_, txn);
 
 			  if (scheduler->application_->Execute(txn, manager, myrand) == READ_BLOCKED){
-					std::cout << "Sending "<<txn->txn_id() <<" for remote read" << std::endl;
+					//std::cout << "Sending "<<txn->txn_id() <<" for remote read" << std::endl;
 					scheduler->thread_connections_[thread]->
 						  LinkChannel(IntToString(txn->txn_id()));
 					// There are outstanding remote reads.
 					active_txns[IntToString(txn->txn_id())] = manager;
-					//++pending_txns;
+					finished = true;
+					++pending_txns;
 			  }
 			  else{
 					//++txns;
 					//std::cout << "Tx " << txn->txn_id() <<" finished!" << std::endl;
-				  txns = txn->txn_id();
+				  txns = std::max(txns, (int)txn->txn_id());
+				  finished = true;
 				  delete manager;
 			  }
 		  }

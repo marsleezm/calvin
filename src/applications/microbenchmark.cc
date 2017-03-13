@@ -22,7 +22,7 @@
 // 'key_start' <= k < 'key_limit', and k == part (mod nparts).
 // Requires: key_start % nparts == 0
 void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
-                                   int key_limit, int part) const {
+                                   int key_limit, int part, Rand* rand) const {
   assert(key_start % nparts == 0);
   keys->clear();
   for (int i = 0; i < num_keys; i++) {
@@ -30,20 +30,12 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
     int key;
     do {
       key = key_start + part +
-            nparts * (rand() % ((key_limit - key_start)/nparts));
+            nparts * (rand->next() % ((key_limit - key_start)/nparts));
     } while (keys->count(key));
     keys->insert(key);
   }
 }
 
-
-string to_str(vector<string> s){
-	string str = "";
-	for(uint i = 0; i < s.size(); ++i){
-		str += s[i] +",";
-	}
-	return str;
-}
 
 // Create a non-dependent single-partition transaction
 TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
@@ -54,7 +46,9 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
   txn->set_txn_id(txn_id);
   txn->set_txn_type(SINGLE_PART);
 
-  txn->set_seed(time(NULL));
+  struct timeval tv;
+  gettimeofday(&tv,NULL);
+  txn->set_seed(1000000 * tv.tv_sec + tv.tv_usec);
 
   txn->add_readers(part);
   txn->add_writers(part);
@@ -87,7 +81,9 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int part1, int part2, int par
   txn->set_txn_id(txn_id);
   txn->set_txn_type(MULTI_PART);
 
-  txn->set_seed(time(NULL));
+  struct timeval tv;
+  gettimeofday(&tv,NULL);
+  txn->set_seed(1000000 * tv.tv_sec + tv.tv_usec);
 
   txn->add_readers(part1);
   txn->add_readers(part2);
@@ -159,7 +155,7 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
 			                kRWSetSize - 1,
 			                nparts * hot_records,
 			                nparts * kDBSize,
-							txn->writers(0));
+							txn->writers(0), rand);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				str_keys.push_back(IntToString(*it));
 		}
@@ -167,13 +163,14 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
 			for (int i = 0; i< txn->writers().size(); ++i) {
 				str_keys.push_back(IntToString(txn->writers(i) + nparts * (rand->next() % hot_records)));
 				if (i == 0){
-					set<int> keys;
-				  	GetRandomKeys(&keys, 3, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i));
+				  	GetRandomKeys(&keys, 3, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i), rand);
 				}
 				else
-				  	GetRandomKeys(&keys, 2, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i));
-				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+				  	GetRandomKeys(&keys, 2, nparts * hot_records, nparts * kDBSize, (int)txn->writers(i), rand);
+				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it) {
+					//std::cout << txn->txn_id()<<" adding " << *it << " for " <<  txn->writers(i) << std::endl;
 					str_keys.push_back(IntToString(*it));
+				}
 			}
 		}
 	  	storage->AddKeys(str_keys);
@@ -184,11 +181,12 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
 
 	//<< txn->txn_id() << " has " << s
 	//std::cout << "Txn " << txn->txn_id() << " has " << to_str(str_keys)  << std::endl;
+	//std::cout << "Txn " << txn->txn_id() << " seed is " << txn->seed()  << std::endl;
 	for (int i = 0; i < kRWSetSize; i++) {
 		if (storage->ShouldExec()) {
 			Value* val = storage->ReadObject(str_keys[i]);
 			if (val == NULL){
-				std::cout << "Blocked when trying to read " << str_keys[i] << std::endl;
+				//std::cout << "Blocked when trying to read " << str_keys[i] << std::endl;
 				return READ_BLOCKED;
 			}
 			else

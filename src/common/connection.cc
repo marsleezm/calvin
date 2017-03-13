@@ -310,6 +310,7 @@ Connection::~Connection() {
   pthread_mutex_unlock(&(multiplexer_->new_connection_mutex_));
 }
 
+// Seems to only to send to local process??
 void Connection::Send(const MessageProto& message) {
   // Prepare message.
   string* message_string = new string();

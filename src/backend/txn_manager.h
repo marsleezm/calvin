@@ -106,6 +106,10 @@ class TxnManager {
 
   // Counting how many transaction steps have been executed the last time
   int max_counter_;
+
+  /****** For statistics ********/
+  int get_blocked_;
+  int sent_msg_;
 };
 
 #endif  // _DB_BACKEND_STORAGE_MANAGER_H_

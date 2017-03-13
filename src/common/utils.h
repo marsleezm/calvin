@@ -76,6 +76,22 @@ static inline void Spin(double duration) {
 //  while (GetTime() < start + duration) {}
 }
 
+static inline string to_str(vector<string> s){
+	string str = s[0];
+	for(uint i = 1; i < s.size(); ++i){
+		str += "," + s[i];
+	}
+	return str;
+}
+
+//static inline string ps_to_str(::google::protobuf::RepeatedPtrField<string> s){
+//	string str = s[0];
+//	for(uint i = 1; i < s.size(); ++i){
+//		str += "," + s[i];
+//	}
+//	return str;
+//}
+
 // Busy-wait until GetTime() >= time.
 static inline void SpinUntil(double time) {
   while (GetTime() >= time) {}
