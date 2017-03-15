@@ -77,7 +77,7 @@ bool CollapsedVersionedStorage::PutObject(const Key& key, Value* value,
   // Is the most recent value a candidate for pruning?
   DataNode* current;
   if (objects_.count(key) != 0 && (current = objects_[key]) != NULL) {
-    int64 most_recent = current->txn_id;
+    //int64 most_recent = current->txn_id;
 
     //TODO: does not delete any old version for the moment
     //if ((most_recent > stable_ && txn_id > stable_) ||
@@ -146,7 +146,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
 
   // First, we open the file for writing
   char log_name[200];
-  snprintf(log_name, sizeof(log_name), "%s/%"PRId64".checkpoint", CHKPNTDIR, stable_);
+  snprintf(log_name, sizeof(log_name), "%s /%" PRId64 ".checkpoint", CHKPNTDIR, stable_);
   FILE* checkpoint = fopen(log_name, "w");
 
   // Next we iterate through all of the objects and write the stable version
@@ -181,7 +181,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
   fprintf(checkpoint, "\nNewOrder\n");
   for (int64 i = 0; i < MAXARRAYSIZE; i++) {
     if (NewOrderStore[i] != NULL) {
-      fprintf(checkpoint, "%"PRId64"%s",
+      fprintf(checkpoint, "%" PRId64 "%s",
               static_cast<int64_t>((*NewOrderStore[i]).length()),
               (*NewOrderStore[i]).c_str());
     }
@@ -190,7 +190,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
   fprintf(checkpoint, "\nOrder\n");
   for (int64 i = 0; i < MAXARRAYSIZE; i++) {
     if (OrderStore[i] != NULL) {
-      fprintf(checkpoint, "%"PRId64"%s",
+      fprintf(checkpoint, "%" PRId64 "%s",
               static_cast<int64_t>((*OrderStore[i]).length()),
               (*OrderStore[i]).c_str());
     }
@@ -199,7 +199,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
   fprintf(checkpoint, "\nOrderLine\n");
   for (int64 i = 0; i < MAXARRAYSIZE * 15; i++) {
     if (OrderLineStore[i] != NULL) {
-      fprintf(checkpoint, "%"PRId64"%s",
+      fprintf(checkpoint, "%" PRId64 "%s",
               static_cast<int64_t>((*OrderLineStore[i]).length()),
               (*OrderLineStore[i]).c_str());
     }
@@ -208,7 +208,7 @@ void CollapsedVersionedStorage::CaptureCheckpoint() {
   fprintf(checkpoint, "\nHistory\n");
   for (int64 i = 0; i < MAXARRAYSIZE; i++) {
     if (HistoryStore[i] != NULL) {
-      fprintf(checkpoint, "%"PRId64"%s",
+      fprintf(checkpoint, "%" PRId64 "%s",
               static_cast<int64_t>((*HistoryStore[i]).length()),
               (*HistoryStore[i]).c_str());
     }

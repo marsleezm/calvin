@@ -42,7 +42,7 @@ PG =
 
 # Set the flags for C++ to compile with (namely where to look for external
 # libraries) and the linker libraries (again to look in the ext/ library)
-CXXFLAGS := -g -MD $(PG) -I$(SRCDIR) -I$(OBJDIR) \
+CXXFLAGS := -std=c++11 -g -MD $(PG) -I$(SRCDIR) -I$(OBJDIR) \
             -I$(ZEROMQ)/include \
             -I$(PROTOB)/src \
             -I$(GTEST)/include \
