@@ -17,7 +17,6 @@
 #include <functional>
 #include <queue>
 #include <vector>
-#include <atomic>
 
 #include "scheduler/scheduler.h"
 #include "common/utils.h"
@@ -38,10 +37,9 @@ class Connection;
 class DeterministicLockManager;
 class Storage;
 class TxnProto;
+class Client;
 
-#define NUM_THREADS 5
-#define TO_SC_NUM 200
-#define PEND_NUM 200
+#define NUM_THREADS 1 
 #define TO_SEND true
 #define TO_READ false
 // #define PREFETCHING
@@ -51,12 +49,15 @@ class DeterministicScheduler : public Scheduler {
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
                          Storage* storage, AtomicQueue<TxnProto*>* txns_queue,
 						 const Application* application);
+  DeterministicScheduler(Configuration* conf, Connection* batch_connection,
+                         Storage* storage, AtomicQueue<TxnProto*>* txns_queue,
+						 const Application* application, Client* client);
   virtual ~DeterministicScheduler();
-
- public:
-  static int64_t num_pend_txns_;
+  void static terminate() { terminated_ = true; }
 
  private:
+
+  static bool terminated_;
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
   
@@ -84,6 +85,10 @@ class DeterministicScheduler : public Scheduler {
   // Application currently being run.
   const Application* application_;
 
+  AtomicQueue<TxnProto*>* txns_queue_;
+
+  Client* client_;
+
   // The per-node lock manager tracks what transactions have temporary ownership
   // of what database objects, allowing the scheduler to track LOCAL conflicts
   // and enforce equivalence to transaction orders.
@@ -108,14 +113,14 @@ class DeterministicScheduler : public Scheduler {
 //    	  decltype([](pair<int64_t, int32_t> left, pair<int64_t, int32_t> right)
 //    			  { return (left.first > right.first);})> pending_txns_;
 
-  priority_queue<int64_t, vector<int64_t>, std::greater<int64_t> >* to_sc_txns_;
-  priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>* pending_txns_;
+  priority_queue<int64_t, vector<int64_t>, std::greater<int64_t> >* to_sc_txns_[NUM_THREADS];
+
+  priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>* pending_txns_[NUM_THREADS];
 
   //priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>* pending_txns_;
   //priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>* pending_reads_;
 
 
-  AtomicQueue<TxnProto*>* txns_queue_;
   
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
   

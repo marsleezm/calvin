@@ -6,6 +6,7 @@
 message TxnProto {
   // Globally unique transaction id, specifying global order.
   required int64 txn_id = 1;
+  optional int64 local_txn_id = 2;
 
   // Specifies which stored procedure to invoke at execution time.
   optional int32 txn_type = 10;

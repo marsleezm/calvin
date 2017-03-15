@@ -41,8 +41,10 @@ double worker_end[SAMPLES];
 double scheduler_unlock[SAMPLES];
 #endif
 
-int64_t Sequencer::num_sc_txns_=0;
+int64_t Sequencer::num_lc_txns_=0;
 int64_t Sequencer::num_c_txns_=0;
+atomic<int64_t> Sequencer::num_pend_txns_(0);
+atomic<int64_t> Sequencer::num_sc_txns_(0);
 
 void* Sequencer::RunSequencerWriter(void *arg) {
   reinterpret_cast<Sequencer*>(arg)->RunWriter();
@@ -58,7 +60,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
                      Client* client, Storage* storage)
     : epoch_duration_(0.01), configuration_(conf), connection_(connection),
       batch_connection_(batch_connection), client_(client), storage_(storage),
-	  deconstructor_invoked_(false), fetched_batch_num_(0) {
+	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0) {
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
   txns_queue_ = new AtomicQueue<TxnProto*>();
@@ -237,6 +239,8 @@ void Sequencer::RunWriter() {
       }
     }
 
+	//std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * MAX_BATCH_SIZE <<
+	//		"to" <<  batch_number * MAX_BATCH_SIZE+MAX_BATCH_SIZE << std::endl;
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
 #ifdef PAXOS
@@ -259,7 +263,8 @@ void Sequencer::RunReader() {
 #endif
 
   FetchMessage();
-
+  double time = GetTime(), now_time;
+  int64_t last_committed;
   // Set up batch messages for each system node.
   map<int, MessageProto> batches;
   for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
@@ -269,7 +274,6 @@ void Sequencer::RunReader() {
     batches[it->first].set_type(MessageProto::TXN_BATCH);
   }
 
-  double time = GetTime();
   int txn_count = 0;
   int batch_count = 0;
   int batch_number = configuration_->this_node_id;
@@ -360,6 +364,8 @@ void Sequencer::RunReader() {
 
     FetchMessage();
 
+
+
 #ifdef LATENCY_TEST
     if (watched_txn != -1) {
       sequencer_send[watched_txn] = GetTime();
@@ -368,15 +374,26 @@ void Sequencer::RunReader() {
 #endif
 
     // Report output.
-    if (GetTime() > time + 1) {
+    now_time = GetTime();
+    if (now_time > time + 1) {
 #ifdef VERBOSE_SEQUENCER
       std::cout << "Submitted " << txn_count << " txns in "
                 << batch_count << " batches,\n" << std::flush;
 #endif
+      std::cout << "Completed " <<
+		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
+			<< " txns/sec, "
+			<< num_sc_txns_ << " spec-committed, "
+			//<< test<< " for drop speed , "
+			//<< executing_txns << " executing, "
+			<< num_pend_txns_ << " pending\n" << std::flush;
+
+
       // Reset txn count.
-      time = GetTime();
+      time = now_time;
       txn_count = 0;
       batch_count = 0;
+      last_committed = Sequencer::num_lc_txns_;
     }
   }
   Spin(1);
@@ -390,19 +407,22 @@ void* Sequencer::FetchMessage() {
 
   //TxnProto* done_txn;
 
-  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
-  // Have we run out of txns in our batch? Let's get some new ones.
-  if (batch_message != NULL) {
-	  for (int i = 0; i < batch_message->data_size(); i++)
-	  {
-		  TxnProto* txn = new TxnProto();
-		  txn->ParseFromString(batch_message->data(i));
-		  txns_queue_->Push(txn);
-	  }
-	  delete batch_message;
-	  ++fetched_batch_num_;
+  if (txns_queue_->Size() < 1000){
+	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
+	  // Have we run out of txns in our batch? Let's get some new ones.
+	  if (batch_message != NULL) {
+		  for (int i = 0; i < batch_message->data_size(); i++)
+		  {
+			  TxnProto* txn = new TxnProto();
+			  txn->ParseFromString(batch_message->data(i));
+			  txn->set_local_txn_id(fetched_txn_num_++);
+			  txns_queue_->Push(txn);
+		  }
+		  delete batch_message;
+		  ++fetched_batch_num_;
 
-  // Done with current batch, get next.
+	  // Done with current batch, get next.
+	  }
   }
   return NULL;
 

@@ -157,7 +157,7 @@ Value* TxnManager::ReadObject(const Key& key) {
 			// The tranasction will perform the read again
 			--max_counter_;
 			if (message_has_value_){
-				if (Sequencer::num_sc_txns_+1 == txn_->txn_id()){
+				if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
 					SendMsg();
 					return reinterpret_cast<Value*>(WAIT_AND_SENT);
 				}

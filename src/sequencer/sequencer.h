@@ -12,6 +12,7 @@
 #include <queue>
 #include "common/utils.h"
 #include <tr1/unordered_map>
+#include <atomic>
 
 //#define PAXOS
 //#define PREFETCHING
@@ -21,6 +22,7 @@
 
 #define SAMPLES 100000
 #define SAMPLE_RATE 999
+//#define VERBOSE_SEQUENCER
 
 //#define LATENCY_TEST
 
@@ -28,6 +30,7 @@ using std::set;
 using std::string;
 using std::queue;
 using std::tr1::unordered_map;
+using std::atomic;
 
 class Configuration;
 class Connection;
@@ -69,8 +72,10 @@ class Sequencer {
   }
 
  public:
-  static int64_t num_sc_txns_;
+  static int64_t num_lc_txns_;
   static int64_t num_c_txns_;
+  static atomic<int64_t> num_pend_txns_;
+  static atomic<int64_t> num_sc_txns_;
 
  private:
   // Sequencer's main loops:
@@ -132,6 +137,9 @@ class Sequencer {
 
   // The number of fetched batches
   int fetched_batch_num_;
+
+  // The number of fetched txns
+  int fetched_txn_num_;
 
   // Returns ptr to heap-allocated
   unordered_map<int, MessageProto*> batches_;

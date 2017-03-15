@@ -212,7 +212,14 @@ storage->Initmutex();
                                      storage,
 									 sequencer.GetTxnsQueue(),
                                      new Microbenchmark(config.all_nodes.size(), HOT));
-  } else {
+  } else if(argv[2][0] == 's'){
+	DeterministicScheduler scheduler(&config,
+									 batch_connection,
+									 storage,
+									 NULL,
+									 new Microbenchmark(config.all_nodes.size(), HOT), client);
+  }
+  else {
 //    DeterministicScheduler scheduler(&config,
 //    								 batch_connection,
 //                                     storage,
@@ -226,6 +233,7 @@ storage->Initmutex();
   }
 
   Spin(180);
+  DeterministicScheduler::terminate();
   return 0;
 }
 
