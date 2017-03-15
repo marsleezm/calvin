@@ -23,13 +23,13 @@ message TxnProto {
   optional IsolationLevel isolation_level = 11;
 
   // Keys of objects read (but not modified) by this transaction.
-  //repeated bytes read_set = 20;
+  repeated bytes read_set = 20;
 
   // Keys of objects modified (but not read) by this transaction.
-  //repeated bytes write_set = 21;
+  repeated bytes write_set = 21;
 
   // Keys of objects read AND modified by this transaction.
-  //repeated bytes read_write_set = 22;
+  repeated bytes read_write_set = 22;
 
   // Arguments to be passed when invoking the stored procedure to execute this
   // transaction. 'arg' is a serialized protocol message. The client and backend

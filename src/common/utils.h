@@ -70,6 +70,14 @@ static inline double GetTime() {
   return tv.tv_sec + tv.tv_usec/1e6;
 }
 
+// Returns the number of seconds since midnight according to local system time,
+// to the nearest microsecond.
+static inline double GetUTime() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec*1e6 + tv.tv_usec;
+}
+
 // Busy-wait for 'duration' seconds.
 static inline void Spin(double duration) {
   usleep(1000000 * duration);

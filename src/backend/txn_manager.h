@@ -64,8 +64,8 @@ class TxnManager {
   void Init(){ exec_counter_ = 0;}
   bool ShouldExec();
 
-  void AddKeys(vector<string> keys) {keys_ = keys;}
-  vector<string> GetKeys() { return keys_;}
+  //void AddKeys(string* keys) {keys_ = keys;}
+  //vector<string> GetKeys() { return keys_;}
 
   TxnProto* get_txn(){ return txn_; }
 
@@ -99,7 +99,7 @@ class TxnManager {
   vector<Value*> remote_reads_;
 
   // The keys the transaction should access
-  vector<string> keys_;
+  //string keys_;
 
   // The message containing read results that should be sent to remote nodes
   MessageProto* message_;

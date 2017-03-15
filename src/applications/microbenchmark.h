@@ -44,6 +44,9 @@ class Microbenchmark : public Application {
  private:
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part, Rand* rand) const;
+  void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
+                     int key_limit, int part) const;
+  void GetKeys(TxnProto* txn, Rand* rand) const;
   Microbenchmark() {}
 };
 

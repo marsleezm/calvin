@@ -146,6 +146,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   // Begin main loop.
   MessageProto message;
   int64_t to_sc_txn;
+
+  int counter = 0;
+  double now_time, old_time=GetTime();
+
   while (!terminated_) {
 	  bool got_message = scheduler->message_queues[thread]->Pop(&message);
 	  if (got_message == true) {
@@ -257,22 +261,27 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  active_txns[txn->txn_id()] = manager;
 			  }
 			  else{
-				  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
-					  ++Sequencer::num_lc_txns_;
-					  //finished = true;
-					  //cout << txn->txn_id() << " directly local-commits" << endl;
-					  delete manager;
-				  }
-				  else{
-					  //cout << txn->txn_id() <<" spec-committed, because num of committed txns is "
-					//		  << Sequencer::num_lc_txns_ << endl;
-					  ++Sequencer::num_sc_txns_;
-					  active_txns[txn->txn_id()] = manager;
-					  my_to_sc_txns->push(txn->local_txn_id());
-				  }
+				  ++counter;
+				  delete manager;
+//				  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
+//					  ++Sequencer::num_lc_txns_;
+//					  delete manager;
+//				  }
+//				  else{
+//					  ++Sequencer::num_sc_txns_;
+//					  active_txns[txn->txn_id()] = manager;
+//					  my_to_sc_txns->push(txn->local_txn_id());
+//				  }
 			  }
 		  }
 	  }
+
+	    if (scheduler->txns_queue_ == NULL && counter == 100000){
+	    		now_time = GetTime();
+	    		std::cout << "Throughput is "<< counter / (now_time-old_time) << " txns/sec" << std::endl;
+	    		old_time = now_time;
+	    		counter = 0;
+	    }
   }
 
   delete scheduler->message_queues[thread];
