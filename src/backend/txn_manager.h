@@ -27,8 +27,9 @@
 
 #include "common/types.h"
 
-#define READ_BLOCKED 1
 #define FINISHED 0
+#define WAIT_AND_SENT 1
+#define WAIT_NOT_SENT 2
 
 using std::vector;
 using std::tr1::unordered_map;
@@ -39,6 +40,7 @@ class Scheduler;
 class Storage;
 class TxnProto;
 class MessageProto;
+class Sequencer;
 
 
 class TxnManager {
@@ -48,6 +50,8 @@ class TxnManager {
                  Storage* actual_storage, TxnProto* txn);
 
   ~TxnManager();
+
+  void SendMsg();
 
   Value* ReadObject(const Key& key);
   bool PutObject(const Key& key, Value* value);
@@ -62,6 +66,8 @@ class TxnManager {
 
   void AddKeys(vector<string> keys) {keys_ = keys;}
   vector<string> GetKeys() { return keys_;}
+
+  TxnProto* get_txn(){ return txn_; }
 
  private:
 

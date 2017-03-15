@@ -138,9 +138,10 @@ TxnProto* Microbenchmark::NewTxn(int64 txn_id, int txn_type,
   return NULL;
 }
 
-int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) const {
+int Microbenchmark::Execute(TxnManager* storage, Rand* rand) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
+	TxnProto* txn = storage->get_txn();
 	storage->Init();
 	vector<string> str_keys;
 	rand->seed(txn->seed());
@@ -185,10 +186,10 @@ int Microbenchmark::Execute(TxnProto* txn, TxnManager* storage, Rand* rand) cons
 	for (int i = 0; i < kRWSetSize; i++) {
 		if (storage->ShouldExec()) {
 			Value* val = storage->ReadObject(str_keys[i]);
-			if (val == NULL){
-				//std::cout << "Blocked when trying to read " << str_keys[i] << std::endl;
-				return READ_BLOCKED;
-			}
+			if (reinterpret_cast<int64>(val) == WAIT_AND_SENT)
+				return WAIT_AND_SENT;
+			else if(reinterpret_cast<int64>(val) == WAIT_NOT_SENT)
+				return WAIT_NOT_SENT;
 			else
 		    	*val = IntToString(StringToInt(*val) + 1);
 		}

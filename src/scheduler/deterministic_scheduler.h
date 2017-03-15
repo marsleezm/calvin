@@ -14,6 +14,10 @@
 #include <pthread.h>
 
 #include <deque>
+#include <functional>
+#include <queue>
+#include <vector>
+#include <atomic>
 
 #include "scheduler/scheduler.h"
 #include "common/utils.h"
@@ -27,6 +31,7 @@ class socket_t;
 class message_t;
 }
 using zmq::socket_t;
+using namespace std;
 
 class Configuration;
 class Connection;
@@ -35,6 +40,10 @@ class Storage;
 class TxnProto;
 
 #define NUM_THREADS 5
+#define TO_SC_NUM 200
+#define PEND_NUM 200
+#define TO_SEND true
+#define TO_READ false
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
@@ -43,6 +52,9 @@ class DeterministicScheduler : public Scheduler {
                          Storage* storage, AtomicQueue<TxnProto*>* txns_queue,
 						 const Application* application);
   virtual ~DeterministicScheduler();
+
+ public:
+  static int64_t num_pend_txns_;
 
  private:
   // Function for starting main loops in a separate pthreads.
@@ -83,9 +95,32 @@ class DeterministicScheduler : public Scheduler {
 //  socket_t* responses_out_[NUM_THREADS];
 //  socket_t* responses_in_;
   // The queue of fetched transactions
+
+  pthread_mutex_t counter_mutex_;
+
+  // Transactions that can be committed if all its previous txns have been local-committed
+//  auto cmp = [](pair<int64_t, int32_t> left, pair<int64_t, int32_t> right)
+//		  { return (left.first < right.first;};
+//  priority_queue<pair<int64_t, int32_t>,  vector<pair<int64_t, int32_t>>,
+//  	  decltype([](pair<int64_t, int32_t> left, pair<int64_t, int32_t> right)
+//  			  { return (left.first > right.first);})> to_sc_txns_;
+//
+//  // Transactions that can only resume execution after all its previous txns have been local-committed
+//  priority_queue<pair<int64_t, int32_t>,  vector<pair<int64_t, int32_t>>,
+//    	  decltype([](pair<int64_t, int32_t> left, pair<int64_t, int32_t> right)
+//    			  { return (left.first > right.first);})> pending_txns_;
+
+  priority_queue<int64_t, vector<int64_t>, std::greater<int64_t> >* to_sc_txns_;
+  priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>* pending_txns_;
+
+  //priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>* pending_txns_;
+  //priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>* pending_reads_;
+
+
   AtomicQueue<TxnProto*>* txns_queue_;
   
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
   
+
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

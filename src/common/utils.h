@@ -15,6 +15,7 @@
 #include <cmath>
 #include <vector>
 #include <tr1/unordered_map>
+#include <atomic>
 
 #include "common/types.h"
 
@@ -151,7 +152,18 @@ static inline void DeleteString(void* data, void* hint) {
 }
 static inline void Noop(void* data, void* hint) {}
 
+
 ////////////////////////////////
+class Compare
+{
+public:
+    bool operator() (std::pair<int64_t, bool> left, std::pair<int64_t, bool> right)
+    {
+    	return (left.first > right.first);
+    }
+};
+
+
 class Mutex {
  public:
   // Mutexes come into the world unlocked.
@@ -189,7 +201,23 @@ class Lock {
   Lock& operator=(const Lock&);
 };
 
-////////////////////////////////////////////////////////////////
+
+class Rand {
+	uint64_t x;
+public:
+	void seed(uint64_t seed){
+		x = seed;
+	}
+
+	uint64_t next(){
+	    x ^= x >> 12; // a
+	    x ^= x << 25; // b
+	    x ^= x >> 27; // c
+	    return x * 0x2545F4914F6CDD1D;
+	}
+};
+
+
 
 template<typename T>
 class AtomicQueue {
@@ -273,20 +301,7 @@ class AtomicQueue {
   AtomicQueue& operator=(const AtomicQueue<T>&);
 };
 
-class Rand {
-	uint64_t x;
-public:
-	void seed(uint64_t seed){
-		x = seed;
-	}
 
-	uint64_t next(){
-	    x ^= x >> 12; // a
-	    x ^= x << 25; // b
-	    x ^= x >> 27; // c
-	    return x * 0x2545F4914F6CDD1D;
-	}
-};
 
 class MutexRW {
  public:
@@ -345,6 +360,69 @@ class WriteLock {
   WriteLock(const WriteLock&);
   WriteLock& operator=(const WriteLock&);
 };
+
+
+//template<class T>
+//class slist{
+//  class node
+//  {
+//	  node* next_;
+//	  const T* data_;
+//
+//	public:
+//
+//	  node(const node* n, const const T d):next_(n),data_(d){}
+//
+//	  ~node(){
+//		  delete next;
+//		  delete data_;
+//	  }
+//
+//	  node* next(){
+//		  return next_;
+//	  }
+//
+//	  const T* data(){
+//		  return data_;
+//	  }
+//  };
+//
+//	node* head_;
+//
+//
+//public:
+//
+//	slist() : head_(nullptr){}
+//	bool empty(){ return (head_ == nullptr); }
+//
+//
+//	void push_front(const T* h){
+//		node* new_head = new node(head, h);
+//		replace_head(new_head);
+//	}
+//
+//
+//
+//	node* head(){
+//		return std::atomic_load(head_);
+//	}
+//
+//	void  replace_head(const node* h){
+//		std::atomic_store(head_, h);
+//	}
+//
+//	node* begin(){
+//		return head;
+//	}
+//
+//	// Non-copyable non-movable
+//private:
+//	slist(const slist&);
+//	slist& operator=(const slist&) ;
+//	slist(const slist&&);
+//	slist& operator=(const slist&&) ;
+//};
+
 
 template<typename K, typename V>
 class AtomicMap {

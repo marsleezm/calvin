@@ -7,6 +7,7 @@
 
 #include "backend/storage.h"
 #include "common/configuration.h"
+#include "sequencer/sequencer.h"
 #include "common/connection.h"
 #include "common/utils.h"
 #include "proto/txn.pb.h"
@@ -153,27 +154,38 @@ Value* TxnManager::ReadObject(const Key& key) {
 		}
 		else{ //Should be blocked
 			++get_blocked_;
-			if (message_has_value_){
-				++sent_msg_;
-				for (int i = 0; i < txn_->writers().size(); i++) {
-				  if (txn_->writers(i) != configuration_->this_node_id) {
-					  //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
-					  message_->set_destination_node(txn_->writers(i));
-					  connection_->Send1(*message_);
-				  }
-				}
-				delete message_;
-				message_ = new MessageProto();
-				message_->set_destination_channel(IntToString(txn_->txn_id()));
-				message_->set_type(MessageProto::READ_RESULT);
-				message_has_value_ = false;
-			}
-
 			// The tranasction will perform the read again
 			--max_counter_;
-			return NULL;
+			if (message_has_value_){
+				if (Sequencer::num_sc_txns_+1 == txn_->txn_id()){
+					SendMsg();
+					return reinterpret_cast<Value*>(WAIT_AND_SENT);
+				}
+				else{
+					return reinterpret_cast<Value*>(WAIT_NOT_SENT);
+				}
+			}
+			else{
+				return reinterpret_cast<Value*>(WAIT_AND_SENT);
+			}
 		}
 	}
+}
+
+void TxnManager::SendMsg(){
+	++sent_msg_;
+	for (int i = 0; i < txn_->writers().size(); i++) {
+	  if (txn_->writers(i) != configuration_->this_node_id) {
+		  //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
+		  message_->set_destination_node(txn_->writers(i));
+		  connection_->Send1(*message_);
+	  }
+	}
+	delete message_;
+	message_ = new MessageProto();
+	message_->set_destination_channel(IntToString(txn_->txn_id()));
+	message_->set_type(MessageProto::READ_RESULT);
+	message_has_value_ = false;
 }
 
 bool TxnManager::PutObject(const Key& key, Value* value) {

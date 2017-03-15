@@ -68,6 +68,9 @@ class Sequencer {
 	  return txns_queue_;
   }
 
+  static int64_t num_sc_txns_;
+  static int64_t num_c_txns_;
+
  private:
   // Sequencer's main loops:
   //
