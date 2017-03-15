@@ -40,7 +40,7 @@ using zmq::socket_t;
 using std::map;
 
 
-int64_t num_pend_txns_=0;
+int64_t DeterministicScheduler::num_pend_txns_=0;
 
 static void DeleteTxnPtr(void* data, void* hint) { free(data); }
 
@@ -67,7 +67,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     : configuration_(conf), batch_connection_(batch_connection), storage_(storage),
 	  application_(application), txns_queue_(txns_queue) {
   //lock_manager_ = new DeterministicLockManager(configuration_);
-	pthread_mutex_init(&counter_mutex_, NULL);
 	to_sc_txns_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t> >[NUM_THREADS];
 	pending_txns_ = new priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>[NUM_THREADS];
 
@@ -172,35 +171,38 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 		  // No remote read result found, start next txn if one is waiting.
-	  pair<int64_t, bool> pend_txn = my_pend_txns.top();
-	  if (Sequencer::num_sc_txns_+1 == pend_txn.first) {
-			  //!TODO: Maybe the transactoin has already been aborted! Need to check
-		  my_pend_txns.pop();
-		  if(pend_txn.second == TO_SEND){
-			  active_txns[pend_txn.first]->SendMsg();
-			  scheduler->thread_connections_[thread]->
-						LinkChannel(IntToString(pend_txn.first));
-		  }
-		  else{
-			  TxnManager* manager = active_txns[pend_txn.first];
-			  if (scheduler->application_->Execute(manager, myrand) == WAIT_AND_SENT){
-				  //std::cout << "Sending for " << txn->txn_id() << " for remote read again!" << std::endl;
-				  scheduler->thread_connections_[thread]->LinkChannel(IntToString(pend_txn.first));
-				  // There are outstanding remote reads.
-				  active_txns[pend_txn.first] = manager;
-				  //finished = true;
+	  if (!my_pend_txns.empty()){
+		  pair<int64_t, bool> pend_txn = my_pend_txns.top();
+		  if (Sequencer::num_sc_txns_+1 == pend_txn.first) {
+				  //!TODO: Maybe the transactoin has already been aborted! Need to check
+			  my_pend_txns.pop();
+			  if(pend_txn.second == TO_SEND){
+				  active_txns[pend_txn.first]->SendMsg();
+				  scheduler->thread_connections_[thread]->
+							LinkChannel(IntToString(pend_txn.first));
 			  }
 			  else{
-				  ++Sequencer::num_sc_txns_;
-				  --num_pend_txns_;
-				  delete manager;
-				  //finished = true;
-				  scheduler->thread_connections_[thread]->
-						UnlinkChannel(IntToString(pend_txn.first));
-				  active_txns.erase(pend_txn.first);
+				  TxnManager* manager = active_txns[pend_txn.first];
+				  if (scheduler->application_->Execute(manager, myrand) == WAIT_AND_SENT){
+					  //std::cout << "Sending for " << txn->txn_id() << " for remote read again!" << std::endl;
+					  scheduler->thread_connections_[thread]->LinkChannel(IntToString(pend_txn.first));
+					  // There are outstanding remote reads.
+					  active_txns[pend_txn.first] = manager;
+					  //finished = true;
+				  }
+				  else{
+					  ++Sequencer::num_sc_txns_;
+					  --num_pend_txns_;
+					  delete manager;
+					  //finished = true;
+					  scheduler->thread_connections_[thread]->
+							UnlinkChannel(IntToString(pend_txn.first));
+					  active_txns.erase(pend_txn.first);
+				  }
 			  }
 		  }
 	  }
+
 
 	  TxnProto* txn;
 	  bool got_it = scheduler->txns_queue_->Pop(&txn);

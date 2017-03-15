@@ -96,8 +96,6 @@ class DeterministicScheduler : public Scheduler {
 //  socket_t* responses_in_;
   // The queue of fetched transactions
 
-  pthread_mutex_t counter_mutex_;
-
   // Transactions that can be committed if all its previous txns have been local-committed
 //  auto cmp = [](pair<int64_t, int32_t> left, pair<int64_t, int32_t> right)
 //		  { return (left.first < right.first;};

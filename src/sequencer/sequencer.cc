@@ -41,8 +41,8 @@ double worker_end[SAMPLES];
 double scheduler_unlock[SAMPLES];
 #endif
 
-int64_t num_sc_txns_=0;
-int64_t num_c_txns_=0;
+int64_t Sequencer::num_sc_txns_=0;
+int64_t Sequencer::num_c_txns_=0;
 
 void* Sequencer::RunSequencerWriter(void *arg) {
   reinterpret_cast<Sequencer*>(arg)->RunWriter();
