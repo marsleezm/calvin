@@ -140,8 +140,10 @@ int main(int argc, char** argv) {
   ConnectionMultiplexer multiplexer(&config);
 
   // Artificial loadgen clients.
-  Client* client = (argv[2][0] == 't') ?
-		  reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3]))) :
+//  Client* client = (argv[2][0] == 't') ?
+//		  reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3]))) :
+//		  reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3])));
+  Client* client =
 		  reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3])));
 
 // #ifdef PAXOS
