@@ -30,6 +30,7 @@
 #define FINISHED 0
 #define WAIT_AND_SENT 1
 #define WAIT_NOT_SENT 2
+#define SKIP 3
 
 using std::vector;
 using std::tr1::unordered_map;
@@ -43,17 +44,18 @@ class MessageProto;
 class Sequencer;
 
 
-class TxnManager {
+class StorageManager {
  public:
   // TODO(alex): Document this class correctly.
-  TxnManager(Configuration* config, Connection* connection,
+  StorageManager(Configuration* config, Connection* connection,
                  Storage* actual_storage, TxnProto* txn);
 
-  ~TxnManager();
+  ~StorageManager();
 
   void SendMsg();
 
   Value* ReadObject(const Key& key);
+  Value* SkipOrRead(const Key& key);
   bool PutObject(const Key& key, Value* value);
   bool DeleteObject(const Key& key);
 
@@ -62,7 +64,18 @@ class TxnManager {
   Storage* GetStorage() { return actual_storage_; }
 
   void Init(){ exec_counter_ = 0;}
-  bool ShouldExec();
+  inline bool ShouldExec()
+  {
+	  if (exec_counter_ == max_counter_){
+		++exec_counter_;
+		++max_counter_;
+		return true;
+	}
+	else{
+		++exec_counter_;
+		return false;
+	}
+}
 
   //void AddKeys(string* keys) {keys_ = keys;}
   //vector<string> GetKeys() { return keys_;}

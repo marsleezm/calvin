@@ -28,10 +28,10 @@ class Microbenchmark : public Application {
 
   virtual TxnProto* NewTxn(int64 txn_id, int txn_type, string args,
                            Configuration* config = NULL) const;
-  virtual int Execute(TxnManager* storage, Rand* rand) const;
+  virtual int Execute(StorageManager* storage, Rand* rand) const;
 
-  TxnProto* MicroTxnSP(int64 txn_id, int part);
-  TxnProto* MicroTxnMP(int64 txn_id, int part1, int part2, int part3);
+  TxnProto* MicroTxnSP(int64 txn_id, int64 seed, int part);
+  TxnProto* MicroTxnMP(int64 txn_id, int64 seed, int part1, int part2, int part3);
 
   int nparts;
   int hot_records;

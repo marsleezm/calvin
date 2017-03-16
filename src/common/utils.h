@@ -27,6 +27,11 @@ using std::tr1::unordered_map;
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)
 
+#define NORMAL_QUEUE 0
+#define FROM_SELF 1
+#define FROM_SEQ_SINGLE 2
+#define FROM_SEQ_DIST 3
+
 // Status code for return values.
 struct Status {
   // Represents overall status state.
@@ -212,6 +217,7 @@ class Lock {
 
 class Rand {
 	uint64_t x;
+	uint64_t y;
 public:
 	void seed(uint64_t seed){
 		x = seed;
@@ -221,7 +227,16 @@ public:
 	    x ^= x >> 12; // a
 	    x ^= x << 25; // b
 	    x ^= x >> 27; // c
-	    return x * 0x2545F4914F6CDD1D;
+	    x = x * 0x2545F4914F6CDD1D;
+	    if (y == x){
+	    	x += 1;
+	    	y = x;
+	    	return x;
+	    }
+	    else{
+	    	y = x;
+	    	return x;
+	    }
 	}
 };
 

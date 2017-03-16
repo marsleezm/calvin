@@ -12,6 +12,7 @@
 #define _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_
 
 #include <pthread.h>
+#include <iostream>
 
 #include <deque>
 #include <functional>
@@ -22,6 +23,7 @@
 #include "common/utils.h"
 #include "proto/txn.pb.h"
 #include "proto/message.pb.h"
+#include "sequencer/sequencer.h"
 
 using std::deque;
 
@@ -39,7 +41,7 @@ class Storage;
 class TxnProto;
 class Client;
 
-#define NUM_THREADS 1 
+#define NUM_THREADS 1
 #define TO_SEND true
 #define TO_READ false
 // #define PREFETCHING
@@ -48,20 +50,43 @@ class DeterministicScheduler : public Scheduler {
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
                          Storage* storage, AtomicQueue<TxnProto*>* txns_queue,
-						 const Application* application);
-  DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-                         Storage* storage, AtomicQueue<TxnProto*>* txns_queue,
-						 const Application* application, Client* client);
+						 Client* client, const Application* application, int queue_mode);
   virtual ~DeterministicScheduler();
   void static terminate() { terminated_ = true; }
 
  private:
-
   static bool terminated_;
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
   
   static void* LockManagerThread(void* arg);
+
+  inline TxnProto* GetTxn(bool& got_it){
+	  TxnProto* txn;
+	  if(queue_mode == FROM_SELF){
+		  client_->GetTxn(&txn, Sequencer::num_lc_txns_, GetUTime());
+		  txn->set_local_txn_id(Sequencer::num_lc_txns_);
+		  return txn;
+	  }
+	  else if (queue_mode == NORMAL_QUEUE){
+		  got_it = txns_queue_->Pop(&txn);
+		  return txn;
+	  }
+	  else if (queue_mode == FROM_SEQ_SINGLE){
+		  got_it = txns_queue_->Pop(&txn);
+		  return txn;
+	  }
+	  else if (queue_mode == FROM_SEQ_DIST){
+		  // !TODO: Not implemented yet
+		  got_it = txns_queue_->Pop(&txn);
+		  return txn;
+	  }
+	  else{
+		  std::cout<< "!!!!!!!!!!!!WRONG!!!!!!!!!!!!!!" << endl;
+		  got_it = false;
+		  return txn;
+	  }
+  }
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
   TxnProto* GetTxnPtr(socket_t* socket, zmq::message_t* msg);
@@ -82,12 +107,15 @@ class DeterministicScheduler : public Scheduler {
   // Storage layer used in application execution.
   Storage* storage_;
   
-  // Application currently being run.
-  const Application* application_;
-
   AtomicQueue<TxnProto*>* txns_queue_;
 
   Client* client_;
+
+  // Application currently being run.
+  const Application* application_;
+
+  // Queue mode
+  int queue_mode;
 
   // The per-node lock manager tracks what transactions have temporary ownership
   // of what database objects, allowing the scheduler to track LOCAL conflicts
@@ -102,19 +130,9 @@ class DeterministicScheduler : public Scheduler {
   // The queue of fetched transactions
 
   // Transactions that can be committed if all its previous txns have been local-committed
-//  auto cmp = [](pair<int64_t, int32_t> left, pair<int64_t, int32_t> right)
-//		  { return (left.first < right.first;};
-//  priority_queue<pair<int64_t, int32_t>,  vector<pair<int64_t, int32_t>>,
-//  	  decltype([](pair<int64_t, int32_t> left, pair<int64_t, int32_t> right)
-//  			  { return (left.first > right.first);})> to_sc_txns_;
-//
-//  // Transactions that can only resume execution after all its previous txns have been local-committed
-//  priority_queue<pair<int64_t, int32_t>,  vector<pair<int64_t, int32_t>>,
-//    	  decltype([](pair<int64_t, int32_t> left, pair<int64_t, int32_t> right)
-//    			  { return (left.first > right.first);})> pending_txns_;
-
   priority_queue<int64_t, vector<int64_t>, std::greater<int64_t> >* to_sc_txns_[NUM_THREADS];
 
+  // Transactions that can only resume execution after all its previous txns have been local-committed
   priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>* pending_txns_[NUM_THREADS];
 
   //priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>* pending_txns_;

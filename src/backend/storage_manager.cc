@@ -1,7 +1,7 @@
 // Author: Alexander Thomson (thomson@cs.yale.edu)
 // Author: Kun Ren (kun.ren@yale.edu)
 
-#include "txn_manager.h"
+#include "storage_manager.h"
 
 #include <ucontext.h>
 
@@ -15,7 +15,7 @@
 #include "applications/application.h"
 #include <iostream>
 
-TxnManager::TxnManager(Configuration* config, Connection* connection,
+StorageManager::StorageManager(Configuration* config, Connection* connection,
                                Storage* actual_storage, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0){
@@ -84,19 +84,8 @@ TxnManager::TxnManager(Configuration* config, Connection* connection,
   // Scheduler is responsible for calling HandleReadResponse. We're done here.
 }
 
-bool TxnManager::ShouldExec(){
-	if (exec_counter_ == max_counter_){
-		++exec_counter_;
-		++max_counter_;
-		return true;
-	}
-	else{
-		++exec_counter_;
-		return false;
-	}
-}
 
-void TxnManager::HandleReadResult(const MessageProto& message) {
+void StorageManager::HandleReadResult(const MessageProto& message) {
   assert(message.type() == MessageProto::READ_RESULT);
   for (int i = 0; i < message.keys_size(); i++) {
     Value* val = new Value(message.values(i));
@@ -106,8 +95,10 @@ void TxnManager::HandleReadResult(const MessageProto& message) {
   }
 }
 
-TxnManager::~TxnManager() {
+StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
+	delete txn_;
+
 	if (message_has_value_){
 		for (int i = 0; i < txn_->writers().size(); i++) {
 		  if (txn_->writers(i) != configuration_->this_node_id) {
@@ -127,13 +118,63 @@ TxnManager::~TxnManager() {
 	}
 }
 
-Value* TxnManager::ReadObject(const Key& key) {
+
+Value* StorageManager::SkipOrRead(const Key& key) {
+
+	if (exec_counter_ == max_counter_){
+		++exec_counter_;
+		++max_counter_;
+
+		// The key is replicated locally, should broadcast to all readers
+			// !TODO: only send the value when all previous txns finish
+			if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
+				Value* val = objects_[key];
+				if (val == NULL){
+					val = actual_storage_->ReadObject(key);
+					objects_[key] = val;
+					//std::cout <<"here, multi part is " << txn_->txn_type() << std::endl;
+					if (txn_->txn_type() == MULTI_PART){
+						message_->add_keys(key);
+						message_->add_values(val == NULL ? "" : *val);
+						message_has_value_ = true;
+					}
+				}
+				return val;
+			}
+			else // The key is not replicated locally, the writer should wait
+			{
+				if (objects_.count(key) > 0){
+					return objects_[key];
+				}
+				else{ //Should be blocked
+					++get_blocked_;
+					// The tranasction will perform the read again
+					--max_counter_;
+					if (message_has_value_){
+						if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
+							SendMsg();
+							return reinterpret_cast<Value*>(WAIT_AND_SENT);
+						}
+						else{
+							return reinterpret_cast<Value*>(WAIT_NOT_SENT);
+						}
+					}
+					else{
+						return reinterpret_cast<Value*>(WAIT_AND_SENT);
+					}
+				}
+			}
+	}
+	else{
+		++exec_counter_;
+		return reinterpret_cast<Value*>(SKIP);
+	}
+}
+
+Value* StorageManager::ReadObject(const Key& key) {
 	// The key is replicated locally, should broadcast to all readers
 	// !TODO: only send the value when all previous txns finish
 	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-		//        Value* val = actual_storage_->ReadObject(key);
-		//        objects_[key] = val;
-
 		Value* val = objects_[key];
 		if (val == NULL){
 			val = actual_storage_->ReadObject(key);
@@ -172,7 +213,7 @@ Value* TxnManager::ReadObject(const Key& key) {
 	}
 }
 
-void TxnManager::SendMsg(){
+void StorageManager::SendMsg(){
 	++sent_msg_;
 	for (int i = 0; i < txn_->writers().size(); i++) {
 	  if (txn_->writers(i) != configuration_->this_node_id) {
@@ -188,7 +229,7 @@ void TxnManager::SendMsg(){
 	message_has_value_ = false;
 }
 
-bool TxnManager::PutObject(const Key& key, Value* value) {
+bool StorageManager::PutObject(const Key& key, Value* value) {
   // Write object to storage if applicable.
   if (configuration_->LookupPartition(key) == configuration_->this_node_id)
     return actual_storage_->PutObject(key, value, txn_->txn_id());
@@ -196,7 +237,7 @@ bool TxnManager::PutObject(const Key& key, Value* value) {
     return true;  // Not this node's problem.
 }
 
-bool TxnManager::DeleteObject(const Key& key) {
+bool StorageManager::DeleteObject(const Key& key) {
   // Delete object from storage if applicable.
   if (configuration_->LookupPartition(key) == configuration_->this_node_id)
     return actual_storage_->DeleteObject(key, txn_->txn_id());

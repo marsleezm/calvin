@@ -44,7 +44,7 @@ class MClient : public Client {
         percent_mp_(mp) {
   }
   virtual ~MClient() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id) {
+  virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
     if (config_->all_nodes.size() > 1 && rand() % 100 < percent_mp_) {
       // Multipartition txn.
       int other1;
@@ -58,10 +58,10 @@ class MClient : public Client {
       } while (other2 == config_->this_node_id || other2 == other1);
       
 
-      *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
+      *txn = microbenchmark.MicroTxnMP(txn_id, seed, config_->this_node_id, other1, other2);
     } else {
       // Single-partition txn.
-      *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
+      *txn = microbenchmark.MicroTxnSP(txn_id, seed, config_->this_node_id);
     }
   }
 
@@ -78,7 +78,7 @@ class TClient : public Client {
         percent_mp_(mp) {
   }
   virtual ~TClient() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id) {
+  virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
     if (config_->all_nodes.size() > 1 && rand() % 100 < percent_mp_) {
       // Multipartition txn.
       int other1;
@@ -92,10 +92,10 @@ class TClient : public Client {
       } while (other2 == config_->this_node_id || other2 == other1);
 
 
-      *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
+      *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, seed, other1, other2);
     } else {
       // Single-partition txn.
-      *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
+      *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id, seed);
     }
   }
 
@@ -176,9 +176,10 @@ int main(int argc, char** argv) {
   ConnectionMultiplexer multiplexer(&config);
 
   // Artificial loadgen clients.
-  Client* client = (argv[2][0] == 'm') ?
-      reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3]))) :
-      reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3])));
+  //Client* client = (argv[2][0] == 'm') ?
+  //    reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3]))) :
+  //    reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3])));
+  Client* client = reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3])));
 
 // #ifdef PAXOS
 //  StartZookeeper(ZOOKEEPER_CONF);
@@ -194,30 +195,34 @@ involed_customers = new vector<Key>;
     storage = FetchingStorage::BuildStorage();
   }
 storage->Initmutex();
-  if (argv[2][0] == 'm') {
-    Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
-  } else {
+  //if (argv[2][0] == 'm') {
+  //  Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
+  //} else {
     //TPCC().InitializeStorage(storage, &config);
 	 Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
-  }
+  //}
 
   Connection* batch_connection = multiplexer.NewConnection("scheduler_");
   			// Initialize sequencer component and start sequencer thread running.
-  Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), batch_connection,
-		  	  client, storage);
+
+  int queue_mode;
   // Run scheduler in main thread.
   if (argv[2][0] == 'm') {
-    DeterministicScheduler scheduler(&config,
-    								 batch_connection,
-                                     storage,
-									 sequencer.GetTxnsQueue(),
-                                     new Microbenchmark(config.all_nodes.size(), HOT));
+	queue_mode = NORMAL_QUEUE;
+	cout << "Normal queue mode" << endl;
+
   } else if(argv[2][0] == 's'){
-	DeterministicScheduler scheduler(&config,
-									 batch_connection,
-									 storage,
-									 NULL,
-									 new Microbenchmark(config.all_nodes.size(), HOT), client);
+	queue_mode = FROM_SELF;
+	cout << "Self-generation queue mode" << endl;
+
+  } else if(argv[2][0] == 'd'){
+	  queue_mode = FROM_SEQ_SINGLE;
+	  cout << "Single-queue by sequencer mode" << endl;
+
+  }  else if(argv[2][0] == 'i'){
+	  queue_mode = FROM_SEQ_DIST;
+	  cout << "Multiple-queue by sequencer mode" << endl;
+
   }
   else {
 //    DeterministicScheduler scheduler(&config,
@@ -225,12 +230,17 @@ storage->Initmutex();
 //                                     storage,
 //									 sequencer.GetTxnsQueue(),
 //                                     new TPCC());
-	    DeterministicScheduler scheduler(&config,
-	    								 batch_connection,
-	                                     storage,
-										 sequencer.GetTxnsQueue(),
-	                                     new Microbenchmark(config.all_nodes.size(), HOT));
+
   }
+
+  Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), batch_connection,
+		  	  client, storage, queue_mode);
+
+  DeterministicScheduler scheduler(&config,
+  								 batch_connection,
+                                   storage,
+									 sequencer.GetTxnsQueue(), client,
+                                   new Microbenchmark(config.all_nodes.size(), HOT), queue_mode);
 
   Spin(180);
   DeterministicScheduler::terminate();

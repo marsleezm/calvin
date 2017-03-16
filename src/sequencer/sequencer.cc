@@ -56,50 +56,68 @@ void* Sequencer::RunSequencerReader(void *arg) {
   return NULL;
 }
 
+void* Sequencer::RunSequencerLoader(void *arg) {
+  reinterpret_cast<Sequencer*>(arg)->RunLoader();
+  return NULL;
+}
+
 Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* batch_connection,
-                     Client* client, Storage* storage)
+                     Client* client, Storage* storage, int mode)
     : epoch_duration_(0.01), configuration_(conf), connection_(connection),
       batch_connection_(batch_connection), client_(client), storage_(storage),
-	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0) {
+	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0), queue_mode(mode) {
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
   txns_queue_ = new AtomicQueue<TxnProto*>();
 
-cpu_set_t cpuset;
-pthread_attr_t attr_writer;
-pthread_attr_init(&attr_writer);
-//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+  cpu_set_t cpuset;
+  if (mode == NORMAL_QUEUE){
 
-CPU_ZERO(&cpuset);
-//CPU_SET(4, &cpuset);
-//CPU_SET(5, &cpuset);
-CPU_SET(6, &cpuset);
-//CPU_SET(7, &cpuset);
-pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
+		pthread_attr_t attr_writer;
+		pthread_attr_init(&attr_writer);
+		//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
+		CPU_ZERO(&cpuset);
+		//CPU_SET(4, &cpuset);
+		//CPU_SET(5, &cpuset);
+		CPU_SET(6, &cpuset);
+		//CPU_SET(7, &cpuset);
+		pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
 
+		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
+			  reinterpret_cast<void*>(this));
 
-  pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
-      reinterpret_cast<void*>(this));
+		CPU_ZERO(&cpuset);
+		CPU_SET(7, &cpuset);
+		pthread_attr_t attr_reader;
+		pthread_attr_init(&attr_reader);
+		pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
 
-CPU_ZERO(&cpuset);
-//CPU_SET(4, &cpuset);
-//CPU_SET(5, &cpuset);
-//CPU_SET(6, &cpuset);
-CPU_SET(7, &cpuset);
-pthread_attr_t attr_reader;
-pthread_attr_init(&attr_reader);
-pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
+		  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
+		      reinterpret_cast<void*>(this));
+  }
+  else{
+		CPU_ZERO(&cpuset);
+		CPU_SET(7, &cpuset);
+		pthread_attr_t simple_loader;
+		pthread_attr_init(&simple_loader);
+		pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
 
-  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
-      reinterpret_cast<void*>(this));
+		pthread_create(&reader_thread_, &simple_loader, RunSequencerLoader,
+		      reinterpret_cast<void*>(this));
+  }
 }
 
 Sequencer::~Sequencer() {
   deconstructor_invoked_ = true;
   delete txns_queue_;
-  pthread_join(writer_thread_, NULL);
-  pthread_join(reader_thread_, NULL);
+  if(queue_mode == NORMAL_QUEUE){
+	  pthread_join(writer_thread_, NULL);
+	  pthread_join(reader_thread_, NULL);
+  }
+  else{
+	  pthread_join(reader_thread_, NULL);
+  }
 }
 
 //void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
@@ -206,7 +224,7 @@ void Sequencer::RunWriter() {
       if (batch.data_size() < MAX_BATCH_SIZE) {
         TxnProto* txn;
         string txn_string;
-        client_->GetTxn(&txn, batch_number * MAX_BATCH_SIZE + txn_id_offset);
+        client_->GetTxn(&txn, batch_number * MAX_BATCH_SIZE + txn_id_offset, GetUTime());
 #ifdef LATENCY_TEST
         if (txn->txn_id() % SAMPLE_RATE == 0) {
           sequencer_recv[txn->txn_id() / SAMPLE_RATE] =
@@ -291,6 +309,7 @@ void Sequencer::RunReader() {
 #else
     bool got_batch = false;
     do {
+    	FetchMessage();
       pthread_mutex_lock(&mutex_);
       if (batch_queue_.size()) {
         batch_string = batch_queue_.front();
@@ -313,29 +332,6 @@ void Sequencer::RunReader() {
 #endif
 
       // Compute readers & writers; store in txn proto.
-
-      //set<int> readers;
-      //set<int> writers;
-      //for (int i = 0; i < txn.read_set_size(); i++)
-      //  readers.insert(configuration_->LookupPartition(txn.read_set(i)));
-      //for (int i = 0; i < txn.write_set_size(); i++)
-      //  writers.insert(configuration_->LookupPartition(txn.write_set(i)));
-      //for (int i = 0; i < txn.read_write_set_size(); i++) {
-      //  writers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
-      //  readers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
-      //}
-
-      //for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
-      //  txn.add_readers(*it);
-      //for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
-      //  txn.add_writers(*it);
-
-      //bytes txn_data;
-      //txn.SerializeToString(&txn_data);
-
-      // Compute union of 'readers' and 'writers' (store in 'readers').
-      //for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
-      //  readers.insert(*it);
       set<int> to_send;
       google::protobuf::RepeatedField<int>::const_iterator  it;
 
@@ -399,6 +395,35 @@ void Sequencer::RunReader() {
   Spin(1);
 }
 
+void Sequencer::RunLoader(){
+  Spin(1);
+  double time = GetTime(), now_time;
+  int last_committed;
+
+  while (!deconstructor_invoked_) {
+
+	FetchMessage();
+
+	// Report output.
+	now_time = GetTime();
+	if (now_time > time + 1) {
+	  std::cout << "Completed " <<
+		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
+			<< " txns/sec, "
+			<< num_sc_txns_ << " spec-committed, "
+			//<< test<< " for drop speed , "
+			//<< executing_txns << " executing, "
+			<< num_pend_txns_ << " pending\n" << std::flush;
+
+
+	  // Reset txn count.
+	  time = now_time;
+	  last_committed = Sequencer::num_lc_txns_;
+	}
+  }
+  Spin(1);
+}
+
 void* Sequencer::FetchMessage() {
   MessageProto* batch_message = NULL;
   //double time = GetTime();
@@ -408,21 +433,31 @@ void* Sequencer::FetchMessage() {
   //TxnProto* done_txn;
 
   if (txns_queue_->Size() < 1000){
-	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
-	  // Have we run out of txns in our batch? Let's get some new ones.
-	  if (batch_message != NULL) {
-		  for (int i = 0; i < batch_message->data_size(); i++)
-		  {
-			  TxnProto* txn = new TxnProto();
-			  txn->ParseFromString(batch_message->data(i));
-			  txn->set_local_txn_id(fetched_txn_num_++);
-			  txns_queue_->Push(txn);
-		  }
-		  delete batch_message;
-		  ++fetched_batch_num_;
-
-	  // Done with current batch, get next.
+	  if (queue_mode == NORMAL_QUEUE){
+		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
+		  	  // Have we run out of txns in our batch? Let's get some new ones.
+		  	  if (batch_message != NULL) {
+		  		  for (int i = 0; i < batch_message->data_size(); i++)
+		  		  {
+		  			  TxnProto* txn = new TxnProto();
+		  			  txn->ParseFromString(batch_message->data(i));
+		  			  txn->set_local_txn_id(fetched_txn_num_++);
+		  			  txns_queue_->Push(txn);
+		  		  }
+		  		  delete batch_message;
+		  		  ++fetched_batch_num_;
+		  	  }
 	  }
+	  else if (queue_mode == FROM_SEQ_SINGLE){
+		  for (int i = 0; i < 1000; i++)
+			  {
+				  TxnProto* txn;
+				  client_->GetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
+				  txn->set_local_txn_id(fetched_txn_num_++);
+				  txns_queue_->Push(txn);
+			  }
+	  }
+
   }
   return NULL;
 

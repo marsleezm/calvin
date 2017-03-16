@@ -1,4 +1,4 @@
-#include "../backend/txn_manager.h"
+#include "../backend/storage_manager.h"
 #include "applications/tpcc.h"
 #include "backend/collapsed_versioned_storage.h"
 #include "common/configuration.h"
@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     txn->add_readers(0);
     txn->add_writers(0);
 
-    TxnManager* manager = new TxnManager(config, NULL, storage, txn);
+    StorageManager* manager = new StorageManager(config, NULL, storage, txn);
 
     tpcc->Execute(txn, manager);
 

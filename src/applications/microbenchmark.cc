@@ -13,7 +13,7 @@
 #include "proto/txn.pb.h"
 #include <string>
 
-#include "../backend/txn_manager.h"
+#include "../backend/storage_manager.h"
 
 // #define PREFETCHING
 #define COLD_CUTOFF 990000
@@ -52,7 +52,7 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
 }
 
 // Create a non-dependent single-partition transaction
-TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
+TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int64 seed, int part) {
   // Create the new transaction object
   TxnProto* txn = new TxnProto();
 
@@ -60,7 +60,7 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
   txn->set_txn_id(txn_id);
   txn->set_txn_type(SINGLE_PART);
 
-  txn->set_seed(GetUTime());
+  txn->set_seed(seed);
 
   txn->add_readers(part);
   txn->add_writers(part);
@@ -69,7 +69,7 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
 }
 
 // Create a non-dependent multi-partition transaction
-TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int part1, int part2, int part3) {
+TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int64 seed, int part1, int part2, int part3) {
   assert(part1 != part2 || nparts == 1);
   // Create the new transaction object
   TxnProto* txn = new TxnProto();
@@ -78,9 +78,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int part1, int part2, int par
   txn->set_txn_id(txn_id);
   txn->set_txn_type(MULTI_PART);
 
-  struct timeval tv;
-  gettimeofday(&tv,NULL);
-  txn->set_seed(GetUTime());
+  txn->set_seed(seed);
 
   txn->add_readers(part1);
   txn->add_readers(part2);
@@ -159,7 +157,7 @@ TxnProto* Microbenchmark::NewTxn(int64 txn_id, int txn_type,
   return NULL;
 }
 
-int Microbenchmark::Execute(TxnManager* storage, Rand* rand) const {
+int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 	TxnProto* txn = storage->get_txn();
@@ -174,16 +172,27 @@ int Microbenchmark::Execute(TxnManager* storage, Rand* rand) const {
 
 	//std::cout << "Txn " << txn->txn_id() << " has " << to_str(str_keys)  << std::endl;
 	//std::cout << "Txn " << txn->txn_id() << " seed is " << txn->seed()  << std::endl;
+//	for (int i = 0; i < kRWSetSize; i++) {
+//		if (storage->ShouldExec()) {
+//			Value* val = storage->ReadObject(txn->read_write_set(i));
+//			if (reinterpret_cast<int64>(val) == WAIT_AND_SENT)
+//				return WAIT_AND_SENT;
+//			else if(reinterpret_cast<int64>(val) == WAIT_NOT_SENT)
+//				return WAIT_NOT_SENT;
+//			else
+//		    	*val = IntToString(StringToInt(*val) + 1);
+//		}
+//	}
 	for (int i = 0; i < kRWSetSize; i++) {
-		//if (storage->ShouldExec()) {
-			Value* val = storage->ReadObject(txn->read_write_set(i));
-			if (reinterpret_cast<int64>(val) == WAIT_AND_SENT)
-				return WAIT_AND_SENT;
-			else if(reinterpret_cast<int64>(val) == WAIT_NOT_SENT)
-				return WAIT_NOT_SENT;
-			else
-		    	*val = IntToString(StringToInt(*val) + 1);
-		//}
+		Value* val = storage->SkipOrRead(txn->read_write_set(i));
+		if (reinterpret_cast<int64>(val) == SKIP)
+			continue;
+		else if (reinterpret_cast<int64>(val) == WAIT_AND_SENT)
+			return WAIT_AND_SENT;
+		else if(reinterpret_cast<int64>(val) == WAIT_NOT_SENT)
+			return WAIT_NOT_SENT;
+		else
+		    *val = IntToString(StringToInt(*val) + 1);
 	}
     // Not necessary since storage already has a pointer to val.
     //   storage->PutObject(txn->read_write_set(i), val);

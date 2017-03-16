@@ -20,7 +20,6 @@
 #include <sched.h>
 #include <map>
 
-#include "../backend/txn_manager.h"
 #include "applications/application.h"
 #include "common/utils.h"
 #include "common/zmq.hpp"
@@ -29,9 +28,10 @@
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
 
+#include "../backend/storage_manager.h"
 // XXX(scw): why the F do we include from a separate component
 //           to get COLD_CUTOFF
-#include "sequencer/sequencer.h"  // COLD_CUTOFF and buffers in LATENCY_TEST
+
 
 using std::pair;
 using std::string;
@@ -59,23 +59,17 @@ TxnProto* DeterministicScheduler::GetTxnPtr(socket_t* socket,
   return txn;
 }
 
-DeterministicScheduler::DeterministicScheduler(Configuration* conf,
-                                               Connection* batch_connection,
-                                               Storage* storage,
-											   AtomicQueue<TxnProto*>* txns_queue,
-                                               const Application* application
-											   ): DeterministicScheduler(conf, batch_connection, storage, txns_queue, application, NULL)
-{
-}
 
 DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                Connection* batch_connection,
                                                Storage* storage,
 											   AtomicQueue<TxnProto*>* txns_queue,
+											   Client* client,
                                                const Application* application,
-											   Client* client)
+											   int mode
+											   )
     : configuration_(conf), batch_connection_(batch_connection), storage_(storage),
-	  application_(application), txns_queue_(txns_queue), client_(client) {
+	   txns_queue_(txns_queue), client_(client), application_(application), queue_mode(mode) {
   //lock_manager_ = new DeterministicLockManager(configuration_);
 	//to_sc_txns_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t> >[NUM_THREADS];
 	//pending_txns_ = new priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>[NUM_THREADS];
@@ -132,23 +126,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   DeterministicScheduler* scheduler =
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
-  unordered_map<int64_t, TxnManager*> active_txns;
+  unordered_map<int64_t, StorageManager*> active_txns;
   priority_queue<int64_t, vector<int64_t>, std::greater<int64_t>>* my_to_sc_txns
   	  = scheduler->to_sc_txns_[thread];
-  //my_to_sc_txns = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t> >();
   priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>* my_pend_txns
   	  = scheduler->pending_txns_[thread];
-  //my_pend_txns= new priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>();
 
   Rand* myrand = scheduler->rands[thread];
-  //bool finished = true;
 
   // Begin main loop.
   MessageProto message;
   int64_t to_sc_txn;
-
-  int counter = 0;
-  double now_time, old_time=GetTime();
 
   while (!terminated_) {
 	  bool got_message = scheduler->message_queues[thread]->Pop(&message);
@@ -156,7 +144,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		  // Remote read result.
 		  assert(message.type() == MessageProto::READ_RESULT);
-		  TxnManager* manager = active_txns[atoi(message.destination_channel().c_str())];
+		  StorageManager* manager = active_txns[atoi(message.destination_channel().c_str())];
 		  manager->HandleReadResult(message);
 
 		  // Execute and clean up.
@@ -169,7 +157,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
 				  // There are outstanding remote reads.
 				  active_txns[txn->txn_id()] = manager;
-				  //finished = true;
 			  }
 			  else{
 				  ++Sequencer::num_lc_txns_;
@@ -206,13 +193,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						LinkChannel(IntToString(pend_txn.first));
 		  }
 		  else{
-			  TxnManager* manager = active_txns[pend_txn.first];
+			  StorageManager* manager = active_txns[pend_txn.first];
 			  if (scheduler->application_->Execute(manager, myrand) == WAIT_AND_SENT){
 				  //std::cout << "Sending for " << pend_txn->txn_id() << " for remote read again!" << std::endl;
 				  scheduler->thread_connections_[thread]->LinkChannel(IntToString(pend_txn.first));
 				  // There are outstanding remote reads.
 				  active_txns[pend_txn.first] = manager;
-				  //finished = true;
 			  }
 			  else{
 				  ++Sequencer::num_lc_txns_;
@@ -226,21 +212,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	  else {
-		  bool got_it;
-		  TxnProto* txn;
-		  if(scheduler->txns_queue_ == NULL){
-			  got_it = true;
-			  scheduler->client_->GetTxn(&txn, Sequencer::num_lc_txns_);
-			  txn->set_local_txn_id(Sequencer::num_lc_txns_);
-		  }
-		  else{
-			  got_it = scheduler->txns_queue_->Pop(&txn);
-		  }
+		  bool got_it = true;
+		  TxnProto* txn = scheduler->GetTxn(got_it);
+
 		  if (got_it == true) {
 			  // Create manager.
 			  //std::cout <<"Starting txn "<<txn->txn_id()<<" with local id as "<< txn->local_txn_id() << std::endl;
-			  TxnManager* manager =
-					new TxnManager(scheduler->configuration_,
+			  StorageManager* manager =
+					new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, txn);
 
@@ -255,33 +234,24 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  ++Sequencer::num_pend_txns_;
 			  }
 			  else if (result == WAIT_NOT_SENT) {
-				  ++Sequencer::num_pend_txns_;
 				  //std::cout << txn->txn_id() <<" wait but not sent for remote read" << std::endl;
 				  my_pend_txns->push(make_pair(txn->txn_id(), TO_SEND));
 				  active_txns[txn->txn_id()] = manager;
+				  ++Sequencer::num_pend_txns_;
 			  }
 			  else{
-				  ++counter;
-				  delete manager;
-//				  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
-//					  ++Sequencer::num_lc_txns_;
-//					  delete manager;
-//				  }
-//				  else{
-//					  ++Sequencer::num_sc_txns_;
-//					  active_txns[txn->txn_id()] = manager;
-//					  my_to_sc_txns->push(txn->local_txn_id());
-//				  }
+				  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
+					  ++Sequencer::num_lc_txns_;
+					  delete manager;
+				  }
+				  else{
+					  ++Sequencer::num_sc_txns_;
+					  active_txns[txn->txn_id()] = manager;
+					  my_to_sc_txns->push(txn->local_txn_id());
+				  }
 			  }
 		  }
 	  }
-
-	    if (scheduler->txns_queue_ == NULL && counter == 100000){
-	    		now_time = GetTime();
-	    		std::cout << "Throughput is "<< counter / (now_time-old_time) << " txns/sec" << std::endl;
-	    		old_time = now_time;
-	    		counter = 0;
-	    }
   }
 
   delete scheduler->message_queues[thread];

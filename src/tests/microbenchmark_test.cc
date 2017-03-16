@@ -4,13 +4,13 @@
 
 #include <set>
 
-#include "../backend/txn_manager.h"
 #include "backend/simple_storage.h"
 #include "common/configuration.h"
 #include "common/connection.h"
 #include "common/testing.h"
 #include "common/utils.h"
 #include "proto/txn.pb.h"
+#include "../backend/storage_manager.h"
 
 using std::set;
 

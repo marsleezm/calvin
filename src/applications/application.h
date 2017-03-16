@@ -16,7 +16,7 @@ using std::string;
 
 class Configuration;
 class Storage;
-class TxnManager;
+class StorageManager;
 class TxnProto;
 
 enum TxnStatus {
@@ -43,7 +43,7 @@ class Application {
   static int CheckpointID(Key key);
 
   // Execute a transaction's application logic given the input 'txn'.
-  virtual int Execute(TxnManager* storage, Rand* rand) const = 0;
+  virtual int Execute(StorageManager* storage, Rand* rand) const = 0;
 
   // Storage initialization method.
   virtual void InitializeStorage(Storage* storage,

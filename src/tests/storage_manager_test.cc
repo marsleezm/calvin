@@ -1,8 +1,9 @@
 // Author: Alexander Thomson (thomson@cs.yale.edu)
 
+#include "../backend/storage_manager.h"
+
 #include <string>
 
-#include "../backend/txn_manager.h"
 #include "backend/simple_storage.h"
 #include "common/configuration.h"
 #include "common/connection.h"

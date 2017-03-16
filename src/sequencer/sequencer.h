@@ -53,7 +53,7 @@ extern double scheduler_unlock[SAMPLES];
 class Client {
  public:
   virtual ~Client() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id) = 0;
+  virtual void GetTxn(TxnProto** txn, int txn_id, int seed) = 0;
 };
 
 class Sequencer {
@@ -61,7 +61,7 @@ class Sequencer {
   // The constructor creates background threads and starts the Sequencer's main
   // loops running.
   Sequencer(Configuration* conf, Connection* connection, Connection* batch_connection,
-		  Client* client, Storage* storage);
+		  Client* client, Storage* storage, int queue_mode);
 
   // Halts the main loops.
   ~Sequencer();
@@ -92,11 +92,14 @@ class Sequencer {
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
   void RunReader();
+  void RunLoader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerReader(void *arg);
+  static void* RunSequencerLoader(void *arg);
+
   void* FetchMessage();
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
@@ -146,5 +149,8 @@ class Sequencer {
 
   // The queue of fetched transactions
   AtomicQueue<TxnProto*>* txns_queue_;
+
+  // Queue mode
+  int queue_mode;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
