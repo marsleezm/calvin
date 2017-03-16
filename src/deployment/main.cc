@@ -140,9 +140,9 @@ int main(int argc, char** argv) {
   ConnectionMultiplexer multiplexer(&config);
 
   // Artificial loadgen clients.
-  Client* client = (argv[2][0] == 'm') ?
-      reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3]))) :
-      reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3])));
+  Client* client = (argv[2][0] == 't') ?
+		  reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3]))) :
+		  reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3])));
 
 // #ifdef PAXOS
 //  StartZookeeper(ZOOKEEPER_CONF);
@@ -174,7 +174,15 @@ storage->Initmutex();
                                      multiplexer.NewConnection("scheduler_"),
                                      storage,
                                      new Microbenchmark(config.all_nodes.size(), HOT));
-  } else {
+  }
+  else if (argv[2][0] == 's') {
+	    DeterministicScheduler scheduler(&config,
+	                                     multiplexer.NewConnection("scheduler_"),
+	                                     storage,
+	                                     new Microbenchmark(config.all_nodes.size(), HOT),
+										 client);
+  }
+  else {
     DeterministicScheduler scheduler(&config,
                                      multiplexer.NewConnection("scheduler_"),
                                      storage,

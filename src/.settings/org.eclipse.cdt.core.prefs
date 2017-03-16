@@ -1,0 +1,6 @@
+eclipse.preferences.version=1
+environment/project/cdt.managedbuild.toolchain.gnu.base.1344776826/LD_LIBRARY_PATH/delimiter=\:
+environment/project/cdt.managedbuild.toolchain.gnu.base.1344776826/LD_LIBRARY_PATH/operation=append
+environment/project/cdt.managedbuild.toolchain.gnu.base.1344776826/LD_LIBRARY_PATH/value=/home/li/Repository/calvin/ext/googletest/lib/.libs\:/home/li/Repository/calvin/ext/zookeeper/.libs\:/home/li/Repository/calvin/ext/zeromq/src/.libs\:/home/li/Repository/calvin/ext/protobuf/src/.libs
+environment/project/cdt.managedbuild.toolchain.gnu.base.1344776826/append=true
+environment/project/cdt.managedbuild.toolchain.gnu.base.1344776826/appendContributed=true

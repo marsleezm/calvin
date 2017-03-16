@@ -33,14 +33,17 @@ class Connection;
 class DeterministicLockManager;
 class Storage;
 class TxnProto;
+class Client;
 
-#define NUM_THREADS 4
+#define NUM_THREADS 1 
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
                          Storage* storage, const Application* application);
+  DeterministicScheduler(Configuration* conf, Connection* batch_connection,
+                         Storage* storage, const Application* application, Client* client);
   virtual ~DeterministicScheduler();
 
  private:
@@ -68,6 +71,9 @@ class DeterministicScheduler : public Scheduler {
   
   // Application currently being run.
   const Application* application_;
+
+  // Client
+  Client* client_;
 
   // The per-node lock manager tracks what transactions have temporary ownership
   // of what database objects, allowing the scheduler to track LOCAL conflicts

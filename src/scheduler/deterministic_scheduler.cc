@@ -62,8 +62,18 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                Connection* batch_connection,
                                                Storage* storage,
                                                const Application* application)
+    :DeterministicScheduler(conf, batch_connection, storage, application, NULL)
+{
+
+}
+
+DeterministicScheduler::DeterministicScheduler(Configuration* conf,
+                                               Connection* batch_connection,
+                                               Storage* storage,
+                                               const Application* application,
+											   Client* client)
     : configuration_(conf), batch_connection_(batch_connection),
-      storage_(storage), application_(application) {
+      storage_(storage), application_(application), client_(client) {
       ready_txns_ = new std::deque<TxnProto*>();
   lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
   
@@ -83,7 +93,7 @@ Spin(2);
   //pthread_attr_setdetachstate(&attr1, PTHREAD_CREATE_DETACHED);
   
 CPU_ZERO(&cpuset);
-CPU_SET(7, &cpuset);
+CPU_SET(4, &cpuset);
   pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
   pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
                  reinterpret_cast<void*>(this));
@@ -95,15 +105,16 @@ CPU_SET(7, &cpuset);
   for (int i = 0; i < NUM_THREADS; i++) {
     string channel("scheduler");
     channel.append(IntToString(i));
+    std::cout <<"Initializing worker thread #"  << i << std::endl;
     thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
-pthread_attr_t attr;
-pthread_attr_init(&attr);
-CPU_ZERO(&cpuset);
-if (i == 0 || i == 1)
-CPU_SET(i, &cpuset);
-else
-CPU_SET(i+2, &cpuset);
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	CPU_ZERO(&cpuset);
+	//if (i == 0 || i == 1)
+	CPU_SET(i, &cpuset);
+	//else
+	//CPU_SET(i+2, &cpuset);
     pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
     pthread_create(&(threads_[i]), &attr, RunWorkerThread,
@@ -132,11 +143,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
   unordered_map<string, StorageManager*> active_txns;
+  int counter = 0;
+  double old_time = GetTime(), now_time;
 
   // Begin main loop.
   MessageProto message;
   while (true) {
-    bool got_message = scheduler->message_queues[thread]->Pop(&message);
+	bool got_message = scheduler->message_queues[thread]->Pop(&message);
     if (got_message == true) {
       // Remote read result.
       assert(message.type() == MessageProto::READ_RESULT);
@@ -158,7 +171,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     } else {
       // No remote read result found, start on next txn if one is waiting.
      TxnProto* txn;
-     bool got_it = scheduler->txns_queue->Pop(&txn);
+     bool got_it;
+     if (scheduler->client_!=NULL){
+		  got_it = true;
+		  scheduler->client_->GetTxn(&txn, counter++);
+     } else{
+    	 got_it = scheduler->txns_queue->Pop(&txn);
+     }
       if (got_it == true) {
         // Create manager.
         StorageManager* manager =
@@ -174,14 +193,25 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
             // Respond to scheduler;
             //scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
-            scheduler->done_queue->Push(txn);
+            if (scheduler->client_== NULL){
+            	scheduler->done_queue->Push(txn);
+            }
           } else {
-        scheduler->thread_connections_[thread]->
-            LinkChannel(IntToString(txn->txn_id()));
-            // There are outstanding remote reads.
-            active_txns[IntToString(txn->txn_id())] = manager;
+        	  scheduler->thread_connections_[thread]->
+			  	  LinkChannel(IntToString(txn->txn_id()));
+        	  // There are outstanding remote reads.
+        	  active_txns[IntToString(txn->txn_id())] = manager;
           }
       }
+    }
+
+    if (scheduler->client_!=NULL){
+    	if (counter == 100000){
+    		now_time = GetTime();
+    		std::cout << "Throughput is "<< counter / (now_time-old_time) << " txns/sec"<< now_time << old_time<< std::endl;
+    		old_time = now_time;
+    		counter = 0;
+    	}
     }
   }
   return NULL;
