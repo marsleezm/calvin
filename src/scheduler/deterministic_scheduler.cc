@@ -37,7 +37,7 @@
 
 using std::pair;
 using std::string;
-using std::unordered_map;
+using std::tr1::unordered_map;
 using zmq::socket_t;
 using std::map;
 
