@@ -21,6 +21,13 @@
 							<builder id="cdt.managedbuild.target.gnu.builder.base.2036251132" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="cdt.managedbuild.target.gnu.builder.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.archiver.base.1533673061" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.1845592843" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base">
+								<option id="gnu.cpp.compiler.option.include.paths.806807496" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="/home/li/Repository/calvin/obj"/>
+									<listOptionValue builtIn="false" value="/home/li/Repository/calvin/ext/zeromq/include"/>
+									<listOptionValue builtIn="false" value="/home/li/Repository/calvin/ext/googletest/include"/>
+									<listOptionValue builtIn="false" value="/home/li/Repository/calvin/ext/protobuf/src"/>
+									<listOptionValue builtIn="false" value="&quot;/home/li/Repository/calvin/ext/zookeeper/include ext/zookeeper/generated&quot;"/>
+								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.2015654701" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.c.compiler.base.1924092232" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.base">
@@ -46,9 +53,6 @@
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
 		<project id="calvin.null.1598536243" name="calvin"/>
 	</storageModule>
-	<storageModule moduleId="scannerConfiguration">
-		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="refreshScope" versionNumber="2">
 		<configuration configurationName="Default">
@@ -56,4 +60,19 @@
 		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
+	<storageModule moduleId="scannerConfiguration">
+		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1344776826;cdt.managedbuild.toolchain.gnu.base.1344776826.569444201;cdt.managedbuild.tool.gnu.c.compiler.base.1924092232;cdt.managedbuild.tool.gnu.c.compiler.input.2067170165">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1344776826;cdt.managedbuild.toolchain.gnu.base.1344776826.569444201;cdt.managedbuild.tool.gnu.cross.cpp.compiler.1751955075;cdt.managedbuild.tool.gnu.cpp.compiler.input.156900009">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1344776826;cdt.managedbuild.toolchain.gnu.base.1344776826.569444201;cdt.managedbuild.tool.gnu.cross.c.compiler.1193550556;cdt.managedbuild.tool.gnu.c.compiler.input.1940376237">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1344776826;cdt.managedbuild.toolchain.gnu.base.1344776826.569444201;cdt.managedbuild.tool.gnu.cpp.compiler.base.1845592843;cdt.managedbuild.tool.gnu.cpp.compiler.input.2015654701">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+	</storageModule>
 </cproject>

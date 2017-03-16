@@ -175,6 +175,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
      if (scheduler->client_!=NULL){
 		  got_it = true;
 		  scheduler->client_->GetTxn(&txn, counter++);
+		  txn->add_readers(0);
+		  txn->add_writers(0);
      } else{
     	 got_it = scheduler->txns_queue->Pop(&txn);
      }

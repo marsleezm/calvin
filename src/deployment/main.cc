@@ -158,10 +158,10 @@ involed_customers = new vector<Key>;
     storage = FetchingStorage::BuildStorage();
   }
 storage->Initmutex();
-  if (argv[2][0] == 'm') {
-    Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
+  if (argv[2][0] == 't') {
+	  TPCC().InitializeStorage(storage, &config);
   } else {
-    TPCC().InitializeStorage(storage, &config);
+	  Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
   }
 
   // Initialize sequencer component and start sequencer thread running.
