@@ -18,6 +18,7 @@
 //#define PREFETCHING
 #define COLD_CUTOFF 990000
 
+//#define MAX_BATCH_SIZE 56
 #define MAX_BATCH_SIZE 56
 
 #define SAMPLES 100000
@@ -54,6 +55,7 @@ class Client {
  public:
   virtual ~Client() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int seed) = 0;
+  virtual void GetDetTxn(TxnProto** txn, int txn_id, int seed) = 0;
 };
 
 class Sequencer {
@@ -150,7 +152,12 @@ class Sequencer {
   // The queue of fetched transactions
   AtomicQueue<TxnProto*>* txns_queue_;
 
+  int num_queues_;
+
   // Queue mode
   int queue_mode;
+
+  // Statistics
+  int fetched_count;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

@@ -117,8 +117,6 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		int hotkey2 = part2 + nparts * (rand->next() % hot_records);
 		int hotkey3 = part3 + nparts * (rand->next() % hot_records);
 		txn->add_read_write_set(IntToString(hotkey1));
-		txn->add_read_write_set(IntToString(hotkey2));
-		txn->add_read_write_set(IntToString(hotkey3));
 
 		// Insert set of kRWSetSize/2 - 1 random cold keys from each partition into
 		// read/write set.
@@ -131,6 +129,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 		  txn->add_read_write_set(IntToString(*it));
 
+		txn->add_read_write_set(IntToString(hotkey2));
 		GetRandomKeys(&keys,
 		                2,
 		                nparts * hot_records,
@@ -139,6 +138,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 		    txn->add_read_write_set(IntToString(*it));
 
+		txn->add_read_write_set(IntToString(hotkey3));
 		GetRandomKeys(&keys,
 		                2,
 		                nparts * hot_records,
@@ -162,27 +162,16 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
   // back out.
 	TxnProto* txn = storage->get_txn();
 	storage->Init();
-	//str_keys={"1","2","3","4","5",
-	//		  "6","7","8","9","10"};
 	if (storage->ShouldExec())
 	{
 		rand->seed(txn->seed());
 		GetKeys(txn, rand);
+		//string writeset;
+		//for(int i = 0; i< txn->read_write_set().size(); ++i)
+		//	writeset += " "+txn->read_write_set(i);
+		//std::cout <<"Txn "<<txn->txn_id()<<" has seed "<<txn->seed()<< ", its keys "<< writeset << std::endl;
 	}
 
-	//std::cout << "Txn " << txn->txn_id() << " has " << to_str(str_keys)  << std::endl;
-	//std::cout << "Txn " << txn->txn_id() << " seed is " << txn->seed()  << std::endl;
-//	for (int i = 0; i < kRWSetSize; i++) {
-//		if (storage->ShouldExec()) {
-//			Value* val = storage->ReadObject(txn->read_write_set(i));
-//			if (reinterpret_cast<int64>(val) == WAIT_AND_SENT)
-//				return WAIT_AND_SENT;
-//			else if(reinterpret_cast<int64>(val) == WAIT_NOT_SENT)
-//				return WAIT_NOT_SENT;
-//			else
-//		    	*val = IntToString(StringToInt(*val) + 1);
-//		}
-//	}
 	for (int i = 0; i < kRWSetSize; i++) {
 		Value* val = storage->SkipOrRead(txn->read_write_set(i));
 		if (reinterpret_cast<int64>(val) == SKIP)

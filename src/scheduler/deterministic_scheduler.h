@@ -40,10 +40,13 @@ class DeterministicLockManager;
 class Storage;
 class TxnProto;
 class Client;
+class StorageManager;
 
-#define NUM_THREADS 1
 #define TO_SEND true
 #define TO_READ false
+
+#define MAX_SC_NUM 10000
+#define MAX_PEND_NUM 1
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
@@ -61,7 +64,7 @@ class DeterministicScheduler : public Scheduler {
   
   static void* LockManagerThread(void* arg);
 
-  inline TxnProto* GetTxn(bool& got_it){
+  inline TxnProto* GetTxn(bool& got_it, int thread){
 	  TxnProto* txn;
 	  if(queue_mode == FROM_SELF){
 		  client_->GetTxn(&txn, Sequencer::num_lc_txns_, GetUTime());
@@ -77,8 +80,7 @@ class DeterministicScheduler : public Scheduler {
 		  return txn;
 	  }
 	  else if (queue_mode == FROM_SEQ_DIST){
-		  // !TODO: Not implemented yet
-		  got_it = txns_queue_->Pop(&txn);
+		  got_it = txns_queue_[thread].Pop(&txn);
 		  return txn;
 	  }
 	  else{
@@ -86,6 +88,62 @@ class DeterministicScheduler : public Scheduler {
 		  got_it = false;
 		  return txn;
 	  }
+  }
+
+  inline bool HandleSCTxns(unordered_map<int64_t, StorageManager*> active_txns,
+			priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* my_to_sc_txns){
+		pair<int64_t, int64_t> to_sc_txn;
+		bool hasSC = false;
+		while(!my_to_sc_txns->empty() && (to_sc_txn = my_to_sc_txns->top()).second == Sequencer::num_lc_txns_){
+			  ++Sequencer::num_lc_txns_;
+			  --Sequencer::num_sc_txns_;
+			  //int64_t txn;
+			  delete active_txns[to_sc_txn.first];
+			  active_txns.erase(to_sc_txn.first);
+			  my_to_sc_txns->pop();
+			  hasSC = true;
+		}
+		return hasSC;
+	}
+
+  inline bool HandlePendTxns(DeterministicScheduler* scheduler, int thread,
+			unordered_map<int64_t, StorageManager*> active_txns, Rand* myrand,
+			priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns)
+  {
+  	if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
+  		MyTuple<int64_t, int64_t, bool> pend_txn = my_pend_txns->top();
+
+  		if(pend_txn.third == TO_SEND){
+  			//std::cout << pend_txn.first <<" finally sent to remote again!" << std::endl;
+  			active_txns[pend_txn.first]->SendMsg();
+  			scheduler->thread_connections_[thread]->
+  					LinkChannel(IntToString(pend_txn.first));
+  			return false;
+  		}
+  		else{
+  			StorageManager* manager = active_txns[pend_txn.first];
+  			if (scheduler->application_->Execute(manager, myrand) == WAIT_AND_SENT){
+  				std::cout <<pend_txn.first << ": wait and sent!!!" << std::endl;
+  				scheduler->thread_connections_[thread]->LinkChannel(IntToString(pend_txn.first));
+  				active_txns[pend_txn.first] = manager;
+  				return false;
+  			}
+  			else{
+  				++Sequencer::num_lc_txns_;
+  				--Sequencer::num_pend_txns_;
+  				delete manager;
+  				//finished = true;
+  				std::cout <<pend_txn.first << ": completed txn " <<  GetTime() << std::endl;
+  				scheduler->thread_connections_[thread]->
+  					UnlinkChannel(IntToString(pend_txn.first));
+  				active_txns.erase(pend_txn.first);
+  				my_pend_txns->pop();
+  				return true;
+  			}
+  		}
+  	}
+  	else
+  		return false;
   }
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
@@ -130,18 +188,11 @@ class DeterministicScheduler : public Scheduler {
   // The queue of fetched transactions
 
   // Transactions that can be committed if all its previous txns have been local-committed
-  priority_queue<int64_t, vector<int64_t>, std::greater<int64_t> >* to_sc_txns_[NUM_THREADS];
+  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* to_sc_txns_[NUM_THREADS];
 
   // Transactions that can only resume execution after all its previous txns have been local-committed
-  priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>* pending_txns_[NUM_THREADS];
+  priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* pending_txns_[NUM_THREADS];
 
-  //priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>* pending_txns_;
-  //priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>* pending_reads_;
-
-
-  
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
-  
-
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

@@ -28,7 +28,7 @@
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
 
-#include "../backend/storage_manager.h"
+#include "backend/storage_manager.h"
 // XXX(scw): why the F do we include from a separate component
 //           to get COLD_CUTOFF
 
@@ -80,8 +80,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	for (int i = 0; i < NUM_THREADS; i++) {
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		rands[i] = new Rand();
-		to_sc_txns_[i] = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t> >();
-		pending_txns_[i] = new priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>();
+		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
+		pending_txns_[i] = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>();
 	}
 
 Spin(2);
@@ -120,6 +120,14 @@ Spin(2);
 //      storage->Unfetch(txn->write_set(i));
 //}
 
+//inline TxnProto* DeterministicScheduler::GetTxn(bool& got_it, int thread){
+//inline bool DeterministicScheduler::HandleSCTxns(unordered_map<int64_t, StorageManager*> active_txns,
+//		priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* my_to_sc_txns)
+//
+//inline bool DeterministicScheduler::HandlePendTxns(DeterministicScheduler* scheduler, int thread,
+//		unordered_map<int64_t, StorageManager*> active_txns, Rand* myrand,
+//		priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns)
+
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
   int thread =
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->first;
@@ -127,97 +135,128 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
   unordered_map<int64_t, StorageManager*> active_txns;
-  priority_queue<int64_t, vector<int64_t>, std::greater<int64_t>>* my_to_sc_txns
+  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* my_to_sc_txns
   	  = scheduler->to_sc_txns_[thread];
-  priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>* my_pend_txns
+  priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns
   	  = scheduler->pending_txns_[thread];
 
   Rand* myrand = scheduler->rands[thread];
 
   // Begin main loop.
   MessageProto message;
-  int64_t to_sc_txn;
+  pair<int64_t, int64_t> to_sc_txn;
 
   while (!terminated_) {
-	  bool got_message = scheduler->message_queues[thread]->Pop(&message);
-	  if (got_message == true) {
-
-		  // Remote read result.
+	  // Got remote read result.
+	  // I should spec commit my txn.
+//	  if (scheduler->message_queues[thread]->Pop(&message)){
+//		  assert(message.type() == MessageProto::READ_RESULT);
+//		  StorageManager* manager = active_txns[atoi(message.destination_channel().c_str())];
+//		  manager->HandleReadResult(message);
+//	  }
+	  if (scheduler->message_queues[thread]->Pop(&message)) {
 		  assert(message.type() == MessageProto::READ_RESULT);
 		  StorageManager* manager = active_txns[atoi(message.destination_channel().c_str())];
 		  manager->HandleReadResult(message);
-
-		  // Execute and clean up.
-		  TxnProto* txn = manager->txn_;
-
-		  std::cout << "Got remote msg for txn: " << txn->txn_id() << std::endl;
-		  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
-			  if (scheduler->application_->Execute(manager, myrand) == WAIT_AND_SENT){
-				  //std::cout << "Sending for " << txn->txn_id() << " for remote read again!" << std::endl;
-				  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
-				  // There are outstanding remote reads.
-				  active_txns[txn->txn_id()] = manager;
-			  }
-			  else{
-				  ++Sequencer::num_lc_txns_;
-				  --Sequencer::num_pend_txns_;
-				  delete manager;
-				  //finished = true;
-				  scheduler->thread_connections_[thread]->
-						UnlinkChannel(IntToString(txn->txn_id()));
-				  active_txns.erase(txn->txn_id());
-			  }
-		  }
-		  else{
-			  // Blocked, can not read
-			  my_pend_txns->push(std::make_pair(txn->local_txn_id(), TO_READ));
+		  while(scheduler->HandlePendTxns(scheduler, thread, active_txns, myrand, my_pend_txns)){
+			   if(!scheduler->HandleSCTxns(active_txns, my_to_sc_txns))
+				   break;
 		  }
 	  }
-	  else if (!my_to_sc_txns->empty() && (to_sc_txn = my_to_sc_txns->top()) == Sequencer::num_lc_txns_){
-		  ++Sequencer::num_lc_txns_;
-		  --Sequencer::num_sc_txns_;
-		  //int64_t txn;
-		  delete active_txns[to_sc_txn];
-		  active_txns.erase(to_sc_txn);
-		  my_to_sc_txns->pop();
-	  }
-	  // Try to spec-commit pending transactions
-	  else if (!my_pend_txns->empty() && my_pend_txns->top().first == Sequencer::num_lc_txns_){
-		  pair<int64_t, bool> pend_txn = my_pend_txns->top();
 
-		  //!TODO: Maybe the transaction has already been aborted! Need to check
-		  my_pend_txns->pop();
-		  if(pend_txn.second == TO_SEND){
-			  active_txns[pend_txn.first]->SendMsg();
-			  scheduler->thread_connections_[thread]->
-						LinkChannel(IntToString(pend_txn.first));
-		  }
-		  else{
-			  StorageManager* manager = active_txns[pend_txn.first];
-			  if (scheduler->application_->Execute(manager, myrand) == WAIT_AND_SENT){
-				  //std::cout << "Sending for " << pend_txn->txn_id() << " for remote read again!" << std::endl;
-				  scheduler->thread_connections_[thread]->LinkChannel(IntToString(pend_txn.first));
-				  // There are outstanding remote reads.
-				  active_txns[pend_txn.first] = manager;
-			  }
-			  else{
-				  ++Sequencer::num_lc_txns_;
-				  --Sequencer::num_pend_txns_;
-				  delete manager;
-				  //finished = true;
-				  scheduler->thread_connections_[thread]->
-						UnlinkChannel(IntToString(pend_txn.first));
-				  active_txns.erase(pend_txn.first);
-			  }
-		  }
-	  }
-	  else {
+
+//	  if (!my_to_sc_txns->empty() && (to_sc_txn = my_to_sc_txns->top()).second == Sequencer::num_lc_txns_){
+//		  ++Sequencer::num_lc_txns_;
+//		  --Sequencer::num_sc_txns_;
+//		  //int64_t txn;
+//		  delete active_txns[to_sc_txn.first];
+//		  active_txns.erase(to_sc_txn.first);
+//		  my_to_sc_txns->pop();
+//	  }
+//	  else if (scheduler->message_queues[thread]->Pop(&message)) {
+//		  assert(message.type() == MessageProto::READ_RESULT);
+//		  StorageManager* manager = active_txns[atoi(message.destination_channel().c_str())];
+//		  manager->HandleReadResult(message);
+//
+////		  // Execute and clean up.
+//		  TxnProto* txn = manager->txn_;
+////
+//		  std::cout.precision(15);
+//		  std::cout << txn->txn_id() << ": got remote msg " << GetTime() << std::endl;
+////		  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
+////			  if (scheduler->application_->Execute(manager, myrand) == WAIT_AND_SENT){
+////				  std::cout << "Sending for " << txn->txn_id() << " for remote read again!" << std::endl;
+////				  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
+////				  // There are outstanding remote reads.
+////				  active_txns[txn->txn_id()] = manager;
+////			  }
+////			  else{
+////				  std::cout.precision(15);
+////				  std::cout <<txn->txn_id() << ": completed txn " <<  GetTime() << std::endl;
+////				  ++Sequencer::num_lc_txns_;
+////				  --Sequencer::num_pend_txns_;
+////				  delete manager;
+////				  //finished = true;
+////				  scheduler->thread_connections_[thread]->
+////						UnlinkChannel(IntToString(txn->txn_id()));
+////				  active_txns.erase(txn->txn_id());
+////				  if (my_pend_txns->top().first == txn->txn_id())
+////					  my_pend_txns->pop();
+////			  }
+////		  }
+////		  else{
+////			  // Blocked, can not read
+////			  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn->txn_id(), txn->local_txn_id(), TO_READ));
+////		  }
+//	  }
+//	  // Try to re-execute pending transactions
+//	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
+//		  MyTuple<int64_t, int64_t, bool> pend_txn = my_pend_txns->top();
+//
+////		  if ( !my_pend_txns->empty())
+////			  std::cout << pend_txn.first<< " dequeued from pending queue! Now first is "
+////			  <<my_pend_txns->top().first  << std::endl;
+////		  else
+////			  std::cout << pend_txn.first<< " dequeued from pending queue! Queue is empty " << std::endl;
+//		  //!TODO: Maybe the transaction has already been aborted! Need to check
+//
+//		  if(pend_txn.third == TO_SEND){
+//			  //std::cout << pend_txn.first <<" finally sent to remote again!" << std::endl;
+//			  active_txns[pend_txn.first]->SendMsg();
+//			  scheduler->thread_connections_[thread]->
+//						LinkChannel(IntToString(pend_txn.first));
+//		  }
+//		  else{
+//			  StorageManager* manager = active_txns[pend_txn.first];
+//			  if (scheduler->application_->Execute(manager, myrand) == WAIT_AND_SENT){
+//				  std::cout <<pend_txn.first << ": wait and sent!!!" << std::endl;
+//				  scheduler->thread_connections_[thread]->LinkChannel(IntToString(pend_txn.first));
+//				  active_txns[pend_txn.first] = manager;
+//			  }
+//			  else{
+//				  ++Sequencer::num_lc_txns_;
+//				  --Sequencer::num_pend_txns_;
+//				  delete manager;
+//				  //finished = true;
+//				  std::cout <<pend_txn.first << ": completed txn " <<  GetTime() << std::endl;
+//				  scheduler->thread_connections_[thread]->
+//						UnlinkChannel(IntToString(pend_txn.first));
+//				  active_txns.erase(pend_txn.first);
+//				  my_pend_txns->pop();
+//			  }
+//		  }
+//	  }
+//
+	  // Try to re-execute pending transactions
+	  if (my_to_sc_txns->size() <= MAX_SC_NUM && my_pend_txns->size() <= MAX_PEND_NUM) {
 		  bool got_it = true;
-		  TxnProto* txn = scheduler->GetTxn(got_it);
+		  TxnProto* txn = scheduler->GetTxn(got_it, thread);
 
 		  if (got_it == true) {
 			  // Create manager.
-			  //std::cout <<"Starting txn "<<txn->txn_id()<<" with local id as "<< txn->local_txn_id() << std::endl;
+			  std::cout.precision(15);
+			  std::cout << txn->txn_id() << " is started!!! " << GetTime() << std::endl;
+
 			  StorageManager* manager =
 					new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
@@ -225,17 +264,18 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 			  int result = scheduler->application_->Execute(manager, myrand);
 			  if (result == WAIT_AND_SENT){
-				  //std::cout << txn->txn_id() <<"wait and sent for remote read" << std::endl;
+				  std::cout << txn->txn_id() <<" wait and sent for remote read" << std::endl;
 				  scheduler->thread_connections_[thread]->
 						  LinkChannel(IntToString(txn->txn_id()));
+				  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn->txn_id(), txn->local_txn_id(), TO_READ));
 				  // There are outstanding remote reads.
 				  active_txns[txn->txn_id()] = manager;
 				  //finished = true;
 				  ++Sequencer::num_pend_txns_;
 			  }
 			  else if (result == WAIT_NOT_SENT) {
-				  //std::cout << txn->txn_id() <<" wait but not sent for remote read" << std::endl;
-				  my_pend_txns->push(make_pair(txn->txn_id(), TO_SEND));
+				  std::cout << txn->txn_id() <<" wait but not sent for remote read" << std::endl;
+				  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn->txn_id(), txn->local_txn_id(), TO_SEND));
 				  active_txns[txn->txn_id()] = manager;
 				  ++Sequencer::num_pend_txns_;
 			  }
@@ -243,14 +283,36 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
 					  ++Sequencer::num_lc_txns_;
 					  delete manager;
+					  while(scheduler->HandleSCTxns(active_txns, my_to_sc_txns)){
+						   if(!scheduler->HandlePendTxns(scheduler, thread,  active_txns, myrand, my_pend_txns))
+							   break;
+					  }
 				  }
 				  else{
 					  ++Sequencer::num_sc_txns_;
 					  active_txns[txn->txn_id()] = manager;
-					  my_to_sc_txns->push(txn->local_txn_id());
+					  my_to_sc_txns->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 				  }
 			  }
 		  }
+	  }
+	  else{
+		  //string sc_txns = "";
+		  //for(deque<int>::iterator it = my_to_sc_txns->; it != my_to_sc_txns->end(); ++it)
+		//	  sc_txns += *it;
+		  //string pend_txns = "";
+		  //for(deque<int>::iterator it = my_pend_txns->begin(); it != my_pend_txns->end(); ++it)
+		//	  pend_txns += *it;
+		  if ( my_to_sc_txns->empty())
+			  cout <<"To SC txns are empty, to pend txns are "
+				  << my_pend_txns->top().first <<"," <<my_pend_txns->top().second << ", num local committed txn is " << Sequencer::num_lc_txns_ << flush;
+		  else if(my_pend_txns->empty())
+		  	  cout <<"To SC txns are " << my_to_sc_txns->top().first <<", to pend txns are empty, num local committed txn is "
+			  	  << Sequencer::num_lc_txns_ << flush;
+		  else
+		  	  cout <<"To SC txns are " << my_to_sc_txns->top().first <<", to pend txns are "
+		  				  << my_pend_txns->top().first << ", num local committed txn is " << Sequencer::num_lc_txns_ << flush;
+		  Spin(0.05);
 	  }
   }
 

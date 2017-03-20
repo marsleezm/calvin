@@ -152,14 +152,26 @@ Value* StorageManager::SkipOrRead(const Key& key) {
 					--max_counter_;
 					if (message_has_value_){
 						if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
+							std::cout.precision(15);
+							std::cout << txn_->txn_id() << ": blocked and sent. " << GetTime() << std::endl;
 							SendMsg();
+							//std::cout << "Sent msg, as mum of lc is the same as my id" <<
+							//		txn_->local_txn_id() << std::endl;
 							return reinterpret_cast<Value*>(WAIT_AND_SENT);
 						}
 						else{
+							std::cout.precision(15);
+							std::cout << txn_->txn_id() << ": blocked but no sent. " << GetTime() << std::endl;
+							//std::cout << "Not sent msg, as mum of lc is smaller than my id:"
+							//		<< Sequencer::num_lc_txns_ << ", "<< txn_->local_txn_id() << std::endl;
 							return reinterpret_cast<Value*>(WAIT_NOT_SENT);
 						}
 					}
 					else{
+						std::cout.precision(15);
+						std::cout << txn_->txn_id() << ": blocked but has nothign to send. " << GetTime() << std::endl;
+						//std::cout << "No value, so not sending anyway, " <<
+						//		txn_->local_txn_id() << std::endl;
 						return reinterpret_cast<Value*>(WAIT_AND_SENT);
 					}
 				}

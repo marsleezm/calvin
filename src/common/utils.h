@@ -23,9 +23,14 @@ using std::string;
 using std::vector;
 using std::tr1::unordered_map;
 
+
+#define NUM_THREADS 2
+
+
 #define ASSERTS_ON true
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)
+#define BUFFER_TXNS_NUM 20
 
 #define NORMAL_QUEUE 0
 #define FROM_SELF 1
@@ -167,10 +172,33 @@ static inline void Noop(void* data, void* hint) {}
 
 
 ////////////////////////////////
-class Compare
+template<typename T1, typename T2, typename T3>
+class MyTuple{
+public:
+	T1 first;
+	T2 second;
+	T3 third;
+
+	MyTuple(T1 t1, T2 t2, T3 t3){
+		first = t1;
+		second = t2;
+		third = t3;
+	}
+};
+
+class ComparePair
 {
 public:
     bool operator() (std::pair<int64_t, bool> left, std::pair<int64_t, bool> right)
+    {
+    	return (left.first > right.first);
+    }
+};
+
+class CompareTuple
+{
+public:
+    bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
     {
     	return (left.first > right.first);
     }
@@ -216,14 +244,14 @@ class Lock {
 
 
 class Rand {
-	uint64_t x;
-	uint64_t y;
+	int64_t x;
+	int64_t y;
 public:
-	void seed(uint64_t seed){
+	void seed(int64_t seed){
 		x = seed;
 	}
 
-	uint64_t next(){
+	int64_t next(){
 	    x ^= x >> 12; // a
 	    x ^= x << 25; // b
 	    x ^= x >> 27; // c
@@ -231,16 +259,48 @@ public:
 	    if (y == x){
 	    	x += 1;
 	    	y = x;
-	    	return x;
+	    	return abs(x);
 	    }
 	    else{
 	    	y = x;
-	    	return x;
+	    	return abs(x);
 	    }
 	}
 };
 
 
+template<typename T>
+class FixedList {
+ public:
+  // Mutexes come into the world unlocked.
+  FixedList(int size) {
+	  data_ = new T[size];
+	  current_ = 0;
+	  end_ = size-1;
+  }
+
+  ~FixedList() { delete data_;}
+
+  T* GetFirst(){
+	  if(current_ <= end_)
+		  return data_[current_++];
+	  else
+		  return NULL;
+  }
+
+  void Clear(){
+	  current_=0;
+  }
+
+  void Add(T* t){
+	  data_[current_++] = t;
+  }
+
+ private:
+  T* data_;
+  int current_;
+  int end_;
+};
 
 template<typename T>
 class AtomicQueue {

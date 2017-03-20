@@ -64,6 +64,30 @@ class MClient : public Client {
       *txn = microbenchmark.MicroTxnSP(txn_id, seed, config_->this_node_id);
     }
   }
+  virtual void GetDetTxn(TxnProto** txn, int txn_id, int seed) {
+	  Rand rand;
+	  rand.seed(seed);
+     if (config_->all_nodes.size() > 1 && rand.next() % 100 < percent_mp_) {
+       // Multipartition txn.
+    	 int option = rand.next()% 6;
+    	 if (option == 0)
+    		 *txn = microbenchmark.MicroTxnMP(txn_id, seed, 0, 1, 2);
+    	 else if (option == 1)
+    		 *txn = microbenchmark.MicroTxnMP(txn_id, seed, 0, 2, 1);
+    	 else if (option == 2)
+    		 *txn = microbenchmark.MicroTxnMP(txn_id, seed, 1, 0, 2);
+    	 else if (option == 3)
+    		 *txn = microbenchmark.MicroTxnMP(txn_id, seed, 1, 2, 0);
+    	 else if (option == 4)
+    		 *txn = microbenchmark.MicroTxnMP(txn_id, seed, 2, 0, 1);
+    	 else if (option == 5)
+    		 *txn = microbenchmark.MicroTxnMP(txn_id, seed, 2, 1, 0);
+
+     } else {
+       // Single-partition txn.
+       *txn = microbenchmark.MicroTxnSP(txn_id, seed, config_->this_node_id);
+     }
+   }
 
  private:
   Microbenchmark microbenchmark;
@@ -79,6 +103,26 @@ class TClient : public Client {
   }
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
+    if (config_->all_nodes.size() > 1 && rand() % 100 < percent_mp_) {
+      // Multipartition txn.
+      int other1;
+      int other2;
+      do {
+        other1 = rand() % config_->all_nodes.size();
+      } while (other1 == config_->this_node_id);
+
+      do {
+        other2 = rand() % config_->all_nodes.size();
+      } while (other2 == config_->this_node_id || other2 == other1);
+
+
+      *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, seed, other1, other2);
+    } else {
+      // Single-partition txn.
+      *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id, seed);
+    }
+  }
+  virtual void GetDetTxn(TxnProto** txn, int txn_id, int seed) {
     if (config_->all_nodes.size() > 1 && rand() % 100 < percent_mp_) {
       // Multipartition txn.
       int other1;
