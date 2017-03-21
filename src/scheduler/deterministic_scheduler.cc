@@ -147,24 +147,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   pair<int64_t, int64_t> to_sc_txn;
 
   while (!terminated_) {
-	  // Got remote read result.
-	  // I should spec commit my txn.
-//	  if (scheduler->message_queues[thread]->Pop(&message)){
-//		  assert(message.type() == MessageProto::READ_RESULT);
-//		  StorageManager* manager = active_txns[atoi(message.destination_channel().c_str())];
-//		  manager->HandleReadResult(message);
-//	  }
-//	  if (scheduler->message_queues[thread]->Pop(&message)) {
-//		  assert(message.type() == MessageProto::READ_RESULT);
-//		  StorageManager* manager = active_txns[atoi(message.destination_channel().c_str())];
-//		  manager->HandleReadResult(message);
-//		  while(scheduler->HandlePendTxns(scheduler, thread, active_txns, myrand, my_pend_txns)){
-//			   if(!scheduler->HandleSCTxns(active_txns, my_to_sc_txns))
-//				   break;
-//		  }
-//	  }
-
-
 	  if (!my_to_sc_txns->empty() && (to_sc_txn = my_to_sc_txns->top()).second == Sequencer::num_lc_txns_){
 		  //cout << to_sc_txn.first << " completed!" << endl;
 		  ++Sequencer::num_lc_txns_;
@@ -172,10 +154,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  //int64_t txn;
 		  delete active_txns[to_sc_txn.first];
 		  active_txns.erase(to_sc_txn.first);
-		  //while (!my_to_sc_txns->empty() && my_to_sc_txns->top() == to_sc_txn){
-		//	  cout << "1 Trying to remove" << my_to_sc_txns->top().first << endl;
 		  my_to_sc_txns->pop();
-		  //}
 	  }
 	  else if (scheduler->message_queues[thread]->Pop(&message)) {
 		  assert(message.type() == MessageProto::READ_RESULT);
@@ -251,7 +230,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						UnlinkChannel(IntToString(pend_txn.first));
 				  active_txns.erase(pend_txn.first);
 				  while (!my_pend_txns->empty() && my_pend_txns->top().first ==  pend_txn.first){
-					  cout << "3 Trying to remove" << my_pend_txns->top().first << endl;
 					  my_pend_txns->pop();
 				  }
 			  }
