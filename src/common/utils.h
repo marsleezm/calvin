@@ -24,8 +24,7 @@ using std::vector;
 using std::tr1::unordered_map;
 
 
-#define NUM_THREADS 2
-
+#define NUM_THREADS 4
 
 #define ASSERTS_ON true
 

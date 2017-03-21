@@ -16,6 +16,15 @@
 #include <iostream>
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
+                               Storage* actual_storage)
+    : configuration_(config), connection_(connection), actual_storage_(actual_storage),
+	  message_has_value_(false), exec_counter_(0), max_counter_(0){
+	get_blocked_ = 0;
+	sent_msg_ = 0;
+	message_ = NULL;
+}
+
+StorageManager::StorageManager(Configuration* config, Connection* connection,
                                Storage* actual_storage, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0){
@@ -82,6 +91,16 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 //  }
 
   // Scheduler is responsible for calling HandleReadResponse. We're done here.
+}
+
+void StorageManager::SetupTxn(TxnProto* txn){
+	assert(txn_ == NULL);
+	assert(txn->txn_type() != SINGLE_PART);
+
+	txn_ = txn;
+	message_ = new MessageProto();
+	message_->set_destination_channel(IntToString(txn_->txn_id()));
+	message_->set_type(MessageProto::READ_RESULT);
 }
 
 
@@ -152,24 +171,24 @@ Value* StorageManager::SkipOrRead(const Key& key) {
 					--max_counter_;
 					if (message_has_value_){
 						if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
-							std::cout.precision(15);
-							std::cout << txn_->txn_id() << ": blocked and sent. " << GetTime() << std::endl;
+							//std::cout.precision(15);
+							//std::cout << txn_->txn_id() << ": blocked and sent. " << GetTime() << std::endl;
 							SendMsg();
 							//std::cout << "Sent msg, as mum of lc is the same as my id" <<
 							//		txn_->local_txn_id() << std::endl;
 							return reinterpret_cast<Value*>(WAIT_AND_SENT);
 						}
 						else{
-							std::cout.precision(15);
-							std::cout << txn_->txn_id() << ": blocked but no sent. " << GetTime() << std::endl;
+							//std::cout.precision(15);
+							//std::cout << txn_->txn_id() << ": blocked but no sent. " << GetTime() << std::endl;
 							//std::cout << "Not sent msg, as mum of lc is smaller than my id:"
 							//		<< Sequencer::num_lc_txns_ << ", "<< txn_->local_txn_id() << std::endl;
 							return reinterpret_cast<Value*>(WAIT_NOT_SENT);
 						}
 					}
 					else{
-						std::cout.precision(15);
-						std::cout << txn_->txn_id() << ": blocked but has nothign to send. " << GetTime() << std::endl;
+						//std::cout.precision(15);
+						//std::cout << txn_->txn_id() << ": blocked but has nothign to send. " << GetTime() << std::endl;
 						//std::cout << "No value, so not sending anyway, " <<
 						//		txn_->local_txn_id() << std::endl;
 						return reinterpret_cast<Value*>(WAIT_AND_SENT);

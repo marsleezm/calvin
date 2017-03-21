@@ -50,9 +50,14 @@ class StorageManager {
   StorageManager(Configuration* config, Connection* connection,
                  Storage* actual_storage, TxnProto* txn);
 
+  StorageManager(Configuration* config, Connection* connection,
+                 Storage* actual_storage);
+
   ~StorageManager();
 
   void SendMsg();
+
+  void SetupTxn(TxnProto* txn);
 
   Value* ReadObject(const Key& key);
   Value* SkipOrRead(const Key& key);
