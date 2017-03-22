@@ -149,6 +149,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty() && (to_sc_txn = my_to_sc_txns->top()).second == Sequencer::num_lc_txns_){
 		  //cout << to_sc_txn.first << " completed!" << endl;
+		  assert(Sequencer::max_commit_ts < to_sc_txn.first);
+		  Sequencer::max_commit_ts = to_sc_txn.first;
 		  ++Sequencer::num_lc_txns_;
 		  --Sequencer::num_sc_txns_;
 		  //int64_t txn;
@@ -182,6 +184,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  else{
 					  //std::cout.precision(15);
 					  //std::cout <<txn->txn_id()<<","<<txn->local_txn_id() << ": completed txn " <<  GetTime() << std::endl;
+					  assert(Sequencer::max_commit_ts < txn->txn_id());
+					  Sequencer::max_commit_ts = txn->txn_id();
 					  ++Sequencer::num_lc_txns_;
 					  --Sequencer::num_pend_txns_;
 					  delete manager;
@@ -209,7 +213,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  scheduler->thread_connections_[thread]->
 						LinkChannel(IntToString(pend_txn.first));
 			  while (!my_pend_txns->empty() &&  my_pend_txns->top().first == pend_txn.first){
-				  cout << "2 Trying to remove" << my_pend_txns->top().first << endl;
+				  //cout << "2 Trying to remove" << my_pend_txns->top().first << endl;
 				  my_pend_txns->pop();
 			  }
 		  }
@@ -221,6 +225,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  active_txns[pend_txn.first] = manager;
 			  }
 			  else{
+				  assert(Sequencer::max_commit_ts < pend_txn.first);
+				  Sequencer::max_commit_ts = pend_txn.first;
 				  ++Sequencer::num_lc_txns_;
 				  --Sequencer::num_pend_txns_;
 				  delete manager;
@@ -272,6 +278,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  else{
 				  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
 					  //std::cout << txn->txn_id()<< ","<< txn->local_txn_id()<< " just finished!!! " << std::endl;
+					  assert(Sequencer::max_commit_ts < txn->txn_id());
+					  Sequencer::max_commit_ts = txn->txn_id();
 					  ++Sequencer::num_lc_txns_;
 					  delete manager;
 				  }

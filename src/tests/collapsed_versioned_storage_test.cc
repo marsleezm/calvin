@@ -5,7 +5,7 @@
 #include "common/testing.h"
 
 TEST(CollapsedVersionedStorageTest) {
-  CollapsedVersionedStorage* storage = new CollapsedVersionedStorage();
+  LockedVersionedStorage* storage = new LockedVersionedStorage();
 
   Key key = bytes("key");
   Value value_one = bytes("value_one");
@@ -42,7 +42,7 @@ TEST(CollapsedVersionedStorageTest) {
 }
 
 TEST(CheckpointingTest) {
-  CollapsedVersionedStorage* storage = new CollapsedVersionedStorage();
+  LockedVersionedStorage* storage = new LockedVersionedStorage();
 
   Key key = bytes("key");
   Value value_one = bytes("value_one");

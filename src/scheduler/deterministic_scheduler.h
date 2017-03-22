@@ -138,5 +138,8 @@ class DeterministicScheduler : public Scheduler {
   priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* pending_txns_[NUM_THREADS];
 
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
+
+  AtomicQueue<int64_t>* abort_queues[NUM_THREADS];
+  AtomicQueue<int64_t>* waiting_queues[NUM_THREADS];
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

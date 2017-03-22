@@ -9,7 +9,7 @@
 int main(int argc, char** argv) {
   Configuration* config =
     new Configuration(0, "common/configuration_test_one_node.conf");
-  CollapsedVersionedStorage* storage = new CollapsedVersionedStorage();
+  LockedVersionedStorage* storage = new LockedVersionedStorage();
   TPCC* tpcc = new TPCC();
 
   TPCC().InitializeStorage(storage, config);

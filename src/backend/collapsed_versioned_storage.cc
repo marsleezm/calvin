@@ -23,7 +23,7 @@ using std::string;
   Value* HistoryStore[MAXARRAYSIZE];
 #endif
 
-Value* CollapsedVersionedStorage::ReadObject(const Key& key, int64 txn_id) {
+Value* LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id) {
 #ifdef TPCCHACK
   if (key.find("ol") != string::npos) {
     return OrderLineStore[txn_id * 15 + atoi(&key[key.find("line(") + 5])];
@@ -53,7 +53,7 @@ Value* CollapsedVersionedStorage::ReadObject(const Key& key, int64 txn_id) {
   return NULL;
 }
 
-bool CollapsedVersionedStorage::PutObject(const Key& key, Value* value,
+bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
                                           int64 txn_id) {
 #ifdef TPCCHACK
   if (key.find("ol") != string::npos) {
@@ -97,7 +97,7 @@ bool CollapsedVersionedStorage::PutObject(const Key& key, Value* value,
   return true;
 }
 
-bool CollapsedVersionedStorage::DeleteObject(const Key& key, int64 txn_id) {
+bool LockedVersionedStorage::DeleteObject(const Key& key, int64 txn_id) {
 #ifdef TPCCHACK
   if (key.find("o") != string::npos || key.find("h") != string::npos)
     return false;
@@ -132,7 +132,7 @@ bool CollapsedVersionedStorage::DeleteObject(const Key& key, int64 txn_id) {
   return true;
 }
 
-int CollapsedVersionedStorage::Checkpoint() {
+int LockedVersionedStorage::Checkpoint() {
   pthread_t checkpointing_daemon;
   int thread_status = pthread_create(&checkpointing_daemon, NULL,
                                      &RunCheckpointer, this);
@@ -140,7 +140,7 @@ int CollapsedVersionedStorage::Checkpoint() {
   return thread_status;
 }
 
-void CollapsedVersionedStorage::CaptureCheckpoint() {
+void LockedVersionedStorage::CaptureCheckpoint() {
   // Give the user output
   fprintf(stdout, "Beginning checkpoint capture...\n");
 

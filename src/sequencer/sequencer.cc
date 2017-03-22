@@ -42,6 +42,7 @@ double scheduler_unlock[SAMPLES];
 #endif
 
 int64_t Sequencer::num_lc_txns_=0;
+int64_t Sequencer::max_commit_ts=0;
 int64_t Sequencer::num_c_txns_=0;
 atomic<int64_t> Sequencer::num_pend_txns_(0);
 atomic<int64_t> Sequencer::num_sc_txns_(0);

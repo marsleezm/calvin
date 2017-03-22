@@ -185,6 +185,70 @@ public:
 	}
 };
 
+
+class ReadFromEntry{
+public:
+	int64_t my_tx_id_;
+	int64_t read_from_id_;
+	atomic<int>* abort_bit_;
+	int num_aborted_;
+	AtomicQueue<int>* abort_queue_;
+
+	ReadFromEntry(int64_t my_tx_id, int64_t read_from_id, int* abort_bit, int num_aborted, void* abort_queue){
+		my_tx_id_ = my_tx_id;
+		read_from_id_ = read_from_id;
+		abort_bit_ = abort_bit;
+		num_aborted_ = num_aborted;
+		abort_queue_ = abort_queue;
+	}
+};
+
+class PendingReadEntry{
+public:
+	int64_t my_tx_id_;
+	Value* value_bit_;
+	void* pend_queue_;
+
+	PendingReadEntry(int64_t my_tx_id, Value* value_bit, void* pend_queue){
+		my_tx_id_ = my_tx_id;
+		value_bit_ = value_bit;
+		pend_queue_ = pend_queue;
+	}
+};
+
+class LockEntry{
+public:
+	int64_t tx_id_;
+	std::atomic<int>* abort_bit_;
+	int num_aborted_;
+	AtomicQueue<int64_t>* abort_queue_;
+
+	LockEntry(int64_t tx_id, std::atomic<int>* abort_bit, int num_aborted, AtomicQueue<int64_t>* abort_queue){
+		tx_id_ = tx_id;
+		abort_bit_ = abort_bit;
+		num_aborted_ = num_aborted;
+		abort_queue_ = abort_queue;
+	}
+};
+
+class CompareReadFrom
+{
+public:
+    bool operator() (ReadFromEntry left, ReadFromEntry right)
+    {
+    	return (left.my_tx_id_ > right.my_tx_id_);
+    }
+};
+
+class ComparePendingRead
+{
+public:
+    bool operator() (PendingReadEntry left, PendingReadEntry right)
+    {
+    	return (left.my_tx_id_ > right.my_tx_id_);
+    }
+};
+
 class ComparePair
 {
 public:
