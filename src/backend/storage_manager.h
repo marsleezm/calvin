@@ -48,10 +48,12 @@ class StorageManager {
  public:
   // TODO(alex): Document this class correctly.
   StorageManager(Configuration* config, Connection* connection,
-                 Storage* actual_storage, TxnProto* txn);
+                 Storage* actual_storage, AtomicQueue<int64_t>* abort_queue,
+				 AtomicQueue<int64_t>* pend_queue, TxnProto* txn);
 
   StorageManager(Configuration* config, Connection* connection,
-                 Storage* actual_storage);
+                 Storage* actual_storage, AtomicQueue<int64_t>* abort_queue,
+				 AtomicQueue<int64_t>* pend_queue);
 
   ~StorageManager();
 
@@ -130,6 +132,12 @@ class StorageManager {
 
   // Counting how many transaction steps have been executed the last time
   int max_counter_;
+
+  AtomicQueue<int64_t>* abort_queue_;
+  AtomicQueue<int64_t>* pend_queue_;
+
+  atomic<int> abort_bit;
+  int num_aborted;
 
   /****** For statistics ********/
   int get_blocked_;

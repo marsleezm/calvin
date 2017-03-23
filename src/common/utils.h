@@ -194,7 +194,8 @@ public:
 	int num_aborted_;
 	AtomicQueue<int>* abort_queue_;
 
-	ReadFromEntry(int64_t my_tx_id, int64_t read_from_id, int* abort_bit, int num_aborted, void* abort_queue){
+	ReadFromEntry(int64_t my_tx_id, int64_t read_from_id, atomic<int>* abort_bit,
+			int num_aborted, AtomicQueue<int>* abort_queue){
 		my_tx_id_ = my_tx_id;
 		read_from_id_ = read_from_id;
 		abort_bit_ = abort_bit;
@@ -207,11 +208,16 @@ class PendingReadEntry{
 public:
 	int64_t my_tx_id_;
 	Value* value_bit_;
-	void* pend_queue_;
+	atomic<int>* abort_bit_;
+	int num_aborted_;
+	AtomicQueue<int>* pend_queue_;
 
-	PendingReadEntry(int64_t my_tx_id, Value* value_bit, void* pend_queue){
+	PendingReadEntry(int64_t my_tx_id, Value* value_bit, atomic<int>* abort_bit_,
+			int num_aborted_, AtomicQueue<int>* pend_queue){
 		my_tx_id_ = my_tx_id;
 		value_bit_ = value_bit;
+		abort_bit_ = abort_bit;
+		num_aborted_ = num_aborted;
 		pend_queue_ = pend_queue;
 	}
 };

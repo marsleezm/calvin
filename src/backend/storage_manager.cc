@@ -16,18 +16,22 @@
 #include <iostream>
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
-                               Storage* actual_storage)
+                               Storage* actual_storage,  AtomicQueue<int64_t>* abort_queue,
+								 AtomicQueue<int64_t>* pend_queue)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
-	  message_has_value_(false), exec_counter_(0), max_counter_(0){
+	  message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
+	  pend_queue_(pend_queue), num_aborted(0){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	message_ = NULL;
 }
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
-                               Storage* actual_storage, TxnProto* txn)
+                               Storage* actual_storage, AtomicQueue<int64_t>* abort_queue,
+								 AtomicQueue<int64_t>* pend_queue, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
-	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0){
+	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
+	  pend_queue_(pend_queue), num_aborted(0){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	message_ = NULL;
@@ -149,7 +153,9 @@ Value* StorageManager::SkipOrRead(const Key& key) {
 			if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
 				Value* val = objects_[key];
 				if (val == NULL){
-					val = actual_storage_->ReadObject(key);
+					val = actual_storage_->ReadObject(key, txn_id, abort_bit, num_aborted, Value* value_bit,
+					AtomicQueue<int64_t>* abort_queue, AtomicQueue<int64_t>* pend_queue
+
 					objects_[key] = val;
 					//std::cout <<"here, multi part is " << txn_->txn_type() << std::endl;
 					if (txn_->txn_type() == MULTI_PART){

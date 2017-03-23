@@ -141,6 +141,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	  = scheduler->pending_txns_[thread];
 
   Rand* myrand = scheduler->rands[thread];
+  AtomicQueue<int64_t>* abort_queue = scheduler->abort_queues[thread];
+  AtomicQueue<int64_t>* waiting_queue = scheduler->waiting_queues[thread];
 
   // Begin main loop.
   MessageProto message;
@@ -158,6 +160,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  active_txns.erase(to_sc_txn.first);
 		  my_to_sc_txns->pop();
 	  }
+	  else if (!abort_queue->Empty()){
+		  //Abort this transaction
+	  }
+	  else if(!waiting_queue->Empty()){
+		  //Restart queue
+	  }
 	  else if (scheduler->message_queues[thread]->Pop(&message)) {
 		  assert(message.type() == MessageProto::READ_RESULT);
 		  int txn_id = atoi(message.destination_channel().c_str());
@@ -165,7 +173,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if (manager == NULL){
 			  manager = new StorageManager(scheduler->configuration_,
 							   scheduler->thread_connections_[thread],
-							   scheduler->storage_);
+							   scheduler->storage_, abort_queue, waiting_queue);
 			  manager->HandleReadResult(message);
 			  active_txns[txn_id] = manager;
 		  }
@@ -255,7 +263,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  if (manager == NULL)
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
-								   scheduler->storage_, txn);
+								   scheduler->storage_, abort_queue, waiting_queue, txn);
 			  else
 				  manager->SetupTxn(txn);
 

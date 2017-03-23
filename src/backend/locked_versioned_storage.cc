@@ -12,8 +12,8 @@
 
 using std::string;
 
-Value* LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, int* abort_bit, int num_aborted, Value* value_bit,
-			AtomicQueue<int64_t>* abort_queue, AtomicQueue<int64_t>* pend_queue) {
+Value* LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, Value* value_bit,
+			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue) {
   // If no one has even created a version of the key
   if (objects_.count(key) == 0) {
 	  pthread_mutex_lock(&new_obj_mutex_);
@@ -32,7 +32,7 @@ Value* LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, int* abo
 	  if (entry->lock.tx_id_ < txn_id){
 		  pthread_mutex_lock(&(entry->mutex_));
 		  if (entry->lock.tx_id_ < txn_id){
-			  entry->pend_list->push_back(PendingReadEntry(txn_id, value_bit, pend_queue));
+			  entry->pend_list->push_back(PendingReadEntry(txn_id, value_bit, pend_queue, abort_bit, num_aborted));
 			  pthread_mutex_unlock(&(entry->mutex_));
 			  // Should return BLOCKED! How to denote that?
 			  return NULL;
@@ -156,19 +156,17 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 			vector<PendingReadEntry>::iterator it = pend_list->begin();
 			while(it != entry->pend_list->end()) {
 				// This txn is ordered after me, I should
-				if((*it).my_tx_id_ > txn_id) {
+				if(it->my_tx_id_ > txn_id) {
 					it = pend_list->erase(it);
-				}
-				// Abort anyone that has read from me
-				else if((*it).my_tx_id_ > txn_id){
-
-					entry->lock.abort_queue_->Push(entry->lock.tx_id_);
-					it = pend_list->erase(it);
+					//If the transaction is still aborted
+					if (*(it->abort_bit_) == it->num_aborted_){
+						*value_bit = value;
+						it->pend_queue_->Push(it->my_tx_id_);
+					}
 				}
 				else ++it;
 			}
 		}
-
 
 		pthread_mutex_unlock(&entry->mutex_);
 	}
