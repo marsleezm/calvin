@@ -10,34 +10,18 @@
 #include <cstring>
 #include <tr1/unordered_map>
 #include <queue>
-#include <climits>
+#include "common/utils.h"
 
 #include "backend/versioned_storage.h"
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
 #define CHKPNTDIR "../db/checkpoints"
-#define NO_LOCK INT_MAX
 
 using std::tr1::unordered_map;
-using std::priority_queue;
-using std::atomic;
+using namespace std;
 
-struct DataNode {
-  int64_t txn_id;
-  Value* value;
-  DataNode* next;
-};
-
-struct KeyEntry {
-	pthread_mutex_t mutex_;
-	LockEntry lock;
-	std::vector<ReadFromEntry>* read_from_list;
-	std::vector<PendingReadEntry>* pend_list;
-	DataNode* head;
-};
-
-class LockedVersionedStorage : public VersionedStorage {
+class LockedVersionedStorage {
  public:
   LockedVersionedStorage() {
     stable_ = 0;
@@ -52,29 +36,26 @@ class LockedVersionedStorage : public VersionedStorage {
 
   // Standard operators in the DB
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
-  virtual Value* ReadObject(const Key& key, int64 txn_id, int* abort_bit, int num_aborted, Value* value_bit,
-  			AtomicQueue<int64_t>* abort_queue, AtomicQueue<int64_t>* pend_queue);
+  virtual Value* ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, Value* value_bit,
+  			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
-			AtomicQueue<int64_t>* abort_queue);
-  virtual bool PutObject(const Key& key, Value* value, int64 txn_id);
-  virtual void ExecAbort(const Key& key, int64 txn_id);
-  virtual void SpecAbort(const Key& key, int64 txn_id);
+			AtomicQueue<pair<int64_t, int>>* abort_queue);
+  virtual bool PutObject(const Key& key, Value value, int64 txn_id);
+  virtual void PutObject(const Key& key, Value* value);
+  virtual void Unlock(const Key& key, int64 txn_id);
+  virtual void RemoveValue(const Key& key, int64 txn_id);
   virtual bool DeleteObject(const Key& key, int64 txn_id);
-
-  // Specify the overloaded parent functions we are using here
-  using VersionedStorage::Prefetch;
-  using VersionedStorage::Unfetch;
 
   // At a new versioned state, the version system is notified that the
   // previously stable values are no longer necessary.  At this point in time,
   // the database can switch the labels as to what is stable (the previously
   // frozen values) to a new txn_id occurring in the future.
-  virtual void PrepareForCheckpoint(int64 stable) { stable_ = stable; }
-  virtual int Checkpoint();
+  //virtual void PrepareForCheckpoint(int64 stable) { stable_ = stable; }
+  //virtual int Checkpoint();
 
   // The capture checkpoint method is an internal method that allows us to
   // write out the stable checkpoint to disk.
-  virtual void CaptureCheckpoint();
+  //virtual void CaptureCheckpoint();
 
  private:
   // We make a simple mapping of keys to a map of "versions" of our value.
@@ -91,9 +72,5 @@ class LockedVersionedStorage : public VersionedStorage {
   pthread_mutex_t new_obj_mutex_;
 };
 
-static inline void* RunCheckpointer(void* storage) {
-  (reinterpret_cast<LockedVersionedStorage*>(storage))->CaptureCheckpoint();
-  return NULL;
-}
 
 #endif  // _DB_BACKEND_COLLAPSED_VERSIONED_STORAGE_H_

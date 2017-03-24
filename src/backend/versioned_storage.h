@@ -29,6 +29,10 @@ class VersionedStorage : public Storage {
   // (which versioned storage never does.
   virtual bool DeleteObject(const Key& key, int64 txn_id) = 0;
 
+  virtual void Unlock(const Key& key, int64 txn_id) = 0;
+
+  virtual void RemoveValue(const Key& key, int64 txn_id) = 0;
+
   // TODO(Thad): We should really make this a virtually required interface for
   // all storage classes but to avoid conflicts I'm just gonna leave it in the
   // versioned storage class.

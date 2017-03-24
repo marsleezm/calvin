@@ -8,6 +8,7 @@
 
 #include <climits>
 #include <cstring>
+#include "common/utils.h"
 #include <tr1/unordered_map>
 
 #include "backend/versioned_storage.h"
@@ -18,15 +19,10 @@
 
 using std::tr1::unordered_map;
 
-struct DataNode {
-  int64 txn_id;
-  Value* value;
-  DataNode* next;
-};
 
-class LockedVersionedStorage : public VersionedStorage {
+class CollapsedVersionedStorage : public VersionedStorage {
  public:
-  LockedVersionedStorage() {
+	CollapsedVersionedStorage() {
     stable_ = 0;
 
 #ifdef TPCCHACK
@@ -36,7 +32,7 @@ class LockedVersionedStorage : public VersionedStorage {
     memset(&HistoryStore, 0, sizeof(HistoryStore));
 #endif
   }
-  virtual ~LockedVersionedStorage() {}
+  virtual ~CollapsedVersionedStorage() {}
 
   // TODO(Thad and Philip): How can we incorporate this type of versioned
   // storage into the work that you've been doing with prefetching?  It seems
@@ -76,7 +72,7 @@ class LockedVersionedStorage : public VersionedStorage {
 };
 
 static inline void* RunCheckpointer(void* storage) {
-  (reinterpret_cast<LockedVersionedStorage*>(storage))->CaptureCheckpoint();
+  (reinterpret_cast<CollapsedVersionedStorage*>(storage))->CaptureCheckpoint();
   return NULL;
 }
 

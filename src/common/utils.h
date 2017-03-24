@@ -16,15 +16,18 @@
 #include <vector>
 #include <tr1/unordered_map>
 #include <atomic>
+#include <climits>
 
 #include "common/types.h"
 
-using std::string;
-using std::vector;
-using std::tr1::unordered_map;
+//using std::string;
+//using std::vector;
+using namespace std;
+using tr1::unordered_map;
 
 
-#define NUM_THREADS 4
+#define NUM_THREADS 1
+#define NO_LOCK INT_MAX
 
 #define ASSERTS_ON true
 
@@ -35,6 +38,16 @@ using std::tr1::unordered_map;
 #define FROM_SELF 1
 #define FROM_SEQ_SINGLE 2
 #define FROM_SEQ_DIST 3
+
+#define NORMAL 0
+#define SPECIAL 1
+#define SKIP 2
+
+#define FINISHED 3
+#define WAIT_AND_SENT 4
+#define WAIT_NOT_SENT 5
+#define TX_ABORTED 6
+#define SUSPENDED 7
 
 // Status code for return values.
 struct Status {
@@ -183,94 +196,6 @@ public:
 		second = t2;
 		third = t3;
 	}
-};
-
-
-class ReadFromEntry{
-public:
-	int64_t my_tx_id_;
-	int64_t read_from_id_;
-	atomic<int>* abort_bit_;
-	int num_aborted_;
-	AtomicQueue<int>* abort_queue_;
-
-	ReadFromEntry(int64_t my_tx_id, int64_t read_from_id, atomic<int>* abort_bit,
-			int num_aborted, AtomicQueue<int>* abort_queue){
-		my_tx_id_ = my_tx_id;
-		read_from_id_ = read_from_id;
-		abort_bit_ = abort_bit;
-		num_aborted_ = num_aborted;
-		abort_queue_ = abort_queue;
-	}
-};
-
-class PendingReadEntry{
-public:
-	int64_t my_tx_id_;
-	Value* value_bit_;
-	atomic<int>* abort_bit_;
-	int num_aborted_;
-	AtomicQueue<int>* pend_queue_;
-
-	PendingReadEntry(int64_t my_tx_id, Value* value_bit, atomic<int>* abort_bit_,
-			int num_aborted_, AtomicQueue<int>* pend_queue){
-		my_tx_id_ = my_tx_id;
-		value_bit_ = value_bit;
-		abort_bit_ = abort_bit;
-		num_aborted_ = num_aborted;
-		pend_queue_ = pend_queue;
-	}
-};
-
-class LockEntry{
-public:
-	int64_t tx_id_;
-	std::atomic<int>* abort_bit_;
-	int num_aborted_;
-	AtomicQueue<int64_t>* abort_queue_;
-
-	LockEntry(int64_t tx_id, std::atomic<int>* abort_bit, int num_aborted, AtomicQueue<int64_t>* abort_queue){
-		tx_id_ = tx_id;
-		abort_bit_ = abort_bit;
-		num_aborted_ = num_aborted;
-		abort_queue_ = abort_queue;
-	}
-};
-
-class CompareReadFrom
-{
-public:
-    bool operator() (ReadFromEntry left, ReadFromEntry right)
-    {
-    	return (left.my_tx_id_ > right.my_tx_id_);
-    }
-};
-
-class ComparePendingRead
-{
-public:
-    bool operator() (PendingReadEntry left, PendingReadEntry right)
-    {
-    	return (left.my_tx_id_ > right.my_tx_id_);
-    }
-};
-
-class ComparePair
-{
-public:
-    bool operator() (std::pair<int64_t, bool> left, std::pair<int64_t, bool> right)
-    {
-    	return (left.first > right.first);
-    }
-};
-
-class CompareTuple
-{
-public:
-    bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
-    {
-    	return (left.first > right.first);
-    }
 };
 
 
@@ -636,6 +561,120 @@ class AtomicMap {
   // DISALLOW_COPY_AND_ASSIGN
   AtomicMap(const AtomicMap<K, V>&);
   AtomicMap& operator=(const AtomicMap<K, V>&);
+};
+
+class ReadFromEntry{
+public:
+	int64_t my_tx_id_;
+	int64_t read_from_id_;
+	atomic<int>* abort_bit_;
+	int num_aborted_;
+	AtomicQueue<pair<int64_t, int>>* abort_queue_;
+
+	ReadFromEntry(int64_t my_tx_id, int64_t read_from_id, atomic<int>* abort_bit,
+			int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue){
+		my_tx_id_ = my_tx_id;
+		read_from_id_ = read_from_id;
+		abort_bit_ = abort_bit;
+		num_aborted_ = num_aborted;
+		abort_queue_ = abort_queue;
+	}
+};
+
+class PendingReadEntry{
+public:
+	int64_t my_tx_id_;
+	Value* value_bit_;
+	atomic<int>* abort_bit_;
+	int num_aborted_;
+	AtomicQueue<pair<int64_t, int>>* pend_queue_;
+
+	PendingReadEntry(int64_t my_tx_id, Value* value_bit, atomic<int>* abort_bit,
+			int num_aborted, AtomicQueue<pair<int64_t, int>>* pend_queue){
+		my_tx_id_ = my_tx_id;
+		value_bit_ = value_bit;
+		abort_bit_ = abort_bit;
+		num_aborted_ = num_aborted;
+		pend_queue_ = pend_queue;
+	}
+};
+
+class LockEntry{
+public:
+	int64_t tx_id_;
+	atomic<int>* abort_bit_;
+	int num_aborted_;
+	AtomicQueue<pair<int64_t, int>>* abort_queue_;
+
+	LockEntry(){
+		tx_id_ = NO_LOCK;
+	}
+
+	LockEntry(int64_t tx_id, std::atomic<int>* abort_bit, int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue){
+		tx_id_ = tx_id;
+		abort_bit_ = abort_bit;
+		num_aborted_ = num_aborted;
+		abort_queue_ = abort_queue;
+	}
+};
+
+class CompareReadFrom
+{
+public:
+    bool operator() (ReadFromEntry left, ReadFromEntry right)
+    {
+    	return (left.my_tx_id_ > right.my_tx_id_);
+    }
+};
+
+class ComparePendingRead
+{
+public:
+    bool operator() (PendingReadEntry left, PendingReadEntry right)
+    {
+    	return (left.my_tx_id_ > right.my_tx_id_);
+    }
+};
+
+class ComparePair
+{
+public:
+    bool operator() (std::pair<int64_t, bool> left, std::pair<int64_t, bool> right)
+    {
+    	return (left.first > right.first);
+    }
+};
+
+class CompareTuple
+{
+public:
+    bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
+    {
+    	return (left.first > right.first);
+    }
+};
+
+struct DataNode {
+  int64_t txn_id;
+  Value* value;
+  DataNode* next=NULL;
+};
+
+
+class KeyEntry {
+	public:
+		pthread_mutex_t mutex_;
+		LockEntry lock;
+		std::vector<ReadFromEntry>* read_from_list;
+		std::vector<PendingReadEntry>* pend_list;
+		DataNode* head;
+
+		KeyEntry(){
+			read_from_list = new vector<ReadFromEntry>();
+			pend_list = new vector<PendingReadEntry>();
+			head = NULL;
+			pthread_mutex_init(&mutex_, NULL);
+	}
 };
 
 #endif  // _DB_COMMON_UTILS_H_

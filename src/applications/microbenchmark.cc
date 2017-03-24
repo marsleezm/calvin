@@ -173,15 +173,19 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
 	}
 
 	for (int i = 0; i < kRWSetSize; i++) {
-		Value* val = storage->SkipOrRead(txn->read_write_set(i));
-		if (reinterpret_cast<int64>(val) == SKIP)
+		int read_state = NORMAL;
+		Value* val = storage->SkipOrRead(txn->read_write_set(i), read_state);
+		if (read_state == NORMAL){
+			// *val = IntToString(StringToInt(*val) + 1);
+			//if(storage->LockObject(txn->read_write_set(i)) == false)
+			//	return TX_ABORTED;
+			//else
+				*val = IntToString(StringToInt(*val)+1);
+		}
+		else if(read_state == SKIP)
 			continue;
-		else if (reinterpret_cast<int64>(val) == WAIT_AND_SENT)
-			return WAIT_AND_SENT;
-		else if(reinterpret_cast<int64>(val) == WAIT_NOT_SENT)
-			return WAIT_NOT_SENT;
 		else
-		    *val = IntToString(StringToInt(*val) + 1);
+			return reinterpret_cast<int64>(val);
 	}
     // Not necessary since storage already has a pointer to val.
     //   storage->PutObject(txn->read_write_set(i), val);
@@ -198,7 +202,7 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
   return SUCCESS;
 }
 
-void Microbenchmark::InitializeStorage(Storage* storage,
+void Microbenchmark::InitializeStorage(LockedVersionedStorage* storage,
                                        Configuration* conf) const {
   for (int i = 0; i < nparts*kDBSize; i++) {
     if (conf->LookupPartition(IntToString(i)) == conf->this_node_id) {

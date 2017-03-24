@@ -24,6 +24,8 @@
 #include "proto/txn.pb.h"
 #include "proto/message.pb.h"
 #include "sequencer/sequencer.h"
+#include "backend/locked_versioned_storage.h"
+#include "backend/storage_manager.h"
 
 using std::deque;
 
@@ -40,7 +42,6 @@ class DeterministicLockManager;
 class Storage;
 class TxnProto;
 class Client;
-class StorageManager;
 
 #define TO_SEND true
 #define TO_READ false
@@ -52,7 +53,7 @@ class StorageManager;
 class DeterministicScheduler : public Scheduler {
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-                         Storage* storage, AtomicQueue<TxnProto*>* txns_queue,
+		  LockedVersionedStorage* storage, AtomicQueue<TxnProto*>* txns_queue,
 						 Client* client, const Application* application, int queue_mode);
   virtual ~DeterministicScheduler();
   void static terminate() { terminated_ = true; }
@@ -64,31 +65,42 @@ class DeterministicScheduler : public Scheduler {
   
   static void* LockManagerThread(void* arg);
 
-  inline TxnProto* GetTxn(bool& got_it, int thread){
-	  TxnProto* txn;
-	  if(queue_mode == FROM_SELF){
-		  client_->GetTxn(&txn, Sequencer::num_lc_txns_, GetUTime());
-		  txn->set_local_txn_id(Sequencer::num_lc_txns_);
-		  return txn;
-	  }
-	  else if (queue_mode == NORMAL_QUEUE){
-		  got_it = txns_queue_->Pop(&txn);
-		  return txn;
-	  }
-	  else if (queue_mode == FROM_SEQ_SINGLE){
-		  got_it = txns_queue_->Pop(&txn);
-		  return txn;
-	  }
-	  else if (queue_mode == FROM_SEQ_DIST){
-		  got_it = txns_queue_[thread].Pop(&txn);
-		  return txn;
-	  }
-	  else{
-		  std::cout<< "!!!!!!!!!!!!WRONG!!!!!!!!!!!!!!" << endl;
-		  got_it = false;
-		  return txn;
-	  }
+  inline void CommitSuspendedTxn(int64_t txn_id, unordered_map<int64_t, StorageManager*> active_txns){
+	  assert(Sequencer::max_commit_ts < txn_id);
+	  Sequencer::max_commit_ts = txn_id;
+	  ++Sequencer::num_lc_txns_;
+	  --Sequencer::num_sc_txns_;
+	  delete active_txns[txn_id];
+	  active_txns.erase(txn_id);
   }
+
+  inline TxnProto* GetTxn(bool& got_it, int thread){
+  	  TxnProto* txn;
+  	  if(queue_mode == FROM_SELF){
+  		  client_->GetTxn(&txn, Sequencer::num_lc_txns_, GetUTime());
+  		  txn->set_local_txn_id(Sequencer::num_lc_txns_);
+  		  return txn;
+  	  }
+  	  else if (queue_mode == NORMAL_QUEUE){
+  		  got_it = txns_queue_->Pop(&txn);
+  		  return txn;
+  	  }
+  	  else if (queue_mode == FROM_SEQ_SINGLE){
+  		  got_it = txns_queue_->Pop(&txn);
+  		  return txn;
+  	  }
+  	  else if (queue_mode == FROM_SEQ_DIST){
+  		  got_it = txns_queue_[thread].Pop(&txn);
+  		  return txn;
+  	  }
+  	  else{
+  		  std::cout<< "!!!!!!!!!!!!WRONG!!!!!!!!!!!!!!" << endl;
+  		  got_it = false;
+  		  return txn;
+  	  }
+    }
+
+  StorageManager* ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*> active_txns);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
   TxnProto* GetTxnPtr(socket_t* socket, zmq::message_t* msg);
@@ -107,7 +119,7 @@ class DeterministicScheduler : public Scheduler {
   Connection* batch_connection_;
 
   // Storage layer used in application execution.
-  Storage* storage_;
+  LockedVersionedStorage* storage_;
   
   AtomicQueue<TxnProto*>* txns_queue_;
 
@@ -139,7 +151,7 @@ class DeterministicScheduler : public Scheduler {
 
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
 
-  AtomicQueue<int64_t>* abort_queues[NUM_THREADS];
-  AtomicQueue<int64_t>* waiting_queues[NUM_THREADS];
+  AtomicQueue<pair<int64_t, int>>* abort_queues[NUM_THREADS];
+  AtomicQueue<pair<int64_t, int>>* waiting_queues[NUM_THREADS];
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

@@ -27,15 +27,12 @@
 
 //#define LATENCY_TEST
 
-using std::set;
-using std::string;
-using std::queue;
 using std::tr1::unordered_map;
-using std::atomic;
+using namespace std;
 
 class Configuration;
 class Connection;
-class Storage;
+class LockedVersionedStorage;
 class TxnProto;
 class MessageProto;
 
@@ -63,7 +60,7 @@ class Sequencer {
   // The constructor creates background threads and starts the Sequencer's main
   // loops running.
   Sequencer(Configuration* conf, Connection* connection, Connection* batch_connection,
-		  Client* client, Storage* storage, int queue_mode);
+		  Client* client, LockedVersionedStorage* storage, int queue_mode);
 
   // Halts the main loops.
   ~Sequencer();
@@ -127,7 +124,7 @@ class Sequencer {
   Client* client_;
 
   // Pointer to this node's storage object, for prefetching.
-  Storage* storage_;
+  LockedVersionedStorage* storage_;
 
   // Separate pthread contexts in which to run the sequencer's main loops.
   pthread_t writer_thread_;
@@ -159,6 +156,6 @@ class Sequencer {
   int queue_mode;
 
   // Statistics
-  int fetched_count;
+  int num_fetched_this_round;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

@@ -38,8 +38,7 @@ class Microbenchmark : public Application {
   static const int kRWSetSize = 10;  // MUST BE EVEN
   static const int kDBSize = 1000000;
 
-
-  virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
+  virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
 
  private:
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,

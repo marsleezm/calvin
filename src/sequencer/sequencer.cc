@@ -42,7 +42,7 @@ double scheduler_unlock[SAMPLES];
 #endif
 
 int64_t Sequencer::num_lc_txns_=0;
-int64_t Sequencer::max_commit_ts=0;
+int64_t Sequencer::max_commit_ts=-1;
 int64_t Sequencer::num_c_txns_=0;
 atomic<int64_t> Sequencer::num_pend_txns_(0);
 atomic<int64_t> Sequencer::num_sc_txns_(0);
@@ -63,11 +63,11 @@ void* Sequencer::RunSequencerLoader(void *arg) {
 }
 
 Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* batch_connection,
-                     Client* client, Storage* storage, int mode)
+                     Client* client, LockedVersionedStorage* storage, int mode)
     : epoch_duration_(0.01), configuration_(conf), connection_(connection),
       batch_connection_(batch_connection), client_(client), storage_(storage),
 	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0), queue_mode(mode),
-	  fetched_count(0) {
+	  num_fetched_this_round(0) {
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
   if (queue_mode == FROM_SEQ_DIST)
@@ -382,7 +382,7 @@ void Sequencer::RunReader() {
     if (now_time > time + 1) {
 #ifdef VERBOSE_SEQUENCER
       std::cout << "Submitted " << txn_count << " txns in "
-                << batch_count << " batches, fetched"<< fetched_count
+                << batch_count << " batches, fetched"<< num_fetched_this_round
 				<< "txns \n" << std::flush;
 #endif
       std::cout << "Completed " <<
@@ -398,7 +398,7 @@ void Sequencer::RunReader() {
       time = now_time;
       txn_count = 0;
       batch_count = 0;
-      fetched_count = 0;
+      num_fetched_this_round = 0;
       last_committed = Sequencer::num_lc_txns_;
     }
   }
@@ -453,7 +453,7 @@ void* Sequencer::FetchMessage() {
 		  			  txn->ParseFromString(batch_message->data(i));
 		  			  txn->set_local_txn_id(fetched_txn_num_++);
 		  			  txns_queue_->Push(txn);
-		  			  ++fetched_count;
+		  			  ++num_fetched_this_round;
 		  		  }
 		  		  delete batch_message;
 		  		  ++fetched_batch_num_;

@@ -8,6 +8,7 @@ BACKEND_SRCS := backend/checkpointable_storage.cc \
                 backend/collapsed_versioned_storage.cc \
                 backend/fetching_storage.cc \
                 backend/simple_storage.cc \
+                backend/locked_versioned_storage.cc \
                 backend/storage_manager.cc
 
 SRC_LINKED_OBJECTS := $(PROTO_OBJS)

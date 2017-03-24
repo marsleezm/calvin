@@ -6,32 +6,30 @@
 #include <ucontext.h>
 
 #include "backend/storage.h"
-#include "common/configuration.h"
 #include "sequencer/sequencer.h"
 #include "common/connection.h"
 #include "common/utils.h"
-#include "proto/txn.pb.h"
 #include "proto/message.pb.h"
 #include "applications/application.h"
 #include <iostream>
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
-                               Storage* actual_storage,  AtomicQueue<int64_t>* abort_queue,
-								 AtomicQueue<int64_t>* pend_queue)
+		LockedVersionedStorage* actual_storage,  AtomicQueue<pair<int64_t, int>>* abort_queue,
+								 AtomicQueue<pair<int64_t, int>>* pend_queue)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
-	  pend_queue_(pend_queue), num_aborted(0){
+	  pend_queue_(pend_queue), spec_committed_(false), num_aborted_(0){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	message_ = NULL;
 }
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
-                               Storage* actual_storage, AtomicQueue<int64_t>* abort_queue,
-								 AtomicQueue<int64_t>* pend_queue, TxnProto* txn)
+		LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
+								 AtomicQueue<pair<int64_t, int>>* pend_queue, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
-	  pend_queue_(pend_queue), num_aborted(0){
+	  pend_queue_(pend_queue), spec_committed_(false), num_aborted_(0){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	message_ = NULL;
@@ -39,6 +37,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		message_ = new MessageProto();
 		message_->set_destination_channel(IntToString(txn_->txn_id()));
 		message_->set_type(MessageProto::READ_RESULT);
+		connection->LinkChannel(IntToString(txn->txn_id()));
 	}
   //MessageProto message;
 
@@ -105,75 +104,119 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	message_ = new MessageProto();
 	message_->set_destination_channel(IntToString(txn_->txn_id()));
 	message_->set_type(MessageProto::READ_RESULT);
+	connection_->LinkChannel(IntToString(txn_->txn_id()));
 }
 
+void StorageManager::Abort(){
+	if (!spec_committed_){
+		for (unordered_map<Key, Value>::iterator it = objects_.begin();
+		   it != objects_.end(); ++it)
+		{
+			actual_storage_->Unlock(it->first, txn_->txn_id());
+		}
+	}
+	else{
+		for (unordered_map<Key, Value>::iterator it = objects_.begin();
+		   it != objects_.end(); ++it)
+		{
+			actual_storage_->RemoveValue(it->first, txn_->txn_id());
+		}
+	}
+	spec_committed_ = false;
+	objects_.clear();
+}
+
+
+void StorageManager::SpecCommit(){
+	for (unordered_map<Key, Value>::iterator it = objects_.begin();
+       it != objects_.end(); ++it)
+	{
+		actual_storage_->PutObject(it->first, it->second, txn_->txn_id());
+	}
+	spec_committed_ = true;
+}
 
 void StorageManager::HandleReadResult(const MessageProto& message) {
   assert(message.type() == MessageProto::READ_RESULT);
   for (int i = 0; i < message.keys_size(); i++) {
     Value* val = new Value(message.values(i));
-    objects_[message.keys(i)] = val;
+    remote_objects_[message.keys(i)] = val;
     //std::cout << "Hanld remote to add " << message.keys(i) << " for txn " << txn_->txn_id() << std::endl;
-    remote_reads_.push_back(val);
   }
 }
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	delete txn_;
 
-	if (message_has_value_){
-		for (int i = 0; i < txn_->writers().size(); i++) {
-		  if (txn_->writers(i) != configuration_->this_node_id) {
-			  message_->set_destination_node(txn_->writers(i));
-			connection_->Send1(*message_);
-		  }
+	if (txn_->txn_type() == MULTI_PART){
+		if (message_has_value_){
+			for (int i = 0; i < txn_->writers().size(); i++) {
+			  if (txn_->writers(i) != configuration_->this_node_id) {
+				  message_->set_destination_node(txn_->writers(i));
+				connection_->Send1(*message_);
+			  }
+			}
+			++sent_msg_;
 		}
-		++sent_msg_;
+		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
+
+	delete txn_;
 	//std::cout << txn_->txn_id() <<" get blocked:" << get_blocked_
 	//		<<", sent msg "<< sent_msg_ << std::endl;
 	delete message_;
-	for (vector<Value*>::iterator it = remote_reads_.begin();
-       it != remote_reads_.end(); ++it)
+	for (unordered_map<Key, Value*>::iterator it = remote_objects_.begin();
+       it != remote_objects_.end(); ++it)
 	{
-		delete *it;
+		delete it->second;
 	}
 }
 
 
-Value* StorageManager::SkipOrRead(const Key& key) {
+Value* StorageManager::SkipOrRead(const Key& key, int& read_state) {
 
-	if (exec_counter_ == max_counter_){
+	if(abort_bit_ == num_aborted_+1){
+		max_counter_ = 0;
+		num_aborted_ += 1;
+		read_state = SPECIAL;
+		return reinterpret_cast<Value*>(TX_ABORTED);
+	}
+	else if (exec_counter_ == max_counter_){
 		++exec_counter_;
 		++max_counter_;
 
-		// The key is replicated locally, should broadcast to all readers
+			// The key is replicated locally, should broadcast to all readers
 			// !TODO: only send the value when all previous txns finish
 			if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-				Value* val = objects_[key];
-				if (val == NULL){
-					val = actual_storage_->ReadObject(key, txn_id, abort_bit, num_aborted, Value* value_bit,
-					AtomicQueue<int64_t>* abort_queue, AtomicQueue<int64_t>* pend_queue
-
-					objects_[key] = val;
-					//std::cout <<"here, multi part is " << txn_->txn_type() << std::endl;
-					if (txn_->txn_type() == MULTI_PART){
-						message_->add_keys(key);
-						message_->add_values(val == NULL ? "" : *val);
-						message_has_value_ = true;
+				if (objects_[key] == ""){
+					Value* val = actual_storage_->ReadObject(key, txn_->txn_id(), &abort_bit_, num_aborted_, &objects_[key], abort_queue_, pend_queue_);
+					if(reinterpret_cast<int64>(val) == SUSPENDED){
+						read_state = SPECIAL;
+						return reinterpret_cast<Value*>(SUSPENDED);
+					}
+					else{
+						objects_[key] = *val;
+						//std::cout <<"here, multi part is " << txn_->txn_type() << std::endl;
+						if (txn_->txn_type() == MULTI_PART){
+							message_->add_keys(key);
+							message_->add_values(val == NULL ? "" : *val);
+							message_has_value_ = true;
+						}
+						return &objects_[key];
 					}
 				}
-				return val;
+				else
+					return &objects_[key];
 			}
 			else // The key is not replicated locally, the writer should wait
 			{
-				if (objects_.count(key) > 0){
-					return objects_[key];
+				if (remote_objects_.count(key) > 0){
+					return remote_objects_[key];
 				}
 				else{ //Should be blocked
-					++get_blocked_;
+					read_state = SPECIAL;
 					// The tranasction will perform the read again
+					++get_blocked_;
 					--max_counter_;
 					if (message_has_value_){
 						if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
@@ -204,51 +247,52 @@ Value* StorageManager::SkipOrRead(const Key& key) {
 	}
 	else{
 		++exec_counter_;
-		return reinterpret_cast<Value*>(SKIP);
+		read_state = SKIP;
+		return NULL;
 	}
 }
-
-Value* StorageManager::ReadObject(const Key& key) {
-	// The key is replicated locally, should broadcast to all readers
-	// !TODO: only send the value when all previous txns finish
-	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-		Value* val = objects_[key];
-		if (val == NULL){
-			val = actual_storage_->ReadObject(key);
-			objects_[key] = val;
-			//std::cout <<"here, multi part is " << txn_->txn_type() << std::endl;
-			if (txn_->txn_type() == MULTI_PART){
-				message_->add_keys(key);
-				message_->add_values(val == NULL ? "" : *val);
-				message_has_value_ = true;
-			}
-		}
-		return val;
-	}
-	else // The key is not replicated locally, the writer should wait
-	{
-		if (objects_.count(key) > 0){
-			return objects_[key];
-		}
-		else{ //Should be blocked
-			++get_blocked_;
-			// The tranasction will perform the read again
-			--max_counter_;
-			if (message_has_value_){
-				if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
-					SendMsg();
-					return reinterpret_cast<Value*>(WAIT_AND_SENT);
-				}
-				else{
-					return reinterpret_cast<Value*>(WAIT_NOT_SENT);
-				}
-			}
-			else{
-				return reinterpret_cast<Value*>(WAIT_AND_SENT);
-			}
-		}
-	}
-}
+//
+//Value* StorageManager::ReadObject(const Key& key) {
+//	// The key is replicated locally, should broadcast to all readers
+//	// !TODO: only send the value when all previous txns finish
+//	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
+//		Value* val = objects_[key];
+//		if (val == NULL){
+//			val = actual_storage_->ReadObject(key);
+//			objects_[key] = val;
+//			//std::cout <<"here, multi part is " << txn_->txn_type() << std::endl;
+//			if (txn_->txn_type() == MULTI_PART){
+//				message_->add_keys(key);
+//				message_->add_values(val == NULL ? "" : *val);
+//				message_has_value_ = true;
+//			}
+//		}
+//		return val;
+//	}
+//	else // The key is not replicated locally, the writer should wait
+//	{
+//		if (remote_objects_.count(key) > 0){
+//			return remote_objects_[key];
+//		}
+//		else{ //Should be blocked
+//			++get_blocked_;
+//			// The tranasction will perform the read again
+//			--max_counter_;
+//			if (message_has_value_){
+//				if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
+//					SendMsg();
+//					return reinterpret_cast<Value*>(WAIT_AND_SENT);
+//				}
+//				else{
+//					return reinterpret_cast<Value*>(WAIT_NOT_SENT);
+//				}
+//			}
+//			else{
+//				return reinterpret_cast<Value*>(WAIT_AND_SENT);
+//			}
+//		}
+//	}
+//}
 
 void StorageManager::SendMsg(){
 	++sent_msg_;
@@ -264,14 +308,6 @@ void StorageManager::SendMsg(){
 	message_->set_destination_channel(IntToString(txn_->txn_id()));
 	message_->set_type(MessageProto::READ_RESULT);
 	message_has_value_ = false;
-}
-
-bool StorageManager::PutObject(const Key& key, Value* value) {
-  // Write object to storage if applicable.
-  if (configuration_->LookupPartition(key) == configuration_->this_node_id)
-    return actual_storage_->PutObject(key, value, txn_->txn_id());
-  else
-    return true;  // Not this node's problem.
 }
 
 bool StorageManager::DeleteObject(const Key& key) {

@@ -15,7 +15,7 @@
 using std::string;
 
 class Configuration;
-class Storage;
+class LockedVersionedStorage;
 class StorageManager;
 class TxnProto;
 
@@ -46,7 +46,7 @@ class Application {
   virtual int Execute(StorageManager* storage, Rand* rand) const = 0;
 
   // Storage initialization method.
-  virtual void InitializeStorage(Storage* storage,
+  virtual void InitializeStorage(LockedVersionedStorage* storage,
                                  Configuration* conf) const = 0;
 };
 

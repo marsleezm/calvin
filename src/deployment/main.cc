@@ -206,9 +206,9 @@ int main(int argc, char** argv) {
             argv[0]);
     exit(1);
   }
-  bool useFetching = false;
-  if (argc > 4 && argv[4][0] == 'f')
-    useFetching = true;
+  //bool useFetching = false;
+  //if (argc > 4 && argv[4][0] == 'f')
+  //  useFetching = true;
   // Catch ^C and kill signals and exit gracefully (for profiling).
   signal(SIGINT, &stop);
   signal(SIGTERM, &stop);
@@ -232,13 +232,15 @@ pthread_mutex_init(&mutex_, NULL);
 pthread_mutex_init(&mutex_for_item, NULL);
 involed_customers = new vector<Key>;
 
-  Storage* storage;
-  if (!useFetching) {
-    storage = new SimpleStorage();
-  } else {
-    storage = FetchingStorage::BuildStorage();
-  }
-storage->Initmutex();
+	LockedVersionedStorage* storage = new LockedVersionedStorage();
+  //if (!useFetching) {
+  //  storage = new SimpleStorage();
+  //} else {
+  //  storage = FetchingStorage::BuildStorage();
+  //}
+
+//storage->Initmutex();
+
   //if (argv[2][0] == 'm') {
   //  Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
   //} else {

@@ -21,16 +21,16 @@
 #define _DB_BACKEND_STORAGE_MANAGER_H_
 
 #include <ucontext.h>
+#include <common/utils.h>
 
 #include <tr1/unordered_map>
 #include <vector>
+#include <atomic>
 
+#include "backend/locked_versioned_storage.h"
 #include "common/types.h"
-
-#define FINISHED 0
-#define WAIT_AND_SENT 1
-#define WAIT_NOT_SENT 2
-#define SKIP 3
+#include "common/configuration.h"
+#include "proto/txn.pb.h"
 
 using std::vector;
 using std::tr1::unordered_map;
@@ -38,7 +38,7 @@ using std::tr1::unordered_map;
 class Configuration;
 class Connection;
 class Scheduler;
-class Storage;
+class LockedVersionedStorage;
 class TxnProto;
 class MessageProto;
 class Sequencer;
@@ -48,12 +48,12 @@ class StorageManager {
  public:
   // TODO(alex): Document this class correctly.
   StorageManager(Configuration* config, Connection* connection,
-                 Storage* actual_storage, AtomicQueue<int64_t>* abort_queue,
-				 AtomicQueue<int64_t>* pend_queue, TxnProto* txn);
+		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
+				 AtomicQueue<pair<int64_t, int>>* pend_queue, TxnProto* txn);
 
   StorageManager(Configuration* config, Connection* connection,
-                 Storage* actual_storage, AtomicQueue<int64_t>* abort_queue,
-				 AtomicQueue<int64_t>* pend_queue);
+		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
+				 AtomicQueue<pair<int64_t, int>>* pend_queue);
 
   ~StorageManager();
 
@@ -61,14 +61,22 @@ class StorageManager {
 
   void SetupTxn(TxnProto* txn);
 
-  Value* ReadObject(const Key& key);
-  Value* SkipOrRead(const Key& key);
-  bool PutObject(const Key& key, Value* value);
+  //Value* ReadObject(const Key& key);
+  Value* SkipOrRead(const Key& key, int& read_state);
+  inline bool LockObject(const Key& key) {
+    // Write object to storage if applicable.
+    if (configuration_->LookupPartition(key) == configuration_->this_node_id)
+  	  return actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_aborted_, pend_queue_);
+    else
+  	  return true;  // Not this node's problem.
+  }
+
   bool DeleteObject(const Key& key);
 
   void HandleReadResult(const MessageProto& message);
 
-  Storage* GetStorage() { return actual_storage_; }
+  LockedVersionedStorage* GetStorage() { return actual_storage_; }
+  inline bool NotificationValid(int num_aborted) { return num_aborted == abort_bit_;}
 
   void Init(){ exec_counter_ = 0;}
   inline bool ShouldExec()
@@ -82,12 +90,15 @@ class StorageManager {
 		++exec_counter_;
 		return false;
 	}
-}
+  }
 
   //void AddKeys(string* keys) {keys_ = keys;}
   //vector<string> GetKeys() { return keys_;}
 
   TxnProto* get_txn(){ return txn_; }
+
+  void Abort();
+  void SpecCommit();
 
  private:
 
@@ -105,7 +116,7 @@ class StorageManager {
   Connection* connection_;
 
   // Storage layer that *actually* stores data objects on this node.
-  Storage* actual_storage_;
+  LockedVersionedStorage* actual_storage_;
 
   // Transaction that corresponds to this instance of a TxnManager.
   TxnProto* txn_;
@@ -114,12 +125,8 @@ class StorageManager {
   // TxnManager construction time.
   //
   // TODO(alex): Should these be pointers to reduce object copying overhead?
-  unordered_map<Key, Value*> objects_;
-
-  vector<Value*> remote_reads_;
-
-  // The keys the transaction should access
-  //string keys_;
+  unordered_map<Key, Value> objects_;
+  unordered_map<Key, Value*> remote_objects_;
 
   // The message containing read results that should be sent to remote nodes
   MessageProto* message_;
@@ -133,11 +140,12 @@ class StorageManager {
   // Counting how many transaction steps have been executed the last time
   int max_counter_;
 
-  AtomicQueue<int64_t>* abort_queue_;
-  AtomicQueue<int64_t>* pend_queue_;
+  AtomicQueue<pair<int64_t, int>>* abort_queue_;
+  AtomicQueue<pair<int64_t, int>>* pend_queue_;
 
-  atomic<int> abort_bit;
-  int num_aborted;
+  bool spec_committed_;
+  atomic<int> abort_bit_;
+  int num_aborted_;
 
   /****** For statistics ********/
   int get_blocked_;
