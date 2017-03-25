@@ -167,8 +167,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else if (!abort_queue->Empty()){
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue->Pop(&to_abort_txn);
+		  LOG("To abort txn is "<< to_abort_txn.first);
 		  StorageManager* manager = active_txns[to_abort_txn.first];
-		  if (manager->NotificationValid(to_abort_txn.second))
+		  if (manager && manager->NotificationValid(to_abort_txn.second))
 			  manager->Abort();
 		  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
 		  //Abort this transaction
@@ -176,8 +177,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else if(!waiting_queue->Empty()){
 		  pair<int64_t, int> to_wait_txn;
 		  waiting_queue->Pop(&to_wait_txn);
+		  LOG("To waiting txn is " << to_wait_txn.first);
 		  StorageManager* manager = active_txns[to_wait_txn.first];
-		  if (manager->NotificationValid(to_wait_txn.second)){
+		  if (manager && manager->NotificationValid(to_wait_txn.second)){
 			  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
 		  }
 	  }
@@ -208,6 +210,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  else{
 					  //std::cout.precision(15);
 					  //std::cout <<txn->txn_id()<<","<<txn->local_txn_id() << ": completed txn " <<  GetTime() << std::endl;
+					  LOG(txn->txn_id()<< " committed!");
 					  assert(Sequencer::max_commit_ts < txn->txn_id());
 					  Sequencer::max_commit_ts = txn->txn_id();
 					  ++Sequencer::num_lc_txns_;
@@ -250,6 +253,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  --Sequencer::num_pend_txns_;
 				  delete manager;
 				  active_txns.erase(pend_txn.first);
+				  LOG(pend_txn.first<< " committed!");
 				  while (!my_pend_txns->empty() && my_pend_txns->top().first ==  pend_txn.first){
 					  my_pend_txns->pop();
 				  }
@@ -301,7 +305,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 }
 
 StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
-		unordered_map<int64_t, StorageManager*> active_txns){
+		unordered_map<int64_t, StorageManager*>& active_txns){
 	TxnProto* txn = manager->get_txn();
 	int result = application_->Execute(manager, rands[thread]);
 	if (result == WAIT_AND_SENT || result == SUSPENDED){
@@ -318,16 +322,17 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		return NULL;
 	}
 	else if(result == TX_ABORTED) {
+		LOG(txn->txn_id()<<" got aborted, trying to unlock then restart! Mgr is "<<manager);
 		manager->Abort();
 		return manager;
 	}
 	else{
 		if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
-			//std::cout << txn->txn_id()<< ","<< txn->local_txn_id()<< " just finished!!! " << std::endl;
+			LOG(txn->txn_id()<< " committed! New num_lc_txns will be "<<Sequencer::num_lc_txns_+1);
 			assert(Sequencer::max_commit_ts < txn->txn_id());
-			manager->SpecCommit();
 			Sequencer::max_commit_ts = txn->txn_id();
 			++Sequencer::num_lc_txns_;
+			manager->SpecCommit();
 			delete manager;
 		}
 		else{
@@ -335,6 +340,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			manager->SpecCommit();
 			//std::cout << txn->txn_id()<< ","<< txn->local_txn_id() << " spec-commit!!! " << std::endl;
 			active_txns[txn->txn_id()] = manager;
+			LOG("Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 			to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 		}
 		return NULL;

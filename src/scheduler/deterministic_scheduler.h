@@ -46,7 +46,7 @@ class Client;
 #define TO_SEND true
 #define TO_READ false
 
-#define MAX_SC_NUM 10000
+#define MAX_SC_NUM 4
 #define MAX_PEND_NUM 1
 // #define PREFETCHING
 
@@ -100,7 +100,8 @@ class DeterministicScheduler : public Scheduler {
   	  }
     }
 
-  StorageManager* ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*> active_txns);
+  StorageManager* ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*>& active_txns);
+  //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
   TxnProto* GetTxnPtr(socket_t* socket, zmq::message_t* msg);

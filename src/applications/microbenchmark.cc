@@ -161,6 +161,7 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 	TxnProto* txn = storage->get_txn();
+	LOG("Executing "<<txn->txn_id());
 	storage->Init();
 	if (storage->ShouldExec())
 	{
@@ -174,12 +175,15 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
 
 	for (int i = 0; i < kRWSetSize; i++) {
 		int read_state = NORMAL;
+		int txn_id = txn->txn_id();
+		++txn_id;
+		--txn_id;
 		Value* val = storage->SkipOrRead(txn->read_write_set(i), read_state);
 		if (read_state == NORMAL){
-			// *val = IntToString(StringToInt(*val) + 1);
-			//if(storage->LockObject(txn->read_write_set(i)) == false)
-			//	return TX_ABORTED;
-			//else
+			//*val = IntToString(StringToInt(*val) + 1);
+			if(storage->LockObject(txn->read_write_set(i)) == false)
+				return TX_ABORTED;
+			else
 				*val = IntToString(StringToInt(*val)+1);
 		}
 		else if(read_state == SKIP)

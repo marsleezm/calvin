@@ -19,6 +19,7 @@
 #include <climits>
 
 #include "common/types.h"
+#include "common/logging.h"
 
 //using std::string;
 //using std::vector;
@@ -26,7 +27,7 @@ using namespace std;
 using tr1::unordered_map;
 
 
-#define NUM_THREADS 1
+#define NUM_THREADS 2
 #define NO_LOCK INT_MAX
 
 #define ASSERTS_ON true

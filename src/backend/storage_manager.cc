@@ -18,7 +18,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 								 AtomicQueue<pair<int64_t, int>>* pend_queue)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
-	  pend_queue_(pend_queue), spec_committed_(false), num_aborted_(0){
+	  pend_queue_(pend_queue), spec_committed_(false), abort_bit_(0), num_aborted_(0){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	message_ = NULL;
@@ -29,7 +29,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 								 AtomicQueue<pair<int64_t, int>>* pend_queue, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
-	  pend_queue_(pend_queue), spec_committed_(false), num_aborted_(0){
+	  pend_queue_(pend_queue), spec_committed_(false), abort_bit_(0), num_aborted_(0){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	message_ = NULL;
@@ -128,6 +128,7 @@ void StorageManager::Abort(){
 
 
 void StorageManager::SpecCommit(){
+	LOG(txn_->txn_id()<<" spec-commit!");
 	for (unordered_map<Key, Value>::iterator it = objects_.begin();
        it != objects_.end(); ++it)
 	{
@@ -179,6 +180,7 @@ Value* StorageManager::SkipOrRead(const Key& key, int& read_state) {
 		max_counter_ = 0;
 		num_aborted_ += 1;
 		read_state = SPECIAL;
+		LOG(txn_->txn_id()<<" is just aborted!!");
 		return reinterpret_cast<Value*>(TX_ABORTED);
 	}
 	else if (exec_counter_ == max_counter_){

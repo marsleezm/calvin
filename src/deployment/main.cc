@@ -233,6 +233,8 @@ pthread_mutex_init(&mutex_for_item, NULL);
 involed_customers = new vector<Key>;
 
 	LockedVersionedStorage* storage = new LockedVersionedStorage();
+
+	//freopen( "output.txt", "w", stdout);
   //if (!useFetching) {
   //  storage = new SimpleStorage();
   //} else {
