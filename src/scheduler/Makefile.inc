@@ -17,8 +17,10 @@ TEST_LINKED_OBJECTS := $(PROTO_OBJS) $(COMMON_OBJS) $(BACKEND_OBJS) \
 include $(MAKEFILE_TEMPLATE)
 
 # Need to specify test cases explicitly because they have variables in recipe
-test-scheduler: $(SCHEDULER_TESTS)
-	@for a in $(SCHEDULER_TESTS); do \
-		echo == $$a ==; \
-		$(LDLIBRARYPATH) $$a; \
-	done
+#test-scheduler: $(SCHEDULER_TESTS)
+#	echo $(SCHEDULER_TESTS)
+#	@for a in $(SCHEDULER_TESTS); do \
+#		echo == $$a ==; \
+#		$(LDLIBRARYPATH) $$a; \
+#		echo $$a; \
+#	done

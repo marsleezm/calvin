@@ -76,6 +76,7 @@ class Sequencer {
   static int64_t max_commit_ts;
   static atomic<int64_t> num_pend_txns_;
   static atomic<int64_t> num_sc_txns_;
+  static atomic<int64_t> num_aborted_;
 
  private:
   // Sequencer's main loops:

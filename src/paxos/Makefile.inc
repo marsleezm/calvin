@@ -14,8 +14,8 @@ TEST_LINKED_OBJECTS := $(PROTO_OBJS) $(COMMON_OBJS)
 include $(MAKEFILE_TEMPLATE)
 	
 # Need to specify test cases explicitly because they have variables in recipe
-test-paxos: $(PAXOS_TESTS)
-	@for a in $(PAXOS_TESTS); do \
-		echo == $$a ==; \
-		$(LDLIBRARYPATH) $$a; \
-	done
+#test-paxos: $(PAXOS_TESTS)
+#	@for a in $(PAXOS_TESTS); do \
+#		echo == $$a ==; \
+#		$(LDLIBRARYPATH) $$a; \
+#	done

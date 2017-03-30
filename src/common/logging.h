@@ -6,11 +6,14 @@
  */
 
 #include <iostream>
+#include <thread>
 
 #ifndef COMMON_LOGGING_H_
 #define COMMON_LOGGING_H_
 
 struct None { };
+
+//static pthread_mutex_t stdout_mutex;
 
 template <typename First,typename Second>
 struct Pair {
@@ -52,17 +55,39 @@ void printList(std::ostream &os,const Pair<Begin,Last> &data)
 template <typename List>
 void log(const char *file,int line,const LogData<List> &data)
 {
-  std::cout << file << " (" << line << "): ";
-  printList(std::cout,data.list);
-  std::cout << "\n";
+	//pthread_mutex_lock(&stdout_mutex);
+	std::cout <<  std::this_thread::get_id() << "--"<< file << " (" << line << "): ";
+	//std::cout << file << " (" << line << "): ";
+	printList(std::cout,data.list);
+	//std::cout << "\n";
+	std::cout<< std::endl;
+	//pthread_mutex_unlock(&stdout_mutex);
 }
 
-#define LOGGING
+//#define ALLLOGGING
+#define DOASSERT
+
+#ifdef DOASSERT
+#define ASSERT(x) (assert(x))
+#else
+#define ASSERT(x)
+#endif
+
+#ifdef ALLLOGGING
+#define LOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
+#define PLOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
+#define LOCKLOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
+
+#else
 
 #ifdef LOGGING
 #define LOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
+#define LOCKLOG(x)
 #else
 #define LOG(x)
+#define LOCKLOG(x)
+#define PLOG(x)
+#endif
 #endif
 
 #endif /* COMMON_LOGGING_H_ */

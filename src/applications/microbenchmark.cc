@@ -23,7 +23,7 @@
 // Requires: key_start % nparts == 0
 void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                                    int key_limit, int part, Rand* rand) const {
-  assert(key_start % nparts == 0);
+  ASSERT(key_start % nparts == 0);
   keys->clear();
   for (int i = 0; i < num_keys; i++) {
     // Find a key not already in '*keys'.
@@ -38,7 +38,7 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
 
 void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                                    int key_limit, int part) const {
-  assert(key_start % nparts == 0);
+  ASSERT(key_start % nparts == 0);
   keys->clear();
   for (int i = 0; i < num_keys; i++) {
     // Find a key not already in '*keys'.
@@ -70,7 +70,7 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int64 seed, int part) {
 
 // Create a non-dependent multi-partition transaction
 TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int64 seed, int part1, int part2, int part3) {
-  assert(part1 != part2 || nparts == 1);
+  ASSERT(part1 != part2 || nparts == 1);
   // Create the new transaction object
   TxnProto* txn = new TxnProto();
 
@@ -161,27 +161,27 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 	TxnProto* txn = storage->get_txn();
-	LOG("Executing "<<txn->txn_id());
+	LOG("Executing "<<txn->txn_id()<<", is multipart? "<<(txn->txn_type()== MULTI_PART));
 	storage->Init();
 	if (storage->ShouldExec())
 	{
 		rand->seed(txn->seed());
 		GetKeys(txn, rand);
-		//string writeset;
-		//for(int i = 0; i< txn->read_write_set().size(); ++i)
-		//	writeset += " "+txn->read_write_set(i);
-		//std::cout <<"Txn "<<txn->txn_id()<<" has seed "<<txn->seed()<< ", its keys "<< writeset << std::endl;
+		string writeset;
+		for(int i = 0; i< txn->read_write_set().size(); ++i)
+			writeset += " "+txn->read_write_set(i);
+		//LOG("Txn "<<txn->txn_id()<<" has seed "<<txn->seed()<< ", its keys "<< writeset);
 	}
 
 	for (int i = 0; i < kRWSetSize; i++) {
 		int read_state = NORMAL;
-		int txn_id = txn->txn_id();
-		++txn_id;
-		--txn_id;
-		Value* val = storage->SkipOrRead(txn->read_write_set(i), read_state);
+		Key key = txn->read_write_set(i);
+		Value* val = storage->SkipOrRead(key, read_state);
+		LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
 		if (read_state == NORMAL){
 			//*val = IntToString(StringToInt(*val) + 1);
-			if(storage->LockObject(txn->read_write_set(i)) == false)
+			LOG(txn->txn_id()<<" trying to lock "<<key);
+			if(storage->LockObject(key) == false)
 				return TX_ABORTED;
 			else
 				*val = IntToString(StringToInt(*val)+1);

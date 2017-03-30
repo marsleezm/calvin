@@ -54,6 +54,7 @@ pthread_attr_init(&attr);
 
 CPU_ZERO(&cpuset);
 CPU_SET(5, &cpuset);
+std::cout << "Connection thread starts at core 5"<<std::endl;
 //CPU_SET(4, &cpuset);
 //CPU_SET(5, &cpuset);
 //CPU_SET(6, &cpuset);

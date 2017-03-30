@@ -44,6 +44,7 @@ double scheduler_unlock[SAMPLES];
 int64_t Sequencer::num_lc_txns_=0;
 int64_t Sequencer::max_commit_ts=-1;
 int64_t Sequencer::num_c_txns_=0;
+atomic<int64_t> Sequencer::num_aborted_(0);
 atomic<int64_t> Sequencer::num_pend_txns_(0);
 atomic<int64_t> Sequencer::num_sc_txns_(0);
 
@@ -88,12 +89,14 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 		CPU_SET(6, &cpuset);
 		//CPU_SET(7, &cpuset);
 		pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
+		std::cout << "Sequencer writer starts at core 6"<<std::endl;
 
 		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 			  reinterpret_cast<void*>(this));
 
 		CPU_ZERO(&cpuset);
 		CPU_SET(7, &cpuset);
+		std::cout << "Sequencer reader starts at core 7"<<std::endl;
 		pthread_attr_t attr_reader;
 		pthread_attr_init(&attr_reader);
 		pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
@@ -104,6 +107,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
   else{
 		CPU_ZERO(&cpuset);
 		CPU_SET(7, &cpuset);
+		std::cout << "Sequencer reader starts at core 7"<<std::endl;
 		pthread_attr_t simple_loader;
 		pthread_attr_init(&simple_loader);
 		pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
@@ -182,7 +186,7 @@ void Sequencer::RunWriter() {
   while (synchronization_counter < configuration_->all_nodes.size()) {
     synchronization_message.Clear();
     if (connection_->GetMessage(&synchronization_message)) {
-      assert(synchronization_message.type() == MessageProto::EMPTY);
+      ASSERT(synchronization_message.type() == MessageProto::EMPTY);
       synchronization_counter++;
     }
   }
@@ -408,7 +412,7 @@ void Sequencer::RunReader() {
 void Sequencer::RunLoader(){
   Spin(1);
   double time = GetTime(), now_time;
-  int last_committed;
+  int last_committed = 0, last_aborted = 0;
 
   while (!deconstructor_invoked_) {
 
@@ -420,6 +424,8 @@ void Sequencer::RunLoader(){
 	  std::cout << "Completed " <<
 		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
 			<< " txns/sec, "
+			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
+			<< " txns/sec aborted, "
 			<< num_sc_txns_ << " spec-committed, "
 			//<< test<< " for drop speed , "
 			//<< executing_txns << " executing, "
@@ -429,6 +435,7 @@ void Sequencer::RunLoader(){
 	  // Reset txn count.
 	  time = now_time;
 	  last_committed = Sequencer::num_lc_txns_;
+	  last_aborted = Sequencer::num_aborted_;
 	}
   }
   Spin(1);
@@ -508,7 +515,7 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
   } else {
     MessageProto* message = new MessageProto();
     while (connection->GetMessage(message)) {
-      assert(message->type() == MessageProto::TXN_BATCH);
+      ASSERT(message->type() == MessageProto::TXN_BATCH);
       if (message->batch_number() == batch_id) {
         return message;
       } else {

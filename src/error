@@ -1,8 +1,0 @@
-+ cxx backend/collapsed_versioned_storage.cc
-+ cxx backend/storage_manager.cc
-+ cxx paxos/paxos.cc
-+ cxx applications/tpcc.cc
-+ cxx applications/microbenchmark.cc
-+ cxx scheduler/deterministic_lock_manager.cc
-+ cxx scheduler/deterministic_scheduler.cc
-+ ld ../bin/deployment/cluster

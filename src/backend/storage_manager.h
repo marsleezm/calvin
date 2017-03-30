@@ -31,6 +31,7 @@
 #include "common/types.h"
 #include "common/configuration.h"
 #include "proto/txn.pb.h"
+#include "proto/message.pb.h"
 
 using std::vector;
 using std::tr1::unordered_map;
@@ -57,7 +58,7 @@ class StorageManager {
 
   ~StorageManager();
 
-  void SendMsg();
+  void SendLocalReads();
 
   void SetupTxn(TxnProto* txn);
 
@@ -66,9 +67,9 @@ class StorageManager {
   inline bool LockObject(const Key& key) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id)
-  	  return actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_aborted_, pend_queue_);
+  	  return actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_);
     else
-  	  return true;  // Not this node's problem.
+  	  return true;  // The key will be locked by another partition.
   }
 
   bool DeleteObject(const Key& key);
@@ -76,9 +77,23 @@ class StorageManager {
   void HandleReadResult(const MessageProto& message);
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
-  inline bool NotificationValid(int num_aborted) { return num_aborted == abort_bit_;}
+  inline bool ShouldRestart(int num_aborted) {
+	  LOG(txn_->txn_id()<<" should be restarted? NumA "<<num_aborted<<", NumR "<<num_restarted_<<", ABit "<<abort_bit_);
+	  return num_aborted == num_restarted_+1 && num_aborted == abort_bit_;}
+  inline bool ShouldResume(int num_aborted) { return num_aborted == num_restarted_&& num_aborted == abort_bit_;}
+  inline bool CanCommit() { return spec_committed_ && num_restarted_ == abort_bit_;}
 
-  void Init(){ exec_counter_ = 0;}
+  inline void Init(){
+	  exec_counter_ = 0;
+  	  if (suspended_key!="" && message_){
+  		  LOG("Adding suspended key to msg: "<<suspended_key);
+  		  message_->add_keys(suspended_key);
+  		  message_->add_values(objects_[suspended_key]);
+  		  message_has_value_ = true;
+  		  suspended_key = "";
+  	  }
+  }
+
   inline bool ShouldExec()
   {
 	  if (exec_counter_ == max_counter_){
@@ -98,7 +113,7 @@ class StorageManager {
   TxnProto* get_txn(){ return txn_; }
 
   void Abort();
-  void SpecCommit();
+  void ApplyChange(bool is_committing);
 
  private:
 
@@ -145,7 +160,9 @@ class StorageManager {
 
   bool spec_committed_;
   atomic<int> abort_bit_;
-  int num_aborted_;
+  int num_restarted_;
+
+  Key suspended_key;
 
   /****** For statistics ********/
   int get_blocked_;

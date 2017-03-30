@@ -11,6 +11,7 @@
 #include <tr1/unordered_map>
 #include <queue>
 #include "common/utils.h"
+#include "sequencer/sequencer.h"
 
 #include "backend/versioned_storage.h"
 #define __STDC_FORMAT_MACROS
@@ -40,12 +41,21 @@ class LockedVersionedStorage {
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
 			AtomicQueue<pair<int64_t, int>>* abort_queue);
-  virtual bool PutObject(const Key& key, Value value, int64 txn_id);
+  virtual bool PutObject(const Key& key, Value value, int64 txn_id, bool is_committing);
+  virtual bool PutObjects(unordered_map<Key, Value>& objects, int64 txn_id, bool is_committing);
   virtual void PutObject(const Key& key, Value* value);
   virtual void Unlock(const Key& key, int64 txn_id);
   virtual void RemoveValue(const Key& key, int64 txn_id);
   virtual bool DeleteObject(const Key& key, int64 txn_id);
 
+  bool FetchEntry(const Key& key, KeyEntry*& entry) {
+	  if (objects_.count(key) == 0)
+		  return false;
+	  else{
+		  entry = objects_[key];
+		  return true;
+	  }
+  }
   // At a new versioned state, the version system is notified that the
   // previously stable values are no longer necessary.  At this point in time,
   // the database can switch the labels as to what is stable (the previously

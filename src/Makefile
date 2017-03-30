@@ -57,7 +57,7 @@ ZMQLDFLAGS := -lzmq -L$(ZEROMQ)/src/.libs
 
 # Lists that the */Makefile.inc makefile fragments will add to
 OBJDIRS :=
-TESTS :=
+TESTS := 
 
 # Make sure that 'all' is the first target
 all:
@@ -68,6 +68,8 @@ all:
 	
 # Makefile template so that the makefrags are far less redundant
 MAKEFILE_TEMPLATE := Makefile.template
+
+# Makefile fragements for tests 
 
 # Makefile fragments for library code
 include proto/Makefile.inc
@@ -83,7 +85,10 @@ include sequencer/Makefile.inc
 # Makefile fragments for executable and deployment scripts
 include deployment/Makefile.inc
 
-test: $(TESTS)
+#include mytests/Makefile.inc
+include tests/Makefile.inc
+
+#test: $(TESTS)
 
 clean:
 	rm -rf $(OBJDIR) $(BINDIR) $(DBDIR) $(STORE) $(CHKPNT)
@@ -108,4 +113,4 @@ always:
            $(foreach dir, $(OBJDIRS), $(OBJDIR)/$(dir)/%.pb.cc) \
            $(foreach dir, $(OBJDIRS), $(OBJDIR)/$(dir)/%.pb.h)
 
-.PHONY: all always clean test
+.PHONY: all always clean 

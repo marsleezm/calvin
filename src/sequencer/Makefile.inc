@@ -14,8 +14,11 @@ TEST_LINKED_OBJECTS := $(PROTO_OBJS) $(COMMON_OBJS)
 include $(MAKEFILE_TEMPLATE)
 
 # Need to specify test cases explicitly because they have variables in recipe
-test-sequencer: $(SEQUENCER_TESTS)
-	@for a in $(SEQUENCER_TESTS); do \
-		echo == $$a ==; \
-		$(LDLIBRARYPATH) $$a; \
-	done
+#test-sequencer: $(SEQUENCER_TESTS)
+#	echo $(SEQUENCER_TESTS)
+#	@for a in $(SEQUENCER_TESTS); do \
+#		echo == $$a ==; \
+#		$(LDLIBRARYPATH) $$a; \
+#	done
+#	echo $(SEQUENCER_TEST_SRCS) 
+#	echo $(TESTDIR)/sequencer*_test.cc

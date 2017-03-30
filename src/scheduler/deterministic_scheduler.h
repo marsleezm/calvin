@@ -46,8 +46,8 @@ class Client;
 #define TO_SEND true
 #define TO_READ false
 
-#define MAX_SC_NUM 4
-#define MAX_PEND_NUM 1
+#define MAX_SC_NUM 5
+#define MAX_PEND_NUM 10
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {

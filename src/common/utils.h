@@ -17,6 +17,8 @@
 #include <tr1/unordered_map>
 #include <atomic>
 #include <climits>
+#include <iostream>
+#include <sstream>
 
 #include "common/types.h"
 #include "common/logging.h"
@@ -27,7 +29,7 @@ using namespace std;
 using tr1::unordered_map;
 
 
-#define NUM_THREADS 2
+#define NUM_THREADS 5
 #define NO_LOCK INT_MAX
 
 #define ASSERTS_ON true
@@ -198,6 +200,9 @@ public:
 		third = t3;
 	}
 };
+
+
+
 
 
 class Mutex {
@@ -502,6 +507,27 @@ class WriteLock {
 //};
 
 
+template <class T>
+bool VectorEqual(std::vector<T> a, std::vector<T> b) {
+	int size1 = a.size(), size2 = b.size();
+	if (size1 != size2){
+		LOG("Size different!"<<size1<<":"<<size2);
+		return false;
+	}
+	else
+	{
+		for(int i = 0; i<size1; ++i){
+			if (a[i] == b[i])
+				continue;
+			else{
+				LOG("Element different!"<<a[i]<<":"<<b[i]);
+				return false;
+			}
+		}
+		return true;
+	}
+};
+
 template<typename K, typename V>
 class AtomicMap {
  public:
@@ -580,6 +606,24 @@ public:
 		num_aborted_ = num_aborted;
 		abort_queue_ = abort_queue;
 	}
+
+	bool operator==  (ReadFromEntry another) const
+	{
+		return (my_tx_id_ == another.my_tx_id_
+				&& read_from_id_ == another.read_from_id_
+				&& abort_bit_ == another.abort_bit_
+				&& num_aborted_ == another.num_aborted_
+				&& abort_queue_ == another.abort_queue_);
+	}
+
+	friend inline std::ostream &operator<<(std::ostream &os, ReadFromEntry const &m) {
+		if(m.abort_bit_)
+			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< m.read_from_id_ <<", "<< *m.abort_bit_<<
+					", "<<m.num_aborted_<<", abort_queue_]";
+		else
+			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< m.read_from_id_ <<", "<< m.abort_bit_<<
+							", "<<m.num_aborted_<<", abort_queue_]";
+	}
 };
 
 class PendingReadEntry{
@@ -589,14 +633,35 @@ public:
 	atomic<int>* abort_bit_;
 	int num_aborted_;
 	AtomicQueue<pair<int64_t, int>>* pend_queue_;
+	AtomicQueue<pair<int64_t, int>>* abort_queue_;
 
-	PendingReadEntry(int64_t my_tx_id, Value* value_bit, atomic<int>* abort_bit,
-			int num_aborted, AtomicQueue<pair<int64_t, int>>* pend_queue){
+	PendingReadEntry(int64_t my_tx_id, Value* value_bit, atomic<int>* abort_bit, int num_aborted,
+			AtomicQueue<pair<int64_t, int>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue){
 		my_tx_id_ = my_tx_id;
 		value_bit_ = value_bit;
 		abort_bit_ = abort_bit;
 		num_aborted_ = num_aborted;
 		pend_queue_ = pend_queue;
+		abort_queue_ = abort_queue;
+	}
+
+	bool operator== (PendingReadEntry another) const
+	{
+		return (my_tx_id_ == another.my_tx_id_
+				&& value_bit_ == another.value_bit_
+				&& abort_bit_ == another.abort_bit_
+				&& num_aborted_ == another.num_aborted_
+				&& pend_queue_ == another.pend_queue_
+				&& abort_queue_ == another.abort_queue_);
+	}
+
+	friend inline std::ostream &operator<<(std::ostream &os, PendingReadEntry const &m) {
+		if(m.abort_bit_)
+			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< *m.value_bit_ <<", "<<*m.abort_bit_<<
+				m.num_aborted_<<", pend_queue, abort_queue]";
+		else
+			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< *m.value_bit_ <<", "<<m.abort_bit_<<
+							m.num_aborted_<<", , pend_queue, abort_queue]";
 	}
 };
 
@@ -609,6 +674,9 @@ public:
 
 	LockEntry(){
 		tx_id_ = NO_LOCK;
+		abort_bit_ = NULL;
+		num_aborted_ = 0;
+		abort_queue_ = NULL;
 	}
 
 	LockEntry(int64_t tx_id, std::atomic<int>* abort_bit, int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue){
@@ -616,6 +684,22 @@ public:
 		abort_bit_ = abort_bit;
 		num_aborted_ = num_aborted;
 		abort_queue_ = abort_queue;
+	}
+
+	bool operator== (LockEntry another) const
+	{
+		return (tx_id_ == another.tx_id_ && num_aborted_ == another.num_aborted_ &&
+				abort_bit_ == another.abort_bit_ && abort_queue_ == another.abort_queue_);
+	}
+
+
+	friend inline std::ostream &operator<<(std::ostream &os, LockEntry const &m) {
+		if(m.abort_bit_)
+			return os << "LockEntry: ["<< m.tx_id_ << ", "<< *m.abort_bit_ <<", "<<m.num_aborted_<<
+					", queue]";
+		else
+			return os << "LockEntry: ["<< m.tx_id_ << ", "<< m.abort_bit_ <<", "<<m.num_aborted_<<
+							", queue]";
 	}
 };
 
@@ -655,10 +739,26 @@ public:
     }
 };
 
-struct DataNode {
-  int64_t txn_id;
-  Value* value;
-  DataNode* next=NULL;
+class DataNode {
+	public:
+	int64_t txn_id;
+	Value* value = NULL;
+	DataNode* next = NULL;
+	bool operator== (DataNode another)
+	{
+		return (txn_id == another.txn_id
+				&& *value == *another.value
+				&& next == another.next);
+	}
+
+	friend inline std::ostream &operator<<(std::ostream &os, DataNode const &m) {
+		return os << "DataNode: ["<< m.txn_id << ", "<< *m.value <<"]";
+	}
+
+	~DataNode(){
+		delete value;
+	}
+
 };
 
 
@@ -675,8 +775,84 @@ class KeyEntry {
 			pend_list = new vector<PendingReadEntry>();
 			head = NULL;
 			pthread_mutex_init(&mutex_, NULL);
-	}
+		}
+
+		bool operator == (KeyEntry another) const {
+			if (lock == another.lock){
+				if(VectorEqual<ReadFromEntry>(*read_from_list, *another.read_from_list) == false){
+					cout << "Read from entry not equal!" << endl;
+					return false;
+				}
+				else{
+					if(VectorEqual<PendingReadEntry>(*pend_list, *another.pend_list) == false){
+						cout << "Pending read not equal" << endl;
+						return false;
+					}
+					else{
+						DataNode* mynode = head, *anothernode = another.head;
+						while(mynode && anothernode){
+							if (mynode == anothernode){
+								mynode = mynode->next;
+								anothernode = anothernode->next;
+							}
+							else
+								return false;
+						}
+						if (mynode == anothernode)
+							return true;
+						else
+							return false;
+					}
+				}
+			}
+			else{
+				cout << "Lock not equal!" << endl;
+				return false;
+			}
+		}
+
+//		friend inline std::ostream &operator<<(std::ostream &os, KeyEntry const &m) {
+//			  std::ostringstream oss1, oss2, oss3;
+//
+////			  if (m.read_from_list && !m.read_from_list->empty())
+////			  {
+////				// Convert all but the last element to avoid a trailing ","
+////				std::copy(m.read_from_list->begin(), m.read_from_list->end()-1,
+////					std::ostream_iterator<ReadFromEntry>(oss1, ","));
+////
+////				// Now add the last element with no delimiter
+////				oss1 << m.read_from_list->back();
+////			  }
+////
+////			  if (m.pend_list && !m.pend_list->empty())
+////			  {
+////				// Convert all but the last element to avoid a trailing ","
+////				std::copy(m.pend_list->begin(), m.pend_list->end()-1,
+////					std::ostream_iterator<int>(oss2, ","));
+////
+////				// Now add the last element with no delimiter
+////				oss2 << m.pend_list[m.pend_list->size()-1];
+////			  }
+//
+//			  DataNode* node = m.head;
+//			  if(node != NULL){
+//				  oss3 << node;
+//				  node = node->next;
+//				  if (!node)
+//				  {
+//					// Now add the last element with no delimiter
+//					oss3 <<  "," << node;
+//				  }
+//			  }
+//
+//			//return os << "KeyEntry: [Mutex is not displayed!, "<<m.lock <<","<<oss1 << "," << oss2 <<"," << oss3 << "]";
+//			  //return os << "KeyEntry: [Mutex is not displayed!, " << ","<<oss1 << "," << oss2 <<"," << oss3 << "]";
+//			  //return os << "KeyEntry: [Mutex is not displayed!, " << m.lock << "]";
+//			  return os << "WTF?";
+//		}
 };
+
+
 
 #endif  // _DB_COMMON_UTILS_H_
 

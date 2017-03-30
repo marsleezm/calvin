@@ -14,8 +14,8 @@ TEST_LINKED_OBJECTS := $(PROTO_OBJS)
 include $(MAKEFILE_TEMPLATE)
 	
 # Need to specify test cases explicitly because they have variables in recipe
-test-common: $(COMMON_TESTS)
-	@for a in $(COMMON_TESTS); do \
-		echo == $$a ==; \
-		$(LDLIBRARYPATH) $$a; \
-	done
+#test-common: $(COMMON_TESTS)
+#	@for a in $(COMMON_TESTS); do \
+#		echo == $$a ==; \
+#		$(LDLIBRARYPATH) $$a; \
+#	done
