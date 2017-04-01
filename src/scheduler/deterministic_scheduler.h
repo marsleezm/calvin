@@ -46,8 +46,9 @@ class Client;
 #define TO_SEND true
 #define TO_READ false
 
-#define MAX_SC_NUM 5
-#define MAX_PEND_NUM 10
+#define MAX_SC_NUM 1
+#define MAX_PEND_NUM 1
+#define MAX_SUSPEND 50
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
@@ -150,8 +151,9 @@ class DeterministicScheduler : public Scheduler {
   // Transactions that can only resume execution after all its previous txns have been local-committed
   priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* pending_txns_[NUM_THREADS];
 
-  AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
+  int num_suspend[NUM_THREADS];
 
+  AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
   AtomicQueue<pair<int64_t, int>>* abort_queues[NUM_THREADS];
   AtomicQueue<pair<int64_t, int>>* waiting_queues[NUM_THREADS];
 };

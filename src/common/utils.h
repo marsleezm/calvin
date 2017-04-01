@@ -29,8 +29,9 @@ using namespace std;
 using tr1::unordered_map;
 
 
-#define NUM_THREADS 5
+#define NUM_THREADS 1
 #define NO_LOCK INT_MAX
+#define GC_THRESHOLD 1
 
 #define ASSERTS_ON true
 
@@ -51,6 +52,8 @@ using tr1::unordered_map;
 #define WAIT_NOT_SENT 5
 #define TX_ABORTED 6
 #define SUSPENDED 7
+#define IS_COPY 8
+#define NOT_COPY 9
 
 // Status code for return values.
 struct Status {
@@ -590,6 +593,22 @@ class AtomicMap {
   AtomicMap& operator=(const AtomicMap<K, V>&);
 };
 
+
+struct ValuePair{
+	int first;
+	Value* second = NULL;
+
+	ValuePair(){
+		first = NOT_COPY;
+		second = NULL;
+	}
+
+	ValuePair(int in_first, Value* in_second){
+		first = in_first;
+		second = in_second;
+	}
+};
+
 class ReadFromEntry{
 public:
 	int64_t my_tx_id_;
@@ -629,13 +648,13 @@ public:
 class PendingReadEntry{
 public:
 	int64_t my_tx_id_;
-	Value* value_bit_;
+	ValuePair* value_bit_;
 	atomic<int>* abort_bit_;
 	int num_aborted_;
 	AtomicQueue<pair<int64_t, int>>* pend_queue_;
 	AtomicQueue<pair<int64_t, int>>* abort_queue_;
 
-	PendingReadEntry(int64_t my_tx_id, Value* value_bit, atomic<int>* abort_bit, int num_aborted,
+	PendingReadEntry(int64_t my_tx_id, ValuePair* value_bit, atomic<int>* abort_bit, int num_aborted,
 			AtomicQueue<pair<int64_t, int>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue){
 		my_tx_id_ = my_tx_id;
 		value_bit_ = value_bit;
@@ -657,10 +676,10 @@ public:
 
 	friend inline std::ostream &operator<<(std::ostream &os, PendingReadEntry const &m) {
 		if(m.abort_bit_)
-			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< *m.value_bit_ <<", "<<*m.abort_bit_<<
+			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< m.value_bit_->first <<", "<< *m.value_bit_->second <<", "<<*m.abort_bit_<<
 				m.num_aborted_<<", pend_queue, abort_queue]";
 		else
-			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< *m.value_bit_ <<", "<<m.abort_bit_<<
+			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< m.value_bit_->first <<", "<< *m.value_bit_->second <<", "<<m.abort_bit_<<
 							m.num_aborted_<<", , pend_queue, abort_queue]";
 	}
 };
@@ -760,7 +779,6 @@ class DataNode {
 	}
 
 };
-
 
 class KeyEntry {
 	public:

@@ -167,9 +167,9 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
 	{
 		rand->seed(txn->seed());
 		GetKeys(txn, rand);
-		string writeset;
-		for(int i = 0; i< txn->read_write_set().size(); ++i)
-			writeset += " "+txn->read_write_set(i);
+//		string writeset;
+//		for(int i = 0; i< txn->read_write_set().size(); ++i)
+//			writeset += " "+txn->read_write_set(i);
 		//LOG("Txn "<<txn->txn_id()<<" has seed "<<txn->seed()<< ", its keys "<< writeset);
 	}
 
@@ -177,14 +177,19 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
 		int read_state = NORMAL;
 		Key key = txn->read_write_set(i);
 		Value* val = storage->SkipOrRead(key, read_state);
-		LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
+		//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
 		if (read_state == NORMAL){
 			//*val = IntToString(StringToInt(*val) + 1);
-			LOG(txn->txn_id()<<" trying to lock "<<key);
-			if(storage->LockObject(key) == false)
+			//LOG(txn->txn_id()<<" trying to lock "<<key);
+			Value* val_copy = NULL;
+			if(storage->LockObject(key, val_copy) == false)
 				return TX_ABORTED;
-			else
-				*val = IntToString(StringToInt(*val)+1);
+			else{
+				if (val_copy == NULL)
+					*val = IntToString(StringToInt(*val)+1);
+				else
+					*val_copy = IntToString(StringToInt(*val_copy)+1);
+			}
 		}
 		else if(read_state == SKIP)
 			continue;

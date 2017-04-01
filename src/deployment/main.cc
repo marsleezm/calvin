@@ -21,6 +21,7 @@
 #include "proto/tpcc_args.pb.h"
 
 #define HOT 100
+//#define HOT 3
 
 using namespace std;
 map<Key, Key> latest_order_id_for_customer;

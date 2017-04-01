@@ -64,10 +64,28 @@ class StorageManager {
 
   //Value* ReadObject(const Key& key);
   Value* SkipOrRead(const Key& key, int& read_state);
-  inline bool LockObject(const Key& key) {
+  inline bool LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
-    if (configuration_->LookupPartition(key) == configuration_->this_node_id)
-  	  return actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_);
+    if (configuration_->LookupPartition(key) == configuration_->this_node_id){
+		if(actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
+			//If this object points to
+	    	write_set.insert(key);
+			if(objects_[key].first == NOT_COPY){
+				objects_[key].first = IS_COPY;
+				LOCKLOG(txn_->txn_id()<<" trying to create a copy for value "<<reinterpret_cast<int64>(objects_[key].second));
+				new_pointer = new Value(*objects_[key].second);
+				objects_[key].second = new_pointer;
+			}
+			else
+				new_pointer = objects_[key].second;
+			return true;
+		}
+		else{
+			++abort_bit_;
+			LOG(txn_->txn_id()<<" lock failed, abort bit is "<<abort_bit_);
+			return false;
+		}
+    }
     else
   	  return true;  // The key will be locked by another partition.
   }
@@ -81,14 +99,15 @@ class StorageManager {
 	  LOG(txn_->txn_id()<<" should be restarted? NumA "<<num_aborted<<", NumR "<<num_restarted_<<", ABit "<<abort_bit_);
 	  return num_aborted == num_restarted_+1 && num_aborted == abort_bit_;}
   inline bool ShouldResume(int num_aborted) { return num_aborted == num_restarted_&& num_aborted == abort_bit_;}
-  inline bool CanCommit() { return spec_committed_ && num_restarted_ == abort_bit_;}
+  inline bool CanSCToCommit() { return spec_committed_ && num_restarted_ == abort_bit_;}
+  inline bool CanCommit() { return num_restarted_ == abort_bit_;}
 
   inline void Init(){
 	  exec_counter_ = 0;
-  	  if (suspended_key!="" && message_){
+  	  if (message_ && suspended_key!=""){
   		  LOG("Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
-  		  message_->add_values(objects_[suspended_key]);
+  		  message_->add_values(*objects_[suspended_key].second);
   		  message_has_value_ = true;
   		  suspended_key = "";
   	  }
@@ -140,7 +159,9 @@ class StorageManager {
   // TxnManager construction time.
   //
   // TODO(alex): Should these be pointers to reduce object copying overhead?
-  unordered_map<Key, Value> objects_;
+  // The first one of the pair indicates whether I should create a copy of this object
+  // when I try to modify the object.
+  unordered_map<Key, ValuePair> objects_;
   unordered_map<Key, Value*> remote_objects_;
 
   // The message containing read results that should be sent to remote nodes
@@ -157,7 +178,9 @@ class StorageManager {
 
   AtomicQueue<pair<int64_t, int>>* abort_queue_;
   AtomicQueue<pair<int64_t, int>>* pend_queue_;
+  std::set<Key> write_set;
 
+ public:
   bool spec_committed_;
   atomic<int> abort_bit_;
   int num_restarted_;

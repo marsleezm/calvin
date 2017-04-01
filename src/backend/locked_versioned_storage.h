@@ -37,16 +37,31 @@ class LockedVersionedStorage {
 
   // Standard operators in the DB
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
-  virtual Value* ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, Value* value_bit,
+  virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
 			AtomicQueue<pair<int64_t, int>>* abort_queue);
-  virtual bool PutObject(const Key& key, Value value, int64 txn_id, bool is_committing);
-  virtual bool PutObjects(unordered_map<Key, Value>& objects, int64 txn_id, bool is_committing);
+  virtual bool PutObject(const Key& key, Value* value, int64 txn_id, bool is_committing);
   virtual void PutObject(const Key& key, Value* value);
   virtual void Unlock(const Key& key, int64 txn_id);
   virtual void RemoveValue(const Key& key, int64 txn_id);
   virtual bool DeleteObject(const Key& key, int64 txn_id);
+
+  // TODO: It's just a dirty/unsafe hack to do GC to avoid having too many versions
+  void inline DirtyGC(DataNode* list, int from_version){
+	  DataNode* current = list->next, *next, *prev=list;
+	  while(current){
+		  next = current->next;
+		  if(current->txn_id <= from_version){
+			  LOCKLOG("Trying to delete "<<current->txn_id<<"'s value"<<reinterpret_cast<int64>(current->value));
+			  prev->next = NULL;
+			  delete current;
+		  }
+		  else
+			  prev = current;
+		  current = next;
+	  }
+  }
 
   bool FetchEntry(const Key& key, KeyEntry*& entry) {
 	  if (objects_.count(key) == 0)
