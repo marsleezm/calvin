@@ -67,17 +67,32 @@ class StorageManager {
   inline bool LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
+//    	if(write_set_.count(key) == 0){
+//    		if(actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
+//				new_pointer = new Value(*read_set_[key].second);
+//				read_set_[key].second = new_pointer;
+//				return true;
+//			}
+//    	}
 		if(actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
 			//If this object points to
-	    	write_set.insert(key);
-			if(objects_[key].first == NOT_COPY){
-				objects_[key].first = IS_COPY;
-				LOCKLOG(txn_->txn_id()<<" trying to create a copy for value "<<reinterpret_cast<int64>(objects_[key].second));
-				new_pointer = new Value(*objects_[key].second);
-				objects_[key].second = new_pointer;
+//	    	write_set.insert(key);
+//			if(read_set_[key].first == NOT_COPY){
+//				read_set_[key].first = IS_COPY;
+//				LOCKLOG(txn_->txn_id()<<" trying to create a copy for value "<<reinterpret_cast<int64>(objects_[key].second));
+//				new_pointer = new Value(*read_set_[key].second);
+//				read_set_[key].second = new_pointer;
+//			}
+//			else
+//				new_pointer = read_set_[key].second;
+			if(read_set_[key].first == NOT_COPY){
+				LOCKLOG(txn_->txn_id()<<" trying to create a copy for value "<<reinterpret_cast<int64>(read_set_[key].second));
+				read_set_[key].second = new Value(*read_set_[key].second);
 			}
-			else
-				new_pointer = objects_[key].second;
+			read_set_[key].first = WRITE;
+			new_pointer = read_set_[key].second;
+			//new_pointer = new Value(*read_set_[key].second);
+			//read_set_[key].second = new_pointer;
 			return true;
 		}
 		else{
@@ -107,7 +122,7 @@ class StorageManager {
   	  if (message_ && suspended_key!=""){
   		  LOG("Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
-  		  message_->add_values(*objects_[suspended_key].second);
+  		  message_->add_values(*read_set_[suspended_key].second);
   		  message_has_value_ = true;
   		  suspended_key = "";
   	  }
@@ -161,7 +176,8 @@ class StorageManager {
   // TODO(alex): Should these be pointers to reduce object copying overhead?
   // The first one of the pair indicates whether I should create a copy of this object
   // when I try to modify the object.
-  unordered_map<Key, ValuePair> objects_;
+  //unordered_map<Key, ValuePair> write_set_;
+  unordered_map<Key, ValuePair> read_set_;
   unordered_map<Key, Value*> remote_objects_;
 
   // The message containing read results that should be sent to remote nodes
@@ -178,7 +194,7 @@ class StorageManager {
 
   AtomicQueue<pair<int64_t, int>>* abort_queue_;
   AtomicQueue<pair<int64_t, int>>* pend_queue_;
-  std::set<Key> write_set;
+  //std::set<Key> write_set;
 
  public:
   bool spec_committed_;

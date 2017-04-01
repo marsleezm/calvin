@@ -107,33 +107,43 @@ void StorageManager::SetupTxn(TxnProto* txn){
 
 void StorageManager::Abort(){
 	if (!spec_committed_){
-		for (set<Key>::iterator it = write_set.begin(); it != write_set.end(); ++it)
+		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 		{
-			actual_storage_->Unlock(*it, txn_->txn_id());
-		}
-		for (unordered_map<Key, ValuePair>::iterator it = objects_.begin();
-				   it != objects_.end(); ++it){
-			if(it->second.first == IS_COPY){
-				LOCKLOG(txn_->txn_id()<<" trying to delete "<<it->first<<", addr is "<<reinterpret_cast<int64>(it->second.second));
+			if(it->second.first == WRITE)
+				actual_storage_->Unlock(it->first, txn_->txn_id());
+			else if(it->second.first == IS_COPY)
 				delete it->second.second;
-			}
 		}
+//		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
+//				   it != read_set_.end(); ++it){
+//			if(it->second.first == IS_COPY){
+//				LOCKLOG(txn_->txn_id()<<" trying to delete "<<it->first<<", addr is "<<reinterpret_cast<int64>(it->second.second));
+//				delete it->second.second;
+//			}
+//		}
 	}
 	else{
-		for (set<Key>::iterator it = write_set.begin(); it != write_set.end(); ++it)
+//		for (set<Key>::iterator it = write_set.begin(); it != write_set.end(); ++it)
+//		{
+//			read_set_.erase(*it);
+//			actual_storage_->RemoveValue(*it, txn_->txn_id());
+//		}
+//		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
+//				   it != read_set_.end(); ++it){
+//			if(it->second.first == IS_COPY)
+//				delete it->second.second;
+//		}
+		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 		{
-			objects_.erase(*it);
-			actual_storage_->RemoveValue(*it, txn_->txn_id());
-		}
-		for (unordered_map<Key, ValuePair>::iterator it = objects_.begin();
-				   it != objects_.end(); ++it){
-			if(it->second.first == IS_COPY)
+			if(it->second.first == WRITE)
+				actual_storage_->RemoveValue(it->first, txn_->txn_id());
+			else if(it->second.first == IS_COPY)
 				delete it->second.second;
 		}
 	}
 
-	write_set.clear();
-	objects_.clear();
+	//write_set.clear();
+	read_set_.clear();
 	spec_committed_ = false;
 	max_counter_ = 0;
 	num_restarted_ = abort_bit_;
@@ -141,32 +151,79 @@ void StorageManager::Abort(){
 
 
 void StorageManager::ApplyChange(bool is_committing){
+//	LOG(txn_->txn_id()<<" is applying its change! Committed is "<<is_committing);
+//	int applied_counter = 0;
+//	bool failed_putting = false;
+////	for (set<Key>::iterator it = write_set.begin(); it != write_set.end(); ++it)
+////	{
+////		if (!actual_storage_->PutObject(*it, read_set_[*it].second, txn_->txn_id(), is_committing)){
+////			failed_putting = true;
+////			break;
+////		}
+////		else
+////			++applied_counter;
+////	}
+//	for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
+//	{
+//		if (!actual_storage_->PutObject(it->first, it->second.second, txn_->txn_id(), is_committing)){
+//			failed_putting = true;
+//			break;
+//		}
+//		else
+//			++applied_counter;
+//	}
+//	if(failed_putting){
+//		set<Key>::iterator it = write_set.begin();
+//		for(int i = 0; i<applied_counter; ++i){
+//			actual_storage_->RemoveValue(*it, txn_->txn_id());
+//			read_set_.erase(*it);
+//			++it;
+//		}
+//		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
+//						   it != read_set_.end(); ++it){
+//			if(it->second.first == IS_COPY)
+//				delete it->second.second;
+//		}
+//		read_set_.clear();
+//		write_set.clear();
+//		spec_committed_ = false;
+//	}
+//	else
+//		spec_committed_ = true;
+
 	LOG(txn_->txn_id()<<" is applying its change! Committed is "<<is_committing);
 	int applied_counter = 0;
 	bool failed_putting = false;
-	for (set<Key>::iterator it = write_set.begin(); it != write_set.end(); ++it)
+	for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 	{
-		if (!actual_storage_->PutObject(*it, objects_[*it].second, txn_->txn_id(), is_committing)){
-			failed_putting = true;
-			break;
+		if(it->second.first == WRITE){
+			if (!actual_storage_->PutObject(it->first, it->second.second, txn_->txn_id(), is_committing)){
+				failed_putting = true;
+				break;
+			}
+			else
+				++applied_counter;
 		}
-		else
-			++applied_counter;
+		else if(it->second.first == IS_COPY)
+			delete it->second.second;
 	}
 	if(failed_putting){
-		set<Key>::iterator it = write_set.begin();
-		for(int i = 0; i<applied_counter; ++i){
-			actual_storage_->RemoveValue(*it, txn_->txn_id());
-			objects_.erase(*it);
+		unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
+		int counter = 0;
+		while(it != read_set_.end()){
+			if(counter < applied_counter){
+				if(it->second.first == WRITE){
+					actual_storage_->RemoveValue(it->first, txn_->txn_id());
+					++counter;
+				}
+			}
+			else{
+				if(it->second.first == IS_COPY)
+					delete it->second.second;
+			}
 			++it;
 		}
-		for (unordered_map<Key, ValuePair>::iterator it = objects_.begin();
-						   it != objects_.end(); ++it){
-			if(it->second.first == IS_COPY)
-				delete it->second.second;
-		}
-		objects_.clear();
-		write_set.clear();
+		read_set_.clear();
 		spec_committed_ = false;
 	}
 	else
@@ -203,16 +260,17 @@ StorageManager::~StorageManager() {
 	delete txn_;
 	delete message_;
 
-	for (set<Key>::iterator it = write_set.begin();
-			   it != write_set.end(); ++it)
-	{
-		objects_.erase(*it);
-	}
-	for (unordered_map<Key, ValuePair>::iterator it = objects_.begin();
-			   it != objects_.end(); ++it){
-		if(it->second.first == IS_COPY)
-			delete it->second.second;
-	}
+//	for (set<Key>::iterator it = write_set.begin();
+//			   it != write_set.end(); ++it)
+//	{
+//		read_set_.erase(*it);
+//	}
+//	for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
+//			   it != read_set_.end(); ++it){
+//		if(it->second.first == IS_COPY)
+//			delete it->second.second;
+//	}
+	read_set_.clear();
 
 	for (unordered_map<Key, Value*>::iterator it = remote_objects_.begin();
        it != remote_objects_.end(); ++it)
@@ -228,9 +286,9 @@ Value* StorageManager::SkipOrRead(const Key& key, int& read_state) {
 		// !TODO: only send the value when all previous txns finish
 		if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
 			//LOG("Trying to read local key "<<key);
-			if (objects_[key].second == NULL){
+			if (read_set_[key].second == NULL){
 				ValuePair result = actual_storage_->ReadObject(key, txn_->txn_id(), &abort_bit_,
-						num_restarted_, &objects_[key], abort_queue_, pend_queue_);
+						num_restarted_, &read_set_[key], abort_queue_, pend_queue_);
 				if(abort_bit_ > num_restarted_){
 					LOG(txn_->txn_id()<<" is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
 					max_counter_ = 0;
@@ -249,21 +307,21 @@ Value* StorageManager::SkipOrRead(const Key& key, int& read_state) {
 						++max_counter_;
 
 						//LOG(txn_->txn_id()<< " read and assigns key value "<<key<<","<<*val);
-						objects_[key] = result;
+						read_set_[key] = result;
 						if (message_){
 							LOG("Adding to msg: "<<key);
 							message_->add_keys(key);
 							message_->add_values(result.second == NULL ? "" : *result.second);
 							message_has_value_ = true;
 						}
-						return objects_[key].second;
+						return read_set_[key].second;
 					}
 				}
 			}
 			else{
 				++exec_counter_;
 				++max_counter_;
-				return objects_[key].second;
+				return read_set_[key].second;
 			}
 		}
 		else // The key is not replicated locally, the writer should wait

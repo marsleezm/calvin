@@ -83,6 +83,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 		rands[i] = new Rand();
 		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
 		pending_txns_[i] = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>();
+		num_suspend[i] = 0;
 	}
 
 Spin(2);
@@ -182,22 +183,22 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  retry_mgr = scheduler->ExecuteTxn(retry_mgr, thread, active_txns);
 	  }
 	  else if(!waiting_queue->Empty()){
-	  		  pair<int64_t, int> to_wait_txn;
-	  		  waiting_queue->Pop(&to_wait_txn);
-	  		  LOG("In to-wait, the first one is "<< to_wait_txn.first);
-	  		  if(to_wait_txn.first > Sequencer::max_commit_ts){
-	  			  LOG("To waiting txn is " << to_wait_txn.first);
-	  			  StorageManager* manager = active_txns[to_wait_txn.first];
-	  			  if (manager && manager->ShouldResume(to_wait_txn.second)){
-	  				  --scheduler->num_suspend[thread];
-	  				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
-	  			  }
-	  			  else{
-	  				  LOG(to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second
-	  						  <<", "<< active_txns[to_wait_txn.first]->num_restarted_
-	  						  <<", "<<active_txns[to_wait_txn.first]->abort_bit_);
-	  			  }
-	  		  }
+		  pair<int64_t, int> to_wait_txn;
+		  waiting_queue->Pop(&to_wait_txn);
+		  LOG("In to-wait, the first one is "<< to_wait_txn.first);
+		  if(to_wait_txn.first > Sequencer::max_commit_ts){
+			  LOG("To waiting txn is " << to_wait_txn.first);
+			  StorageManager* manager = active_txns[to_wait_txn.first];
+			  if (manager && manager->ShouldResume(to_wait_txn.second)){
+				  --scheduler->num_suspend[thread];
+				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
+			  }
+			  else{
+				  LOG(to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second
+						  <<", "<< active_txns[to_wait_txn.first]->num_restarted_
+						  <<", "<<active_txns[to_wait_txn.first]->abort_bit_);
+			  }
+		  }
 	  }
 	  else if (!abort_queue->Empty()){
 		  pair<int64_t, int> to_abort_txn;
@@ -321,6 +322,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
 		  }
 	  }
+
 //	  else{
 //		  //string sc_txns = "";
 //		  //for(deque<int>::iterator it = my_to_sc_txns->; it != my_to_sc_txns->end(); ++it)

@@ -181,14 +181,11 @@ int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
 		if (read_state == NORMAL){
 			//*val = IntToString(StringToInt(*val) + 1);
 			//LOG(txn->txn_id()<<" trying to lock "<<key);
-			Value* val_copy = NULL;
+			Value* val_copy = val;
 			if(storage->LockObject(key, val_copy) == false)
 				return TX_ABORTED;
 			else{
-				if (val_copy == NULL)
-					*val = IntToString(StringToInt(*val)+1);
-				else
-					*val_copy = IntToString(StringToInt(*val_copy)+1);
+				*val_copy = IntToString(StringToInt(*val_copy)+1);
 			}
 		}
 		else if(read_state == SKIP)

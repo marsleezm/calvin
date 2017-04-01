@@ -29,9 +29,9 @@ using namespace std;
 using tr1::unordered_map;
 
 
-#define NUM_THREADS 1
+#define NUM_THREADS 5
 #define NO_LOCK INT_MAX
-#define GC_THRESHOLD 1
+#define GC_THRESHOLD 0
 
 #define ASSERTS_ON true
 
@@ -54,6 +54,7 @@ using tr1::unordered_map;
 #define SUSPENDED 7
 #define IS_COPY 8
 #define NOT_COPY 9
+#define WRITE 10
 
 // Status code for return values.
 struct Status {
@@ -203,8 +204,6 @@ public:
 		third = t3;
 	}
 };
-
-
 
 
 

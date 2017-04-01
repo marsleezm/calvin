@@ -58,7 +58,7 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 					DirtyGC(list, max_ts-GC_THRESHOLD);
 					value_pair.first = NOT_COPY;
 					value_pair.second = list->value;
-
+					LOCKLOG(txn_id<<" reading ["<<key<<"] from"<<list->txn_id<<", NO COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				else{
 					int size = entry->read_from_list->size();
