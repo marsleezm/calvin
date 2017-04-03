@@ -12,7 +12,7 @@ message TPCCArgs {
 
   // This represents the total order line count for a new order and an array
   // of the quantity of item per supply warehouse
-  repeated int32 order_line_count = 20;
+  repeated int32 items = 20;
   repeated int32 quantities = 21;
 
   // In a payment transaction, this represents the amount of payment
@@ -27,4 +27,5 @@ message TPCCArgs {
 
   optional int32 lastest_order_number  = 42;
   optional int32 threshold = 51;
+  optional int32 order_line_count = 52;
 }

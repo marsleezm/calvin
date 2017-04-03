@@ -58,12 +58,14 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int64 seed, int part) {
 
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
-  txn->set_txn_type(SINGLE_PART);
+  txn->set_txn_type(MICROTXN_SP);
+  txn->set_multipartition(false);
 
   txn->set_seed(seed);
 
   txn->add_readers(part);
   txn->add_writers(part);
+  GetKeys(txn);
 
   return txn;
 }
@@ -76,7 +78,8 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int64 seed, int part1, int pa
 
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
-  txn->set_txn_type(MULTI_PART);
+  txn->set_txn_type(MICROTXN_MP);
+  txn->set_multipartition(true);
 
   txn->set_seed(seed);
 
@@ -87,16 +90,17 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int64 seed, int part1, int pa
   txn->add_writers(part1);
   txn->add_writers(part2);
   txn->add_writers(part3);
+  GetKeys(txn);
 
   return txn;
 }
 
-void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
+void Microbenchmark::GetKeys(TxnProto* txn) const {
 	set<int> keys;
 
-	if (txn->txn_type() == SINGLE_PART){
+	if (txn->multipartition() == false){
 		int part = txn->writers(0);
-		int hotkey = part + nparts * (rand->next() % hot_records);
+		int hotkey = part + nparts * (rand() % hot_records);
 		txn->add_read_write_set(IntToString(hotkey));
 
 		// Insert set of kRWSetSize - 1 random cold keys from specified partition into
@@ -106,16 +110,16 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 					kRWSetSize - 1,
 					nparts * hot_records,
 					nparts * kDBSize,
-					part, rand);
+					part);
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 			txn->add_read_write_set(IntToString(*it));
 	}else{
 		int part1 = txn->writers(0),
 			part2 = txn->writers(1),
 			part3 = txn->writers(2);
-		int hotkey1 = part1 + nparts * (rand->next() % hot_records);
-		int hotkey2 = part2 + nparts * (rand->next() % hot_records);
-		int hotkey3 = part3 + nparts * (rand->next() % hot_records);
+		int hotkey1 = part1 + nparts * (rand() % hot_records);
+		int hotkey2 = part2 + nparts * (rand() % hot_records);
+		int hotkey3 = part3 + nparts * (rand() % hot_records);
 		txn->add_read_write_set(IntToString(hotkey1));
 
 		// Insert set of kRWSetSize/2 - 1 random cold keys from each partition into
@@ -125,7 +129,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		                3,
 		                nparts * hot_records,
 		                nparts * kDBSize,
-		                part1, rand);
+		                part1);
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 		  txn->add_read_write_set(IntToString(*it));
 
@@ -134,7 +138,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		                2,
 		                nparts * hot_records,
 		                nparts * kDBSize,
-		                part2, rand);
+		                part2);
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 		    txn->add_read_write_set(IntToString(*it));
 
@@ -143,7 +147,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		                2,
 		                nparts * hot_records,
 		                nparts * kDBSize,
-		                part3, rand);
+		                part3);
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 		  txn->add_read_write_set(IntToString(*it));
 	}
@@ -152,26 +156,21 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 
 // The load generator can be called externally to return a transaction proto
 // containing a new type of transaction.
-TxnProto* Microbenchmark::NewTxn(int64 txn_id, int txn_type,
-                                 string args, Configuration* config) const {
-  return NULL;
+void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* txn) const {
+
 }
 
-int Microbenchmark::Execute(StorageManager* storage, Rand* rand) const {
+int Microbenchmark::Execute(StorageManager* storage) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 	TxnProto* txn = storage->get_txn();
-	LOG("Executing "<<txn->txn_id()<<", is multipart? "<<(txn->txn_type()== MULTI_PART));
+	LOG("Executing "<<txn->txn_id()<<", is multipart? "<<(txn->multipartition()));
 	storage->Init();
-	if (storage->ShouldExec())
-	{
-		rand->seed(txn->seed());
-		GetKeys(txn, rand);
-//		string writeset;
-//		for(int i = 0; i< txn->read_write_set().size(); ++i)
-//			writeset += " "+txn->read_write_set(i);
-		//LOG("Txn "<<txn->txn_id()<<" has seed "<<txn->seed()<< ", its keys "<< writeset);
-	}
+//	if (storage->ShouldExec())
+//	{
+//		rand->seed(txn->seed());
+//		GetKeys(txn, rand);
+//	}
 
 	for (int i = 0; i < kRWSetSize; i++) {
 		int read_state = NORMAL;

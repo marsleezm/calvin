@@ -17,7 +17,11 @@ using std::string;
 
 class Microbenchmark : public Application {
  public:
-
+  enum TxnType {
+	INITIALIZE = 0,
+	MICROTXN_SP = 1,
+	MICROTXN_MP = 2,
+  };
 
   Microbenchmark(int nodecount, int hotcount) {
     nparts = nodecount;
@@ -26,9 +30,8 @@ class Microbenchmark : public Application {
 
   virtual ~Microbenchmark() {}
 
-  virtual TxnProto* NewTxn(int64 txn_id, int txn_type, string args,
-                           Configuration* config = NULL) const;
-  virtual int Execute(StorageManager* storage, Rand* rand) const;
+  virtual void NewTxn(int64 txn_id, int txn_type, Configuration* config = NULL, TxnProto* txn = NULL) const;
+  virtual int Execute(StorageManager* storage) const;
 
   TxnProto* MicroTxnSP(int64 txn_id, int64 seed, int part);
   TxnProto* MicroTxnMP(int64 txn_id, int64 seed, int part1, int part2, int part3);
@@ -45,7 +48,7 @@ class Microbenchmark : public Application {
                      int key_limit, int part, Rand* rand) const;
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part) const;
-  void GetKeys(TxnProto* txn, Rand* rand) const;
+  void GetKeys(TxnProto* txn) const;
   Microbenchmark() {}
 };
 

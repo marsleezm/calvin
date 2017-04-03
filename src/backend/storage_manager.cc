@@ -30,7 +30,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	  pend_queue_(pend_queue), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
-	if (txn->txn_type() != SINGLE_PART){
+	if (txn->multipartition()){
 		message_ = new MessageProto();
 		message_->set_destination_channel(IntToString(txn_->txn_id()));
 		message_->set_type(MessageProto::READ_RESULT);
@@ -96,7 +96,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
 void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn_ == NULL);
-	ASSERT(txn->txn_type() != SINGLE_PART);
+	ASSERT(txn->multipartition());
 
 	txn_ = txn;
 	message_ = new MessageProto();
@@ -360,6 +360,84 @@ Value* StorageManager::SkipOrRead(const Key& key, int& read_state) {
 		return NULL;
 	}
 }
+
+
+Value* StorageManager::ReadValue(const Key& key, int& read_state) {
+	// The key is replicated locally, should broadcast to all readers
+	// !TODO: only send the value when all previous txns finish
+	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
+		//LOG("Trying to read local key "<<key);
+		if (read_set_[key].second == NULL){
+			ValuePair result = actual_storage_->ReadObject(key, txn_->txn_id(), &abort_bit_,
+					num_restarted_, &read_set_[key], abort_queue_, pend_queue_);
+			if(abort_bit_ > num_restarted_){
+				LOG(txn_->txn_id()<<" is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
+				max_counter_ = 0;
+				num_restarted_ = abort_bit_;
+				read_state = SPECIAL;
+				return reinterpret_cast<Value*>(TX_ABORTED);
+			}
+			else {
+				if(result.first == SUSPENDED){
+					read_state = SPECIAL;
+					suspended_key = key;
+					return reinterpret_cast<Value*>(SUSPENDED);
+				}
+				else{
+					++exec_counter_;
+					if(exec_counter_>max_counter_)
+						++max_counter_;
+
+					//LOG(txn_->txn_id()<< " read and assigns key value "<<key<<","<<*val);
+					read_set_[key] = result;
+					if (message_){
+						LOG("Adding to msg: "<<key);
+						message_->add_keys(key);
+						message_->add_values(result.second == NULL ? "" : *result.second);
+						message_has_value_ = true;
+					}
+					return read_set_[key].second;
+				}
+			}
+		}
+		else{
+			++exec_counter_;
+			if(exec_counter_>max_counter_)
+				++max_counter_;
+			return read_set_[key].second;
+		}
+	}
+	else // The key is not replicated locally, the writer should wait
+	{
+		if (remote_objects_.count(key) > 0){
+			++exec_counter_;
+			if(exec_counter_>max_counter_)
+				++max_counter_;
+			return remote_objects_[key];
+		}
+		else{ //Should be blocked
+			LOG("Does not have remote key: "<<key);
+			read_state = SPECIAL;
+			// The tranasction will perform the read again
+			++get_blocked_;
+			if (message_has_value_){
+				if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
+					LOG(txn_->txn_id() << ": blocked and sent.");
+					SendLocalReads();
+					return reinterpret_cast<Value*>(WAIT_AND_SENT);
+				}
+				else{
+					LOG(txn_->txn_id() << ": blocked but no sent. ");
+					return reinterpret_cast<Value*>(WAIT_NOT_SENT);
+				}
+			}
+			else{
+				LOG(txn_->txn_id() << ": blocked but has nothign to send. ");
+				return reinterpret_cast<Value*>(WAIT_AND_SENT);
+			}
+		}
+	}
+}
 //
 //Value* StorageManager::ReadObject(const Key& key) {
 //	// The key is replicated locally, should broadcast to all readers
@@ -418,11 +496,5 @@ void StorageManager::SendLocalReads(){
 	message_has_value_ = false;
 }
 
-bool StorageManager::DeleteObject(const Key& key) {
-  // Delete object from storage if applicable.
-  if (configuration_->LookupPartition(key) == configuration_->this_node_id)
-    return actual_storage_->DeleteObject(key, txn_->txn_id());
-  else
-    return true;  // Not this node's problem.
-}
+
 

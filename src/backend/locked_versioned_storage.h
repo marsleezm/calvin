@@ -45,7 +45,10 @@ class LockedVersionedStorage {
   virtual void PutObject(const Key& key, Value* value);
   virtual void Unlock(const Key& key, int64 txn_id);
   virtual void RemoveValue(const Key& key, int64 txn_id);
-  virtual bool DeleteObject(const Key& key, int64 txn_id);
+  inline bool DeleteObject(const Key& key) { delete objects_[key]; return true; }
+  bool DeleteObject(const Key& key, int64 txn_id);
+
+  inline Value* StableRead(const Key& key) {return objects_[key]->head->value;}
 
   // TODO: It's just a dirty/unsafe hack to do GC to avoid having too many versions
   void inline DirtyGC(DataNode* list, int from_version){

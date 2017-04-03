@@ -64,6 +64,7 @@ class StorageManager {
 
   //Value* ReadObject(const Key& key);
   Value* SkipOrRead(const Key& key, int& read_state);
+  Value* ReadValue(const Key& key, int& read_state);
   inline bool LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
@@ -105,8 +106,6 @@ class StorageManager {
   	  return true;  // The key will be locked by another partition.
   }
 
-  bool DeleteObject(const Key& key);
-
   void HandleReadResult(const MessageProto& message);
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
@@ -116,6 +115,7 @@ class StorageManager {
   inline bool ShouldResume(int num_aborted) { return num_aborted == num_restarted_&& num_aborted == abort_bit_;}
   inline bool CanSCToCommit() { return spec_committed_ && num_restarted_ == abort_bit_;}
   inline bool CanCommit() { return num_restarted_ == abort_bit_;}
+  inline Value* StableRead(const Key& key) { return actual_storage_->StableRead(key); }
 
   inline void Init(){
 	  exec_counter_ = 0;
@@ -141,10 +141,18 @@ class StorageManager {
 	}
   }
 
+  inline bool DeleteObject(const Key& key) {
+	  // Delete object from storage if applicable.
+	  if (configuration_->LookupPartition(key) == configuration_->this_node_id)
+	    return actual_storage_->DeleteObject(key);
+	  else
+	    return true;  // Not this node's problem.
+  }
+
   //void AddKeys(string* keys) {keys_ = keys;}
   //vector<string> GetKeys() { return keys_;}
 
-  TxnProto* get_txn(){ return txn_; }
+  inline TxnProto* get_txn(){ return txn_; }
 
   void Abort();
   void ApplyChange(bool is_committing);

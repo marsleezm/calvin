@@ -29,7 +29,7 @@ using namespace std;
 using tr1::unordered_map;
 
 
-#define NUM_THREADS 5
+#define NUM_THREADS 2
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 0
 
@@ -44,8 +44,9 @@ using tr1::unordered_map;
 #define FROM_SEQ_DIST 3
 
 #define NORMAL 0
-#define SPECIAL 1
-#define SKIP 2
+#define SKIP 1
+#define SPECIAL 2
+
 
 #define FINISHED 3
 #define WAIT_AND_SENT 4
@@ -55,6 +56,13 @@ using tr1::unordered_map;
 #define IS_COPY 8
 #define NOT_COPY 9
 #define WRITE 10
+
+
+#define SPEC_READ(storage, key, object, read_state, val) \
+read_state = NORMAL; \
+val = storage->ReadValue(district_key, read_state); \
+if (read_state == SPECIAL) return reinterpret_cast<int64>(val); \
+else assert(object.ParseFromString(*val));
 
 // Status code for return values.
 struct Status {

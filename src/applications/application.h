@@ -25,25 +25,19 @@ enum TxnStatus {
   REDO = 2,
 };
 
-enum TxnType {
-  INITIALIZE = 0,
-  SINGLE_PART = 1,
-  MULTI_PART = 2,
-};
-
 class Application {
  public:
   virtual ~Application() {}
 
   // Load generation.
-  virtual TxnProto* NewTxn(int64 txn_id, int txn_type, string args,
-                           Configuration* config) const = 0;
+  virtual void NewTxn(int64 txn_id, int txn_type,
+                           Configuration* config, TxnProto* txn) const = 0;
 
   // Static method to convert a key into an int for an array
   static int CheckpointID(Key key);
 
   // Execute a transaction's application logic given the input 'txn'.
-  virtual int Execute(StorageManager* storage, Rand* rand) const = 0;
+  virtual int Execute(StorageManager* storage) const = 0;
 
   // Storage initialization method.
   virtual void InitializeStorage(LockedVersionedStorage* storage,

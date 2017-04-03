@@ -80,7 +80,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		abort_queues[i] = new AtomicQueue<pair<int64_t, int>>();
 		waiting_queues[i] = new AtomicQueue<pair<int64_t, int>>();
-		rands[i] = new Rand();
 		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
 		pending_txns_[i] = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>();
 		num_suspend[i] = 0;
@@ -132,6 +131,7 @@ Spin(2);
 //		priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns)
 
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
+	LOG("Worker is started!!!");
   int thread =
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->first;
   DeterministicScheduler* scheduler =
@@ -141,7 +141,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	  = scheduler->to_sc_txns_[thread];
   priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns
   	  = scheduler->pending_txns_[thread];
-  Rand* myrand = scheduler->rands[thread];
   AtomicQueue<pair<int64_t, int>>* abort_queue = scheduler->abort_queues[thread];
   AtomicQueue<pair<int64_t, int>>* waiting_queue = scheduler->waiting_queues[thread];
 
@@ -233,7 +232,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  TxnProto* txn = manager->txn_;
 			  LOG(txn->txn_id()<<": got remote msg from" << message.source_node());
 			  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
-				  int result = scheduler->application_->Execute(manager, myrand);
+				  int result = scheduler->application_->Execute(manager);
 				  if (result == WAIT_AND_SENT){
 					  LOG(txn->txn_id()<<" is waiting for remote read again!");
 
@@ -283,7 +282,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 		  else{
 			  StorageManager* manager = active_txns[pend_txn.first];
-			  int result = scheduler->application_->Execute(manager, myrand);
+			  int result = scheduler->application_->Execute(manager);
 			  if (result == WAIT_AND_SENT){
 				  LOG(pend_txn.first<<": wait and sent!!!");
 			  }
@@ -349,7 +348,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		unordered_map<int64_t, StorageManager*>& active_txns){
 	TxnProto* txn = manager->get_txn();
-	int result = application_->Execute(manager, rands[thread]);
+	int result = application_->Execute(manager);
 	if (result == SUSPENDED){
 		LOG(txn->txn_id()<< " suspended");
 		active_txns[txn->txn_id()] = manager;
@@ -411,16 +410,15 @@ DeterministicScheduler::~DeterministicScheduler() {
 	cout << "Already destroyed!" << endl;
 
 	//delete pending_reads_;
-
-	for (int i = 0; i < NUM_THREADS; i++) {
-		delete to_sc_txns_[i];
-		delete pending_txns_[i];
-		delete message_queues[i];
-		delete waiting_queues[i];
-		delete abort_queues[i];
-		delete rands[i];
-		delete to_sc_txns_[i];
-		delete pending_txns_[i];
-	}
+//
+//	for (int i = 0; i < NUM_THREADS; i++) {
+//		delete to_sc_txns_[i];
+//		delete pending_txns_[i];
+//		delete message_queues[i];
+//		delete waiting_queues[i];
+//		delete abort_queues[i];
+//		delete to_sc_txns_[i];
+//		delete pending_txns_[i];
+//	}
 }
 
