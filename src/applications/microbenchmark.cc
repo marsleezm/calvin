@@ -65,7 +65,7 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int64 seed, int part) {
 
   txn->add_readers(part);
   txn->add_writers(part);
-  GetKeys(txn);
+  //GetKeys(txn);
 
   return txn;
 }
@@ -90,7 +90,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int64 seed, int part1, int pa
   txn->add_writers(part1);
   txn->add_writers(part2);
   txn->add_writers(part3);
-  GetKeys(txn);
+  //GetKeys(txn);
 
   return txn;
 }
@@ -153,6 +153,64 @@ void Microbenchmark::GetKeys(TxnProto* txn) const {
 	}
 }
 
+void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
+	set<int> keys;
+
+	if (txn->multipartition() == false){
+		int part = txn->writers(0);
+		int hotkey = part + nparts * (rand->next() % hot_records);
+		txn->add_read_write_set(IntToString(hotkey));
+
+		// Insert set of kRWSetSize - 1 random cold keys from specified partition into
+		// read/write set.
+		set<int> keys;
+		GetRandomKeys(&keys,
+					kRWSetSize - 1,
+					nparts * hot_records,
+					nparts * kDBSize,
+					part, rand);
+		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+			txn->add_read_write_set(IntToString(*it));
+	}else{
+		int part1 = txn->writers(0),
+			part2 = txn->writers(1),
+			part3 = txn->writers(2);
+		int hotkey1 = part1 + nparts * (rand->next() % hot_records);
+		int hotkey2 = part2 + nparts * (rand->next() % hot_records);
+		int hotkey3 = part3 + nparts * (rand->next() % hot_records);
+		txn->add_read_write_set(IntToString(hotkey1));
+
+		// Insert set of kRWSetSize/2 - 1 random cold keys from each partition into
+		// read/write set.
+		set<int> keys;
+		GetRandomKeys(&keys,
+		                3,
+		                nparts * hot_records,
+		                nparts * kDBSize,
+		                part1, rand);
+		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+		  txn->add_read_write_set(IntToString(*it));
+
+		txn->add_read_write_set(IntToString(hotkey2));
+		GetRandomKeys(&keys,
+		                2,
+		                nparts * hot_records,
+		                nparts * kDBSize,
+		                part2, rand);
+		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+		    txn->add_read_write_set(IntToString(*it));
+
+		txn->add_read_write_set(IntToString(hotkey3));
+		GetRandomKeys(&keys,
+		                2,
+		                nparts * hot_records,
+		                nparts * kDBSize,
+		                part3, rand);
+		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+		  txn->add_read_write_set(IntToString(*it));
+	}
+}
+
 
 // The load generator can be called externally to return a transaction proto
 // containing a new type of transaction.
@@ -166,11 +224,14 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	LOG("Executing "<<txn->txn_id()<<", is multipart? "<<(txn->multipartition()));
 	storage->Init();
-//	if (storage->ShouldExec())
-//	{
-//		rand->seed(txn->seed());
-//		GetKeys(txn, rand);
-//	}
+
+	if (storage->ShouldExec())
+	{
+		Rand* rand = new Rand();
+		rand->seed(txn->txn_id());
+		GetKeys(txn, rand);
+		delete rand;
+	}
 
 	for (int i = 0; i < kRWSetSize; i++) {
 		int read_state = NORMAL;

@@ -29,7 +29,7 @@ using namespace std;
 using tr1::unordered_map;
 
 
-#define NUM_THREADS 2
+#define NUM_THREADS 5
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 0
 
