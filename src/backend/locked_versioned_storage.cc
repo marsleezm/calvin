@@ -40,12 +40,12 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 		entry->pend_list->push_back(PendingReadEntry(txn_id, value_bit, abort_bit, num_aborted, pend_queue, abort_queue));
 		pthread_mutex_unlock(&(entry->mutex_));
 		// Should return BLOCKED! How to denote that?
-		LOG(txn_id<<" reading suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"], num aborted is "<<num_aborted);
+		LOCKLOG(txn_id<<" reading suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"], num aborted is "<<num_aborted);
 		return ValuePair(SUSPENDED, NULL);
 	}
 	else{
 		ValuePair value_pair;
-		LOG(txn_id<<" trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
+		LOCKLOG(txn_id<<" trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
 		for (DataNode* list = entry->head; list; list = list->next) {
 			if (list->txn_id <= txn_id) {
 				// Read the version and
@@ -53,8 +53,8 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 				// Clean up any stable version, only leave the oldest one
 				int max_ts = Sequencer::max_commit_ts;
 				if (list->txn_id <= max_ts){
-					LOCKLOG(txn_id<<" trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
-					LOCKLOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
+					//LOCKLOG(txn_id<<" trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
+					//LOCKLOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
 					value_pair.first = NOT_COPY;
 					value_pair.second = list->value;

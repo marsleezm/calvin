@@ -32,6 +32,7 @@
 #include "common/configuration.h"
 #include "proto/txn.pb.h"
 #include "proto/message.pb.h"
+#include "proto/tpcc_args.pb.h"
 
 using std::vector;
 using std::tr1::unordered_map;
@@ -65,35 +66,22 @@ class StorageManager {
   //Value* ReadObject(const Key& key);
   Value* SkipOrRead(const Key& key, int& read_state);
   Value* ReadValue(const Key& key, int& read_state);
+  Value* JustRead(const Key& key, int& read_state);
+
+  // Some transactions may have this kind of behavior: read a value, if some condition is satisfied, update the
+  // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,
+  // previous operations will not be triggered again and such the exec_counter will be wrong.
+
   inline bool LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-//    	if(write_set_.count(key) == 0){
-//    		if(actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
-//				new_pointer = new Value(*read_set_[key].second);
-//				read_set_[key].second = new_pointer;
-//				return true;
-//			}
-//    	}
 		if(actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
-			//If this object points to
-//	    	write_set.insert(key);
-//			if(read_set_[key].first == NOT_COPY){
-//				read_set_[key].first = IS_COPY;
-//				LOCKLOG(txn_->txn_id()<<" trying to create a copy for value "<<reinterpret_cast<int64>(objects_[key].second));
-//				new_pointer = new Value(*read_set_[key].second);
-//				read_set_[key].second = new_pointer;
-//			}
-//			else
-//				new_pointer = read_set_[key].second;
 			if(read_set_[key].first == NOT_COPY){
+				read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
 				LOCKLOG(txn_->txn_id()<<" trying to create a copy for value "<<reinterpret_cast<int64>(read_set_[key].second));
-				read_set_[key].second = new Value(*read_set_[key].second);
 			}
 			read_set_[key].first = WRITE;
 			new_pointer = read_set_[key].second;
-			//new_pointer = new Value(*read_set_[key].second);
-			//read_set_[key].second = new_pointer;
 			return true;
 		}
 		else{
@@ -141,6 +129,16 @@ class StorageManager {
 	}
   }
 
+  inline bool ShouldRead()
+  {
+	  if (exec_counter_ < max_counter_){
+		  ++exec_counter_;
+		  return false;
+	  }
+	  else
+		  return true;
+  }
+
   inline bool DeleteObject(const Key& key) {
 	  // Delete object from storage if applicable.
 	  if (configuration_->LookupPartition(key) == configuration_->this_node_id)
@@ -153,6 +151,7 @@ class StorageManager {
   //vector<string> GetKeys() { return keys_;}
 
   inline TxnProto* get_txn(){ return txn_; }
+  inline TPCCArgs* get_args() { return tpcc_args;}
 
   void Abort();
   void ApplyChange(bool is_committing);
@@ -202,7 +201,9 @@ class StorageManager {
 
   AtomicQueue<pair<int64_t, int>>* abort_queue_;
   AtomicQueue<pair<int64_t, int>>* pend_queue_;
-  //std::set<Key> write_set;
+  vector<pair<int32, int32>> multi_skip_list_;
+
+  TPCCArgs* tpcc_args;
 
  public:
   bool spec_committed_;

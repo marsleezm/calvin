@@ -31,7 +31,7 @@ using tr1::unordered_map;
 
 #define NUM_THREADS 5
 #define NO_LOCK INT_MAX
-#define GC_THRESHOLD 0
+#define GC_THRESHOLD 3
 
 #define ASSERTS_ON true
 
@@ -58,11 +58,20 @@ using tr1::unordered_map;
 #define WRITE 10
 
 
-#define SPEC_READ(storage, key, object, read_state, val) \
+#define FULL_READ(storage, key, object, read_state, val) \
 read_state = NORMAL; \
-val = storage->ReadValue(district_key, read_state); \
+val = storage->ReadValue(key, read_state); \
 if (read_state == SPECIAL) return reinterpret_cast<int64>(val); \
 else assert(object.ParseFromString(*val));
+
+// It happens after a transaction resumes from suspension; we know that
+// the value of the key will not be needed anymore, so no need do parse it
+#define PART_READ(storage, key, object, read_state, val) \
+read_state = NORMAL; \
+val = storage->ReadValue(key, read_state); \
+if (read_state == SPECIAL) return reinterpret_cast<int64>(val); \
+else if(read_state == NORMAL) assert(object.ParseFromString(*val));
+
 
 // Status code for return values.
 struct Status {

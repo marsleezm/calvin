@@ -110,20 +110,27 @@ class TClient : public Client {
 		(*txn)->set_multipartition(false);
 
     // New order txn
-   //int random_txn_type = rand() % 100;
-    // New order txn
-   tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-//    if (random_txn_type < 45)  {
-//      tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-//    } else if(random_txn_type < 88) {
-//      tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-//    } else if(random_txn_type < 92) {
-//      tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
-//    } else if(random_txn_type < 96){
-//      tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
-//    } else {
-//      tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
-//    }
+    int random_txn_type = rand() % 100;
+//	if (random_txn_type < 45)  {
+//	  tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+//	} else if(random_txn_type < 88) {
+//	  tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+//	} else if(random_txn_type < 92) {
+//	  tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+//	} else{
+//	  tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+//	}
+    if (random_txn_type < 45)  {
+      tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+    } else if(random_txn_type < 88) {
+      tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+    } else if(random_txn_type < 92) {
+      tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+    } else if(random_txn_type < 96){
+      tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
+    } else {
+      tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+    }
 
   }
 
@@ -136,6 +143,16 @@ class TClient : public Client {
 	else
 		(*txn)->set_multipartition(false);
 
+//    int random_txn_type = rand() % 100;
+//	if (random_txn_type < 45)  {
+//	  tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+//	} else if(random_txn_type < 88) {
+//	  tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+//	} else if(random_txn_type < 92) {
+//	  tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+//	} else{
+//	  tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+//	}
     // New order txn
    int random_txn_type = rand() % 100;
     // New order txn
@@ -162,40 +179,40 @@ void stop(int sig) {
 // #ifdef PAXOS
 //  StopZookeeper(ZOOKEEPER_CONF);
 // #endif
-  exit(sig);
+	DeterministicScheduler::terminate();
+	exit(sig);
 }
 
 int main(int argc, char** argv) {
-  // TODO(alex): Better arg checking.
-  if (argc < 4) {
-    fprintf(stderr, "Usage: %s <node-id> <m[icro]|t[pcc]> <percent_mp>\n",
+	// TODO(alex): Better arg checking.
+	if (argc < 4) {
+		fprintf(stderr, "Usage: %s <node-id> <m[icro]|t[pcc]> <percent_mp>\n",
             argv[0]);
-    exit(1);
-  }
-  //bool useFetching = false;
-  //if (argc > 4 && argv[4][0] == 'f')
-  //  useFetching = true;
-  // Catch ^C and kill signals and exit gracefully (for profiling).
-  signal(SIGINT, &stop);
-  signal(SIGTERM, &stop);
+		exit(1);
+	}
 
-  // Build this node's configuration object.
-  Configuration config(StringToInt(argv[1]), "deploy-run.conf");
+	signal(SIGINT, &stop);
+	signal(SIGTERM, &stop);
 
-  // Build connection context and start multiplexer thread running.
-  ConnectionMultiplexer multiplexer(&config);
+	// Build this node's configuration object.
+	Configuration config(StringToInt(argv[1]), "deploy-run.conf");
 
-  // Artificial loadgen clients.
-  Client* client = (argv[2][0] == 'm') ?
-      reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3]))) :
-      reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3])));
+	// Build connection context and start multiplexer thread running.
+	ConnectionMultiplexer multiplexer(&config);
 
-// #ifdef PAXOS
-//  StartZookeeper(ZOOKEEPER_CONF);
-// #endif
-pthread_mutex_init(&mutex_, NULL);
-pthread_mutex_init(&mutex_for_item, NULL);
-involed_customers = new vector<Key>;
+	// Artificial loadgen clients.
+	Client* client = (argv[2][0] == 'm') ?
+			reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3]))) :
+			reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3])));
+
+	// #ifdef PAXOS
+	//  StartZookeeper(ZOOKEEPER_CONF);
+	// #endif
+  	freopen("output.txt","w",stdout);
+	pthread_mutex_init(&mutex_, NULL);
+	pthread_mutex_init(&mutex_for_item, NULL);
+	involed_customers = new vector<Key>;
+
 
 	LockedVersionedStorage* storage = new LockedVersionedStorage();
 
@@ -235,6 +252,9 @@ involed_customers = new vector<Key>;
 	                                     storage,
 	  									 sequencer.GetTxnsQueue(), client,
 	                                     new Microbenchmark(config.all_nodes.size(), HOT), queue_mode);
+		Spin(180);
+		DeterministicScheduler::terminate();
+		return 0;
 	}
 	else {
 		DeterministicScheduler scheduler(&config,
@@ -242,11 +262,11 @@ involed_customers = new vector<Key>;
                                      storage,
 									 sequencer.GetTxnsQueue(), client,
                                      new TPCC(), queue_mode);
+		Spin(180);
+		DeterministicScheduler::terminate();
+		return 0;
 	}
 
 
-	Spin(180);
-	DeterministicScheduler::terminate();
-	return 0;
 }
 

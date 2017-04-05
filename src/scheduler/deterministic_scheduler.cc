@@ -107,7 +107,6 @@ Spin(2);
                    reinterpret_cast<void*>(
                    new pair<int, DeterministicScheduler*>(i, this)));
   }
-
 }
 
 //void UnfetchAll(Storage* storage, TxnProto* txn) {
@@ -341,7 +340,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //		  Spin(0.05);
 //	  }
   }
-
   return NULL;
 }
 
@@ -409,16 +407,14 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 DeterministicScheduler::~DeterministicScheduler() {
 	cout << "Already destroyed!" << endl;
 
-	//delete pending_reads_;
-//
-//	for (int i = 0; i < NUM_THREADS; i++) {
-//		delete to_sc_txns_[i];
-//		delete pending_txns_[i];
-//		delete message_queues[i];
-//		delete waiting_queues[i];
-//		delete abort_queues[i];
-//		delete to_sc_txns_[i];
-//		delete pending_txns_[i];
-//	}
+	for (int i = 0; i < NUM_THREADS; i++) {
+		delete to_sc_txns_[i];
+		delete pending_txns_[i];
+		delete message_queues[i];
+		delete waiting_queues[i];
+		delete abort_queues[i];
+		delete to_sc_txns_[i];
+		delete pending_txns_[i];
+	}
 }
 

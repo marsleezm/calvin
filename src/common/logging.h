@@ -58,15 +58,15 @@ void log(const char *file,int line,const LogData<List> &data)
 	pthread_mutex_lock(&stdout_mutex);
 	//std::cout <<  std::this_thread::get_id() << "--"<< file << " (" << line << "): ";
 	//std::cout << file << " (" << line << "): ";
-	std::cout << line << "): ";
+	std::cout << std::this_thread::get_id() << "--" << line << "): ";
 	printList(std::cout,data.list);
 	//std::cout << "\n";
 	std::cout<< std::endl;
 	pthread_mutex_unlock(&stdout_mutex);
 }
 
-//#define ALLLOGGING
-//#define DOASSERT
+//#define LOCKLOGGING
+#define DOASSERT
 
 #ifdef DOASSERT
 #define ASSERT(x) (assert(x))
@@ -81,7 +81,7 @@ void log(const char *file,int line,const LogData<List> &data)
 
 #else
 
-#ifdef LOCKLOGING
+#ifdef LOCKLOGGING
 #define LOG(x)
 #define LOCKLOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
 #define PLOG(x)
