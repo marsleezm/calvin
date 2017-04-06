@@ -6,6 +6,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 
 #include "applications/microbenchmark.h"
 #include "applications/tpcc.h"
@@ -54,7 +55,7 @@ class MClient : public Client {
       do {
         other2 = rand() % config_->all_nodes.size();
       } while (other2 == config_->this_node_id || other2 == other1);
-      
+
 
       *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
     } else {
@@ -88,23 +89,35 @@ class TClient : public Client {
     args.SerializeToString(&args_string);
 
     // New order txn
-   int random_txn_type = rand() % 100;
-    // New order txn
-    if (random_txn_type < 45)  {
-      *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
-    } else if(random_txn_type < 88) {
-      *txn = tpcc.NewTxn(txn_id, TPCC::PAYMENT, args_string, config_);
-    } else if(random_txn_type < 92) {
-      *txn = tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, args_string, config_);
-      args.set_multipartition(false);
-    } else if(random_txn_type < 96){
-      *txn = tpcc.NewTxn(txn_id, TPCC::DELIVERY, args_string, config_);
-      args.set_multipartition(false);
-    } else {
-      *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
-      args.set_multipartition(false);
-    }
 
+    int random_txn_type = rand() % 100;
+     // New order txn
+	if (random_txn_type < 45)  {
+	  *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
+	} else if(random_txn_type < 88) {
+	  *txn = tpcc.NewTxn(txn_id, TPCC::PAYMENT, args_string, config_);
+	}  else {
+	  *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
+	  args.set_multipartition(false);
+	}
+
+//   int random_txn_type = rand() % 100;
+//    // New order txn
+//    if (random_txn_type < 45)  {
+//      *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
+//    } else if(random_txn_type < 88) {
+//      *txn = tpcc.NewTxn(txn_id, TPCC::PAYMENT, args_string, config_);
+//    } else if(random_txn_type < 92) {
+//      *txn = tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, args_string, config_);
+//      args.set_multipartition(false);
+//    } else if(random_txn_type < 96){
+//      *txn = tpcc.NewTxn(txn_id, TPCC::DELIVERY, args_string, config_);
+//      args.set_multipartition(false);
+//    } else {
+//      *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
+//      args.set_multipartition(false);
+//    }
+//    *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
   }
 
  private:
@@ -140,10 +153,8 @@ int main(int argc, char** argv) {
   ConnectionMultiplexer multiplexer(&config);
 
   // Artificial loadgen clients.
-//  Client* client = (argv[2][0] == 't') ?
-//		  reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3]))) :
-//		  reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3])));
-  Client* client =
+  Client* client = (argv[2][0] == 't') ?
+		  reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3]))) :
 		  reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3])));
 
 // #ifdef PAXOS
@@ -159,36 +170,47 @@ involed_customers = new vector<Key>;
   } else {
     storage = FetchingStorage::BuildStorage();
   }
-storage->Initmutex();
+  storage->Initmutex();
   if (argv[2][0] == 't') {
+	  std::cout << "TPC-C benchmark" << std::endl;
 	  TPCC().InitializeStorage(storage, &config);
-  } else {
+  } else if((argv[2][0] == 'm')){
+	  std::cout << "Micro benchmark" << std::endl;
 	  Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
+  }
+
+  int queue_mode;
+  if (argv[2][1] == 'n') {
+	queue_mode = NORMAL_QUEUE;
+	std::cout << "Normal queue mode" << std::endl;
+  } else if(argv[2][1] == 's'){
+	queue_mode = SELF_QUEUE;
+	std::cout << "Self-generation queue mode" << std::endl;
+
+  } else if(argv[2][1] == 'd'){
+	  queue_mode = DIRECT_QUEUE;
+	  std::cout << "Direct queue by sequencer mode" << std::endl;
+
   }
 
   // Initialize sequencer component and start sequencer thread running.
   Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), client,
-                      storage);
+                      storage, queue_mode);
 
   // Run scheduler in main thread.
-  if (argv[2][0] == 'm') {
+  if (argv[2][0] == 't') {
+	  DeterministicScheduler scheduler(&config,
+	                                       multiplexer.NewConnection("scheduler_"),
+	                                       storage,
+	                                       new TPCC(), sequencer.GetTxnsQueue(), client, queue_mode);
+  }
+  else{
     DeterministicScheduler scheduler(&config,
                                      multiplexer.NewConnection("scheduler_"),
                                      storage,
-                                     new Microbenchmark(config.all_nodes.size(), HOT));
-  }
-  else if (argv[2][0] == 's') {
-	    DeterministicScheduler scheduler(&config,
-	                                     multiplexer.NewConnection("scheduler_"),
-	                                     storage,
-	                                     new Microbenchmark(config.all_nodes.size(), HOT),
-										 client);
-  }
-  else {
-    DeterministicScheduler scheduler(&config,
-                                     multiplexer.NewConnection("scheduler_"),
-                                     storage,
-                                     new TPCC());
+                                     new Microbenchmark(config.all_nodes.size(), HOT),
+									 sequencer.GetTxnsQueue(),
+									 client, queue_mode);
   }
 
   Spin(180);

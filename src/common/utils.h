@@ -24,6 +24,10 @@ using std::vector;
 using std::tr1::unordered_map;
 //using std::unordered_map;
 
+#define NORMAL_QUEUE 1
+#define SELF_QUEUE 2
+#define DIRECT_QUEUE 3
+
 #define ASSERTS_ON true
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)

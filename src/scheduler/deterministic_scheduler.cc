@@ -61,19 +61,12 @@ TxnProto* DeterministicScheduler::GetTxnPtr(socket_t* socket,
 DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                Connection* batch_connection,
                                                Storage* storage,
-                                               const Application* application)
-    :DeterministicScheduler(conf, batch_connection, storage, application, NULL)
-{
-
-}
-
-DeterministicScheduler::DeterministicScheduler(Configuration* conf,
-                                               Connection* batch_connection,
-                                               Storage* storage,
                                                const Application* application,
-											   Client* client)
+											   AtomicQueue<TxnProto*>* input_queue,
+											   Client* client,
+											   int queue_mode)
     : configuration_(conf), batch_connection_(batch_connection),
-      storage_(storage), application_(application), client_(client) {
+      storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode) {
       ready_txns_ = new std::deque<TxnProto*>();
   lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
   
@@ -94,6 +87,7 @@ Spin(2);
   
 CPU_ZERO(&cpuset);
 CPU_SET(4, &cpuset);
+std::cout << "Central locking thread starts at 4"<<std::endl;
   pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
   pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
                  reinterpret_cast<void*>(this));
@@ -105,7 +99,6 @@ CPU_SET(4, &cpuset);
   for (int i = 0; i < NUM_THREADS; i++) {
     string channel("scheduler");
     channel.append(IntToString(i));
-    std::cout <<"Initializing worker thread #"  << i << std::endl;
     thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
 	pthread_attr_t attr;
@@ -113,6 +106,7 @@ CPU_SET(4, &cpuset);
 	CPU_ZERO(&cpuset);
 	//if (i == 0 || i == 1)
 	CPU_SET(i, &cpuset);
+	std::cout << "Worker thread #"<<i<<" starts at core "<<i<<std::endl;
 	//else
 	//CPU_SET(i+2, &cpuset);
     pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
@@ -172,11 +166,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
       // No remote read result found, start on next txn if one is waiting.
      TxnProto* txn;
      bool got_it;
-     if (scheduler->client_!=NULL){
+     if (scheduler->queue_mode_ == SELF_QUEUE){
 		  got_it = true;
 		  scheduler->client_->GetTxn(&txn, counter++);
-		  txn->add_readers(0);
-		  txn->add_writers(0);
+		  scheduler->add_readers_writers(txn);
      } else{
     	 got_it = scheduler->txns_queue->Pop(&txn);
      }
@@ -195,7 +188,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
             // Respond to scheduler;
             //scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
-            if (scheduler->client_== NULL){
+            if (scheduler->queue_mode_!= SELF_QUEUE){
             	scheduler->done_queue->Push(txn);
             }
           } else {
@@ -207,7 +200,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
       }
     }
 
-    if (scheduler->client_!=NULL){
+    if (scheduler->queue_mode_ == SELF_QUEUE){
     	if (counter == 100000){
     		now_time = GetTime();
     		std::cout << "Throughput is "<< counter / (now_time-old_time) << " txns/sec"<< now_time << old_time<< std::endl;
@@ -268,10 +261,12 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
       executing_txns--;
 
       if(done_txn->writers_size() == 0 || rand() % done_txn->writers_size() == 0)
-        txns++;       
+        txns++;
+      //else
+    	//  std::cout<<"WTF, not true? Writer size is "<<done_txn->writers_size()<<std::endl;
       delete done_txn;
 
-    } else {
+    } else if (scheduler->queue_mode_ == NORMAL_QUEUE){
       // Have we run out of txns in our batch? Let's get some new ones.
       if (batch_message == NULL) {
         batch_message = GetBatch(batch_number, scheduler->batch_connection_);
@@ -300,6 +295,20 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
         }
 
       }
+    }
+    else if (scheduler->queue_mode_ == DIRECT_QUEUE){
+    	if (executing_txns + pending_txns < 2000){
+			for (int i = 0; i < 100; i++) {
+				TxnProto* txn;
+				if(scheduler->to_lock_txns->Empty())
+					break;
+				else{
+					scheduler->to_lock_txns->Pop(&txn);
+					scheduler->lock_manager_->Lock(txn);
+					pending_txns++;
+				}
+			}
+    	}
     }
 
     // Start executing any and all ready transactions to get them off our plate

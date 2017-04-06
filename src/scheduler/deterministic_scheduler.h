@@ -19,8 +19,10 @@
 #include "common/utils.h"
 #include "proto/txn.pb.h"
 #include "proto/message.pb.h"
+#include "common/configuration.h"
 
 using std::deque;
+using std::set;
 
 namespace zmq {
 class socket_t;
@@ -28,22 +30,20 @@ class message_t;
 }
 using zmq::socket_t;
 
-class Configuration;
+//class Configuration;
 class Connection;
 class DeterministicLockManager;
 class Storage;
 class TxnProto;
 class Client;
 
-#define NUM_THREADS 1 
+#define NUM_THREADS 4
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
  public:
-  DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-                         Storage* storage, const Application* application);
-  DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-                         Storage* storage, const Application* application, Client* client);
+  DeterministicScheduler(Configuration* conf, Connection* batch_connection, Storage* storage,
+		  const Application* application, AtomicQueue<TxnProto*>* input_queue, Client* client, int queue_mode);
   virtual ~DeterministicScheduler();
 
  private:
@@ -54,6 +54,23 @@ class DeterministicScheduler : public Scheduler {
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
   TxnProto* GetTxnPtr(socket_t* socket, zmq::message_t* msg);
+
+  inline void add_readers_writers(TxnProto* txn){
+  	  set<int> readers, writers;
+        for (int i = 0; i < txn->read_set_size(); i++)
+          readers.insert(configuration_->LookupPartition(txn->read_set(i)));
+        for (int i = 0; i < txn->write_set_size(); i++)
+          writers.insert(configuration_->LookupPartition(txn->write_set(i)));
+        for (int i = 0; i < txn->read_write_set_size(); i++) {
+          writers.insert(configuration_->LookupPartition(txn->read_write_set(i)));
+          readers.insert(configuration_->LookupPartition(txn->read_write_set(i)));
+        }
+
+        for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
+          txn->add_readers(*it);
+        for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
+          txn->add_writers(*it);
+    }
 
   // Configuration specifying node & system settings.
   Configuration* configuration_;
@@ -71,6 +88,8 @@ class DeterministicScheduler : public Scheduler {
   
   // Application currently being run.
   const Application* application_;
+
+  AtomicQueue<TxnProto*>* to_lock_txns;
 
   // Client
   Client* client_;
@@ -95,5 +114,7 @@ class DeterministicScheduler : public Scheduler {
   
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
   
+  int queue_mode_;
+
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

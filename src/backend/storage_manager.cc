@@ -86,7 +86,7 @@ bool StorageManager::ReadyToExecute() {
 }
 
 StorageManager::~StorageManager() {
-	delete txn_;
+  //delete txn_;
   for (vector<Value*>::iterator it = remote_reads_.begin();
        it != remote_reads_.end(); ++it) {
     delete *it;

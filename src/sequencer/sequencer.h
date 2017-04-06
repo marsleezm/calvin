@@ -11,12 +11,16 @@
 #include <string>
 #include <queue>
 #include "pthread.h"
+#include "common/utils.h"
+#include "proto/txn.pb.h"
+#include "common/configuration.h"
 
 //#define PAXOS
 //#define PREFETCHING
 #define COLD_CUTOFF 990000
 
-#define MAX_BATCH_SIZE 56
+//#define MAX_BATCH_SIZE 56
+#define MAX_BATCH_SIZE 150
 
 #define SAMPLES 100000
 #define SAMPLE_RATE 999
@@ -56,10 +60,12 @@ class Sequencer {
   // The constructor creates background threads and starts the Sequencer's main
   // loops running.
   Sequencer(Configuration* conf, Connection* connection, Client* client,
-            Storage* storage);
+            Storage* storage, int queue_mode);
 
   // Halts the main loops.
   ~Sequencer();
+
+  AtomicQueue<TxnProto*>* GetTxnsQueue() { return txns_queue_;}
 
  private:
   // Sequencer's main loops:
@@ -76,14 +82,33 @@ class Sequencer {
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
   void RunReader();
+  void RunLoader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerReader(void *arg);
+  static void* RunSequencerLoader(void *arg);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
+
+  inline void add_readers_writers(TxnProto* txn){
+  	  set<int> readers, writers;
+        for (int i = 0; i < txn->read_set_size(); i++)
+          readers.insert(configuration_->LookupPartition(txn->read_set(i)));
+        for (int i = 0; i < txn->write_set_size(); i++)
+          writers.insert(configuration_->LookupPartition(txn->write_set(i)));
+        for (int i = 0; i < txn->read_write_set_size(); i++) {
+          writers.insert(configuration_->LookupPartition(txn->read_write_set(i)));
+          readers.insert(configuration_->LookupPartition(txn->read_write_set(i)));
+        }
+
+        for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
+          txn->add_readers(*it);
+        for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
+          txn->add_writers(*it);
+    }
 
   // Length of time spent collecting client requests before they are ordered,
   // batched, and sent out to schedulers.
@@ -112,5 +137,11 @@ class Sequencer {
   // Queue for sending batches from writer to reader if not in paxos mode.
   queue<string> batch_queue_;
   pthread_mutex_t mutex_;
+
+  int queue_mode_;
+
+  int fetched_txn_num_;
+
+  AtomicQueue<TxnProto*>* txns_queue_;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

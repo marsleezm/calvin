@@ -15,6 +15,7 @@
 #include "common/utils.h"
 #include "proto/tpcc.pb.h"
 #include "proto/tpcc_args.pb.h"
+#include <iostream>
 
 using std::string;
 
@@ -305,7 +306,7 @@ TxnProto* TPCC::NewTxn(int64 txn_id, int txn_type, string args,
         snprintf(district_key, sizeof(district_key), "w%dd%d",warehouse_id, district_id);
 
        if(latest_order_id_for_district.count(district_key) == 0) {
-         txn->set_txn_id(-1);
+              txn->set_txn_id(-1);
          break;
        } 
        
@@ -690,6 +691,7 @@ int TPCC::PaymentTransaction(TxnProto* txn, StorageManager* storage) const {
              customer->id().c_str(), customer->warehouse_id().c_str(),
              customer->district_id().c_str(), district->id().c_str(),
              warehouse->id().c_str(), amount, customer->data().c_str());
+    customer->set_data(new_information);
   }
 
   // We write the customer to disk
@@ -727,8 +729,13 @@ int TPCC::PaymentTransaction(TxnProto* txn, StorageManager* storage) const {
 
 
 int TPCC::OrderStatusTransaction(TxnProto* txn, StorageManager* storage) const {
+  if(txn->txn_id() == -1){
+	  //std::cout<<"Actual failed"<<std::endl;
+	  return SUCCESS;
+  }
   TPCCArgs* tpcc_args = new TPCCArgs();
   tpcc_args->ParseFromString(txn->arg());
+
   int order_line_count = tpcc_args->order_line_count(0);
 
   Value* warehouse_value;
@@ -783,6 +790,12 @@ int TPCC::StockLevelTransaction(TxnProto* txn, StorageManager* storage) const {
   TPCCArgs* tpcc_args = new TPCCArgs();
   tpcc_args->ParseFromString(txn->arg());
   int threshold = tpcc_args->threshold();
+
+  if(txn->read_set_size() == 0) {
+	  //std::cout<<"Actual failed"<<std::endl;
+	  delete tpcc_args;
+	  return SUCCESS;
+  }
  
   Value* warehouse_value;
   Warehouse* warehouse = new Warehouse();
@@ -831,6 +844,7 @@ int TPCC::DeliveryTransaction(TxnProto* txn, StorageManager* storage) const {
 
   if(txn->read_set_size() == 1) {
     delete warehouse; 
+    //std::cout<<"Actual failed"<<std::endl;
     return SUCCESS;
   }
 
@@ -878,7 +892,8 @@ int TPCC::DeliveryTransaction(TxnProto* txn, StorageManager* storage) const {
     assert(customer->ParseFromString(*customer_value));
     customer->set_balance(customer->balance() + total_amount);
     customer->set_delivery_count(customer->delivery_count() + 1);  
-   
+    assert(customer->SerializeToString(customer_value));
+
     delete district;
     delete order;
     delete customer;

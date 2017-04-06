@@ -58,6 +58,7 @@ CPU_SET(5, &cpuset);
 //CPU_SET(5, &cpuset);
 //CPU_SET(6, &cpuset);
 //CPU_SET(7, &cpuset);
+std::cout << "Connection thread starts at core 5"<<std::endl;
 pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 

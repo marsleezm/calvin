@@ -51,45 +51,69 @@ void* Sequencer::RunSequencerReader(void *arg) {
   return NULL;
 }
 
+void* Sequencer::RunSequencerLoader(void *arg) {
+  reinterpret_cast<Sequencer*>(arg)->RunLoader();
+  return NULL;
+}
+
 Sequencer::Sequencer(Configuration* conf, Connection* connection,
-                     Client* client, Storage* storage)
+                     Client* client, Storage* storage, int queue_mode)
     : epoch_duration_(0.01), configuration_(conf), connection_(connection),
-      client_(client), storage_(storage), deconstructor_invoked_(false) {
+      client_(client), storage_(storage), deconstructor_invoked_(false), queue_mode_(queue_mode), fetched_txn_num_(0) {
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
 
 cpu_set_t cpuset;
-pthread_attr_t attr_writer;
-pthread_attr_init(&attr_writer);
-//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-CPU_ZERO(&cpuset);
-//CPU_SET(4, &cpuset);
-//CPU_SET(5, &cpuset);
-CPU_SET(6, &cpuset);
-//CPU_SET(7, &cpuset);
-pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
+if(queue_mode == DIRECT_QUEUE){
+	CPU_ZERO(&cpuset);
+	CPU_SET(7, &cpuset);
+	std::cout << "Sequencer reader starts at core 7"<<std::endl;
+	pthread_attr_t simple_loader;
+	pthread_attr_init(&simple_loader);
+	pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
+
+	pthread_create(&reader_thread_, &simple_loader, RunSequencerLoader,
+		  reinterpret_cast<void*>(this));
+	txns_queue_ = new AtomicQueue<TxnProto*>();
+}
+else{
+	pthread_attr_t attr_writer;
+	pthread_attr_init(&attr_writer);
+	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+	CPU_ZERO(&cpuset);
+	//CPU_SET(4, &cpuset);
+	//CPU_SET(5, &cpuset);
+	CPU_SET(6, &cpuset);
+	//CPU_SET(7, &cpuset);
+	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
+	std::cout << "Sequencer writer starts at core 6"<<std::endl;
 
 
 
-  pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
-      reinterpret_cast<void*>(this));
+	  pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
+		  reinterpret_cast<void*>(this));
 
-CPU_ZERO(&cpuset);
-//CPU_SET(4, &cpuset);
-//CPU_SET(5, &cpuset);
-//CPU_SET(6, &cpuset);
-CPU_SET(7, &cpuset);
-pthread_attr_t attr_reader;
-pthread_attr_init(&attr_reader);
-pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
+	CPU_ZERO(&cpuset);
+	//CPU_SET(4, &cpuset);
+	//CPU_SET(5, &cpuset);
+	//CPU_SET(6, &cpuset);
+	CPU_SET(7, &cpuset);
+	pthread_attr_t attr_reader;
+	pthread_attr_init(&attr_reader);
+	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
+	std::cout << "Sequencer reader starts at core 7"<<std::endl;
 
-  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
-      reinterpret_cast<void*>(this));
+	  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
+		  reinterpret_cast<void*>(this));
+	}
 }
 
 Sequencer::~Sequencer() {
   deconstructor_invoked_ = true;
+  if (queue_mode_ == DIRECT_QUEUE)
+	  delete txns_queue_;
   pthread_join(writer_thread_, NULL);
   pthread_join(reader_thread_, NULL);
 }
@@ -156,7 +180,6 @@ void Sequencer::RunWriter() {
       synchronization_counter++;
     }
   }
-  std::cout << "Starting sequencer.\n" << std::flush;
 
   // Set up batch messages for each system node.
   MessageProto batch;
@@ -362,3 +385,26 @@ void Sequencer::RunReader() {
   }
   Spin(1);
 }
+
+void Sequencer::RunLoader(){
+  Spin(1);
+
+  while (!deconstructor_invoked_) {
+	  assert(queue_mode_ == DIRECT_QUEUE);
+	  if (txns_queue_->Size() < 1000){
+		  for (int i = 0; i < 1000; i++)
+		  {
+			  TxnProto* txn;
+			  srand(fetched_txn_num_);
+			  client_->GetTxn(&txn, fetched_txn_num_);
+			  add_readers_writers(txn);
+			  txns_queue_->Push(txn);
+			  ++fetched_txn_num_;
+		  }
+	  }
+  }
+  Spin(1);
+}
+
+
+
