@@ -222,7 +222,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 	TxnProto* txn = storage->get_txn();
-	LOG("Executing "<<txn->txn_id()<<", is multipart? "<<(txn->multipartition()));
+	LOG(txn->txn_id(), "Executing, is multipart? "<<(txn->multipartition()));
 	storage->Init();
 
 	if (storage->ShouldExec())

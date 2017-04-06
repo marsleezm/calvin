@@ -53,19 +53,31 @@ void printList(std::ostream &os,const Pair<Begin,Last> &data)
 }
 
 template <typename List>
-void log(const char *file,int line,const LogData<List> &data)
+inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data)
 {
-	pthread_mutex_lock(&stdout_mutex);
+	//pthread_mutex_lock(&stdout_mutex);
 	//std::cout <<  std::this_thread::get_id() << "--"<< file << " (" << line << "): ";
 	//std::cout << file << " (" << line << "): ";
-	std::cout << std::this_thread::get_id() << "--" << line << "): ";
-	printList(std::cout,data.list);
-	//std::cout << "\n";
-	std::cout<< std::endl;
-	pthread_mutex_unlock(&stdout_mutex);
+//	if(tx_id == -1 ){
+//		std::cout << std::this_thread::get_id() << "--" << line << "): ";
+//		printList(std::cout,data.list);
+//		//std::cout << "\n";
+//		std::cout<< std::endl;
+//	}
+//	else
+		//if( tx_id == 113364 || tx_id == 113362 || tx_id == 113360){
+		pthread_mutex_lock(&stdout_mutex);
+		std::cout << std::this_thread::get_id() << "--" << line << "): "<<tx_id;
+		printList(std::cout,data.list);
+		//std::cout << "\n";
+		std::cout<< std::endl;
+		pthread_mutex_unlock(&stdout_mutex);
+	//}
+	//pthread_mutex_unlock(&stdout_mutex);
 }
 
 //#define LOCKLOGGING
+//#define ALLLOGGING
 #define DOASSERT
 
 #ifdef DOASSERT
@@ -75,19 +87,19 @@ void log(const char *file,int line,const LogData<List> &data)
 #endif
 
 #ifdef ALLLOGGING
-#define LOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
-#define PLOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
-#define LOCKLOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
+#define LOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
+#define PLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
+#define LOCKLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
 
 #else
 
 #ifdef LOCKLOGGING
-#define LOG(x)
-#define LOCKLOG(x) (log(__FILE__,__LINE__,LogData<None>() << x))
+#define LOG(txid, x)
+#define LOCKLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
 #define PLOG(x)
 #else
-#define LOG(x)
-#define LOCKLOG(x)
+#define LOG(txid, x)
+#define LOCKLOG(txid, x)
 #define PLOG(x)
 #endif
 #endif

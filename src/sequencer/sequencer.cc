@@ -20,6 +20,7 @@
 #include "common/utils.h"
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
+#include "scheduler/deterministic_scheduler.h"
 #ifdef PAXOS
 # include "paxos/paxos.h"
 #endif
@@ -430,7 +431,18 @@ void Sequencer::RunLoader(){
 			//<< test<< " for drop speed , "
 			//<< executing_txns << " executing, "
 			<< num_pend_txns_ << " pending\n" << std::flush;
-
+	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
+		  for(int i = 0; i<NUM_THREADS; ++i){
+			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
+				  <<", num committed txn is "<<Sequencer::num_lc_txns_
+				  <<", waiting queue is"<<std::endl;
+			  for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
+				  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
+				  std::cout<<t.first<<",";
+			  }
+			  std::cout<<"\n";
+		  }
+	  }
 
 	  // Reset txn count.
 	  time = now_time;

@@ -56,7 +56,7 @@ class LockedVersionedStorage {
 	  while(current){
 		  next = current->next;
 		  if(current->txn_id <= from_version){
-			  LOCKLOG("Trying to delete "<<current->txn_id<<"'s value"<<reinterpret_cast<int64>(current->value));
+			  //LOG("Trying to delete "<<current->txn_id<<"'s value "<<reinterpret_cast<int64>(current->value));
 			  prev->next = NULL;
 			  delete current;
 		  }

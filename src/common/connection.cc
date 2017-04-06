@@ -54,7 +54,7 @@ pthread_attr_init(&attr);
 
 CPU_ZERO(&cpuset);
 CPU_SET(5, &cpuset);
-LOG("Connection thread starts at core 5");
+LOG(-1, "Connection thread starts at core 5");
 //CPU_SET(4, &cpuset);
 //CPU_SET(5, &cpuset);
 //CPU_SET(6, &cpuset);

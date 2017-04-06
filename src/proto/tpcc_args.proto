@@ -32,7 +32,7 @@ message TPCCArgs {
   // Needed for transaction exection;
   optional bytes warehouse_key = 60;
   optional bytes district_key = 61;
-  repeated bytes customer_key = 62;
-  repeated bytes order_key = 63;
-  repeated bytes item_id = 64;
+  optional bytes customer_key = 62;
+  optional bytes order_key = 63;
+  optional bytes item_id = 64;
 }

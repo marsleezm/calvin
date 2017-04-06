@@ -75,10 +75,10 @@ class StorageManager {
   inline bool LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-		if(actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
+		if(abort_bit_ == num_restarted_ && actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
 			if(read_set_[key].first == NOT_COPY){
 				read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
-				LOCKLOG(txn_->txn_id()<<" trying to create a copy for value "<<reinterpret_cast<int64>(read_set_[key].second));
+				LOG(txn_->txn_id(), " trying to create a copy for value "<<reinterpret_cast<int64>(read_set_[key].second));
 			}
 			read_set_[key].first = WRITE;
 			new_pointer = read_set_[key].second;
@@ -86,7 +86,8 @@ class StorageManager {
 		}
 		else{
 			++abort_bit_;
-			LOG(txn_->txn_id()<<" lock failed, abort bit is "<<abort_bit_);
+			LOG(txn_->txn_id(), " lock failed, abort bit is "<<abort_bit_);
+			//std::cout<<txn_->txn_id()<<" lock failed, abort bit is "<<std::endl;
 			return false;
 		}
     }
@@ -98,7 +99,7 @@ class StorageManager {
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
-	  LOG(txn_->txn_id()<<" should be restarted? NumA "<<num_aborted<<", NumR "<<num_restarted_<<", ABit "<<abort_bit_);
+	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_restarted_<<", ABit "<<abort_bit_);
 	  return num_aborted == num_restarted_+1 && num_aborted == abort_bit_;}
   inline bool ShouldResume(int num_aborted) { return num_aborted == num_restarted_&& num_aborted == abort_bit_;}
   inline bool CanSCToCommit() { return spec_committed_ && num_restarted_ == abort_bit_;}
@@ -108,7 +109,7 @@ class StorageManager {
   inline void Init(){
 	  exec_counter_ = 0;
   	  if (message_ && suspended_key!=""){
-  		  LOG("Adding suspended key to msg: "<<suspended_key);
+  		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
   		  message_->add_values(*read_set_[suspended_key].second);
   		  message_has_value_ = true;
@@ -124,6 +125,7 @@ class StorageManager {
 		return true;
 	}
 	else{
+		LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
 		++exec_counter_;
 		return false;
 	}

@@ -35,6 +35,7 @@ class Connection;
 class LockedVersionedStorage;
 class TxnProto;
 class MessageProto;
+class DeterministicScheduler;
 
 #ifdef LATENCY_TEST
 extern double sequencer_recv[SAMPLES];
@@ -68,6 +69,10 @@ class Sequencer {
   // Get the transaction queue
   inline AtomicQueue<TxnProto*>* GetTxnsQueue(){
 	  return txns_queue_;
+  }
+
+  void SetScheduler(DeterministicScheduler* scheduler){
+	  scheduler_ = scheduler;
   }
 
  public:
@@ -111,6 +116,8 @@ class Sequencer {
   // Length of time spent collecting client requests before they are ordered,
   // batched, and sent out to schedulers.
   double epoch_duration_;
+
+  DeterministicScheduler* scheduler_;
 
   // Configuration specifying node & system settings.
   Configuration* configuration_;

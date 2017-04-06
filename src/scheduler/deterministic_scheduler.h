@@ -52,6 +52,7 @@ class Client;
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
+	friend Sequencer;
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
 		  LockedVersionedStorage* storage, AtomicQueue<TxnProto*>* txns_queue,
@@ -59,7 +60,7 @@ class DeterministicScheduler : public Scheduler {
   virtual ~DeterministicScheduler();
   void static terminate() { terminated_ = true; }
 
- private:
+ protected:
   static bool terminated_;
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);

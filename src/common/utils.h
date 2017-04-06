@@ -29,9 +29,9 @@ using namespace std;
 using tr1::unordered_map;
 
 
-#define NUM_THREADS 5
+#define NUM_THREADS 4
 #define NO_LOCK INT_MAX
-#define GC_THRESHOLD 3
+#define GC_THRESHOLD 20
 
 #define ASSERTS_ON true
 
@@ -66,11 +66,20 @@ else assert(object.ParseFromString(*val));
 
 // It happens after a transaction resumes from suspension; we know that
 // the value of the key will not be needed anymore, so no need do parse it
-#define PART_READ(storage, key, object, read_state, val) \
+/*#define PART_READ(storage, key, object, read_state, val) \
 read_state = NORMAL; \
 val = storage->ReadValue(key, read_state); \
 if (read_state == SPECIAL) return reinterpret_cast<int64>(val); \
 else if(read_state == NORMAL) assert(object.ParseFromString(*val));
+*/
+
+#define PART_READ(storage, type, key, read_state, val) \
+if(storage->ShouldRead()){	\
+	val = storage->JustRead(key, read_state);	\
+	if (read_state == SPECIAL) return reinterpret_cast<int64>(val);	\
+	else {	\
+		type obj;	\
+		assert(obj.ParseFromString(*val));	}}\
 
 
 // Status code for return values.
@@ -387,6 +396,11 @@ class AtomicQueue {
     return false;
   }
 
+  T Get(int i) {
+	  Lock l(&size_mutex_);
+	  return queue_[i];
+  }
+
  private:
   vector<T> queue_;  // Circular buffer containing elements.
   uint32 size_;      // Allocated size of queue_, not number of elements.
@@ -530,7 +544,7 @@ template <class T>
 bool VectorEqual(std::vector<T> a, std::vector<T> b) {
 	int size1 = a.size(), size2 = b.size();
 	if (size1 != size2){
-		LOG("Size different!"<<size1<<":"<<size2);
+		LOG(-1, "Size different!"<<size1<<":"<<size2);
 		return false;
 	}
 	else
@@ -539,7 +553,7 @@ bool VectorEqual(std::vector<T> a, std::vector<T> b) {
 			if (a[i] == b[i])
 				continue;
 			else{
-				LOG("Element different!"<<a[i]<<":"<<b[i]);
+				LOG(-1, "Element different!"<<a[i]<<":"<<b[i]);
 				return false;
 			}
 		}

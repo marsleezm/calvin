@@ -17,15 +17,15 @@
 ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
 			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue) {
 	// If no one has even created a version of the key
-	//LOCKLOG(txn_id<<" reading ["<< key <<"]");
+	//LOCKLOG(txn_id, " reading ["<< key <<"]");
 	if (objects_.count(key) == 0) {
 		pthread_mutex_lock(&new_obj_mutex_);
-		LOG(txn_id<<" got new object lock!! ["<<key<<"]");
+		LOG(txn_id, " got new object lock!! ["<<key<<"]");
 		if(objects_.count(key) == 0){
 			objects_[key] = new KeyEntry();
 			objects_[key]->read_from_list->push_back(ReadFromEntry(txn_id, -1, abort_bit, num_aborted, abort_queue));
 			pthread_mutex_unlock(&new_obj_mutex_);
-			LOG(txn_id<<" reading done");
+			LOG(txn_id, " reading done");
 			return ValuePair();
 		}
 		else{
@@ -35,17 +35,17 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 	KeyEntry* entry = objects_[key];
 	// If the transaction that requested the lock is ordered before me, I have to wait for him
 	pthread_mutex_lock(&(entry->mutex_));
-	//LOCKLOG(txn_id<<" got entry lock!");
+	//LOCKLOG(txn_id, " got entry lock!");
 	if (entry->lock.tx_id_ < txn_id){
 		entry->pend_list->push_back(PendingReadEntry(txn_id, value_bit, abort_bit, num_aborted, pend_queue, abort_queue));
 		pthread_mutex_unlock(&(entry->mutex_));
 		// Should return BLOCKED! How to denote that?
-		LOCKLOG(txn_id<<" reading suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"], num aborted is "<<num_aborted);
+		LOCKLOG(txn_id, " reading suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"], num aborted is "<<num_aborted);
 		return ValuePair(SUSPENDED, NULL);
 	}
 	else{
 		ValuePair value_pair;
-		LOCKLOG(txn_id<<" trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
+		//LOCKLOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
 		for (DataNode* list = entry->head; list; list = list->next) {
 			if (list->txn_id <= txn_id) {
 				// Read the version and
@@ -53,12 +53,12 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 				// Clean up any stable version, only leave the oldest one
 				int max_ts = Sequencer::max_commit_ts;
 				if (list->txn_id <= max_ts){
-					//LOCKLOG(txn_id<<" trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
+					//LOCKLOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
 					//LOCKLOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
 					value_pair.first = NOT_COPY;
 					value_pair.second = list->value;
-					LOCKLOG(txn_id<<" reading ["<<key<<"] from"<<list->txn_id<<", NO COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
+					//LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				else{
 					int size = entry->read_from_list->size();
@@ -71,7 +71,7 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 
 					value_pair.first = IS_COPY;
 					value_pair.second = new Value(*list->value);
-					LOCKLOG(txn_id<<" reading ["<<key<<"] from"<<list->txn_id<<", IS COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
+					LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", IS COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				break;
 			}
@@ -83,7 +83,7 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 		else{
 			entry->read_from_list->push_back(ReadFromEntry(txn_id, -1, abort_bit, num_aborted, abort_queue));
 			pthread_mutex_unlock(&(entry->mutex_));
-			LOG(txn_id<<" reading NULL for ["<<key<<"]");
+			//LOCKLOG(txn_id, " reading NULL for ["<<key<<"]");
 			return ValuePair();
 		}
 	}
@@ -107,7 +107,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 			objects_[key] = new KeyEntry();
 			objects_[key]->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
 			pthread_mutex_unlock(&new_obj_mutex_);
-			//LOCKLOG(txn_id<<" locking done");
+			//LOCKLOG(txn_id, " locking done");
 			return true;
 		}
 		else{
@@ -118,56 +118,59 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 
 	entry = objects_[key];
 	if (entry->lock.tx_id_ < txn_id){
-		LOG(txn_id<<" locking directly aborted for ["<<key<<"]");
+		//LOG(txn_id, " locking directly aborted for ["<<key<<"]");
+		//std::cout<<txn_id<<" locking directly aborted for ["<<key<<"] by"<<entry->lock.tx_id_<<std::endl;
 		return false;
 	}
 	else{
 		pthread_mutex_lock(&entry->mutex_);
-		LOG(txn_id<<" got lock for ["<<key<<"].");
+		LOG(txn_id, " got lock for ["<<key<<"].");
 		//Some reader has created the record, but no one has locked the key yet!
 		if(entry->lock.tx_id_ < txn_id) {
 			pthread_mutex_unlock(&objects_[key]->mutex_);
-			LOG(txn_id<<" locking directly aborted!");
+			LOG(txn_id, " locking directly aborted!");
+			//std::cout<<txn_id<<" locking directly aborted for ["<<key<<"]"<<std::endl;
 			return false;
 		}
 		// The entry's current lock tx_id is larger than my id, so I should abort it!!!
 		else{
 			if (entry->lock.tx_id_ == NO_LOCK) {
-				LOG(txn_id<<" succeeded in locking ["<<key<<"], num aborted is "<<num_aborted);
+				LOG(txn_id, " succeeded in locking ["<<key<<"], num aborted is "<<num_aborted);
 				entry->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
 			}
 			else{
 				//Try to abort this transaction
-				LOG(txn_id<<" trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
+				LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
 				bool result = std::atomic_compare_exchange_strong(entry->lock.abort_bit_,
 						&entry->lock.num_aborted_, entry->lock.num_aborted_+1);
 
 				//If the transaction has actually been restarted already.
 				if (result){
-					LOG(txn_id<<" add "<<entry->lock.tx_id_<<" to abort queue, new abort bit is "<<entry->lock.num_aborted_+1);
+					LOCKLOG(txn_id, " add "<<entry->lock.tx_id_<<" to abort queue, key is "<<key);
 					entry->lock.abort_queue_->Push(make_pair(entry->lock.tx_id_, entry->lock.num_aborted_+1));
 				}
-				LOG(txn_id<<" stole lock from aboted tx"<<entry->lock.tx_id_<<" my abort num is "<<num_aborted);
+				LOCKLOG(txn_id, " stole lock from aboted tx "<<entry->lock.tx_id_<<" my abort num is "<<num_aborted<<" for "<<key);
+				//std::cout<<txn_id<<" stole lock from aboted tx "<<entry->lock.tx_id_<<" for key "<<key<<std::endl;
 				entry->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
 			}
 
 			vector<ReadFromEntry>* read_from_list =entry->read_from_list;
 			vector<ReadFromEntry>::iterator it = read_from_list->begin();
 			while(it != read_from_list->end()) {
-				LOG(txn_id<<" in read from, reader tx id is "<<it->my_tx_id_);
+				//LOG(txn_id, " in read from, reader tx id is "<<it->my_tx_id_);
 				if(it->my_tx_id_ <= Sequencer::max_commit_ts) {
 					it = read_from_list->erase(it);
 				}
 				// Abort anyone that has missed my version
 				else if(it->my_tx_id_ > txn_id){
 					ASSERT( it->read_from_id_ != txn_id);
-					LOG(txn_id<<" trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
+					LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
 					bool result = std::atomic_compare_exchange_strong(it->abort_bit_,
 												&it->num_aborted_, it->num_aborted_+1);
 					//If the transaction has actually been aborted by me.
 
 					if (result){
-						LOG(txn_id<<" adding "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
+						LOG(txn_id, " adding "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
 						it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 					}
 					it = read_from_list->erase(it);
@@ -176,7 +179,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 			}
 
 			pthread_mutex_unlock(&entry->mutex_);
-			//LOCKLOG(txn_id<<" locking done");
+			//LOCKLOG(txn_id, " locking done");
 			return true;
 		}
 	}
@@ -186,28 +189,28 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
                                           int64 txn_id, bool is_committing) {
 	//return true;
 	KeyEntry* entry = objects_[key];
-	//LOCKLOG(txn_id<<" putting ["<<key<<"]");
+	//LOCKLOG(txn_id, " putting ["<<key<<"]");
 	if (entry->lock.tx_id_ != txn_id){
-		LOG(txn_id<<" WTF, I don't have the lock???");
+		LOG(txn_id, " WTF, I don't have the lock???");
 		return false;
 	}
 	else{
 		pthread_mutex_lock(&entry->mutex_);
 		if (entry->lock.tx_id_ != txn_id){
 			pthread_mutex_unlock(&entry->mutex_);
-			LOG(txn_id<<" putting failed ["<<key<<"]");
+			LOG(txn_id, " putting failed ["<<key<<"]");
 			return false;
 		}
 		else{
 			//I am still holding the lock
 			entry->lock.tx_id_ = NO_LOCK;
 			DataNode* current = entry->head, *next = NULL;
-			//LOCKLOG(txn_id<< " adding key and value: "<<key);
+			//LOCKLOG(txn_id,  " adding key and value: "<<key);
 			while(current){
 
 				// The version must be invalid, I have to remove it
 				if (current->txn_id > txn_id){
-					LOCKLOG(txn_id<< " trying to delete value from "<<current->txn_id);
+					//LOG(txn_id,  " trying to delete value from "<<current->txn_id);
 					next = current->next;
 					delete current;
 					current = next;
@@ -215,7 +218,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 				else{
 					DataNode* node = new DataNode();
 					node->value = value;
-					LOCKLOG(txn_id<< " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
+					//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 					node->txn_id = txn_id;
 					node->next = current;
 					entry->head = node;
@@ -225,7 +228,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 			if (!current){
 				DataNode* node = new DataNode();
 				node->value = value;
-				LOCKLOG(txn_id<< " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
+				//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 				node->txn_id = txn_id;
 				node->next = current;
 				entry->head = node;
@@ -235,24 +238,24 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 			vector<PendingReadEntry>* pend_list =entry->pend_list;
 			vector<PendingReadEntry>::iterator it = pend_list->begin();
 			while(it != entry->pend_list->end()) {
-				LOG(txn_id<<"'s pend reader is "<<it->my_tx_id_);
+				LOG(txn_id, "'s pend reader is "<<it->my_tx_id_);
 				// This txn is ordered after me, I should
 				if(it->my_tx_id_ > txn_id) {
 					//If the transaction is still aborted
-					LOG(it->my_tx_id_<<"'s abort bit is "<<*(it->abort_bit_)<<", num aborted is "<<it->num_aborted_);
+					//LOCKLOG(it->my_tx_id_<<"'s abort bit is "<<*(it->abort_bit_)<<", num aborted is "<<it->num_aborted_);
 					if (*(it->abort_bit_) == it->num_aborted_){
-						LOG("Adding ["<<it->my_tx_id_<<","<< it->num_aborted_<<"] to waiting queue by "<<txn_id);
+						LOCKLOG(txn_id, "Adding ["<<it->my_tx_id_<<","<< it->num_aborted_<<"] to waiting queue by "<<txn_id);
 						it->pend_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_));
 						if(!is_committing){
 							entry->read_from_list->push_back(ReadFromEntry(it->my_tx_id_, txn_id,
 									it->abort_bit_, it->num_aborted_, it->abort_queue_));
 							Value* v= new Value(*value);
 							*it->value_bit_ = ValuePair(IS_COPY, v);
-							LOCKLOG(txn_id<<" unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
+							LOCKLOG(txn_id, " unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
 						}
 						else{
 							*it->value_bit_ = ValuePair(NOT_COPY, value);
-							LOCKLOG(txn_id<<" unblocked reader "<<it->my_tx_id_<<", giving NOT COPY version "<<reinterpret_cast<int64>(value));
+							LOCKLOG(txn_id, " unblocked reader "<<it->my_tx_id_<<", giving NOT COPY version "<<reinterpret_cast<int64>(value));
 						}
 					}
 					it = pend_list->erase(it);
@@ -260,7 +263,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 				else ++it;
 			}
 			pthread_mutex_unlock(&entry->mutex_);
-			LOG(txn_id<<" putting done ["<<key<<"]");
+			//LOG(txn_id, " putting done ["<<key<<"]");
 			return true;
 		}
 	}
@@ -285,7 +288,7 @@ void LockedVersionedStorage::PutObject(const Key& key, Value* value) {
 void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id) {
 	KeyEntry* entry;
 	// If the lock has already been taken by someone
-	LOG(txn_id<<" unlock "<<key);
+	LOG(txn_id, " unlock "<<key);
 	entry = objects_[key];
 	if (entry->lock.tx_id_ == txn_id) {
 		pthread_mutex_lock(&entry->mutex_);
@@ -298,24 +301,24 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id) {
 void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id) {
 	KeyEntry* entry;
 	entry = objects_[key];
-	LOCKLOG(txn_id<<" remove "<<key);
+	LOCKLOG(txn_id, " remove "<<key);
 	pthread_mutex_lock(&entry->mutex_);
 	DataNode* list = entry->head;
 	while (list) {
 	  if (list->txn_id == txn_id) {
 		  entry->head =	list->next;
-		  LOCKLOG(txn_id<<" trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
+		  LOCKLOG(txn_id, " trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
 		  delete list;
 		  break;
 	  }
 	  else if(list->txn_id > txn_id){
-		  LOCKLOG(txn_id<<" not mine, invalid version is "<<list->txn_id<<", value addr is "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
+		  LOCKLOG(txn_id, " not mine, invalid version is "<<list->txn_id<<", value addr is "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
 		  entry->head = list->next;
 		  delete list;
 		  list = entry->head;
 	  }
 	  else{
-		  LOCKLOG(txn_id<<": WTF, didn't find my version, this is "<<list->txn_id);
+		  LOCKLOG(txn_id, ": WTF, didn't find my version, this is "<<list->txn_id);
 		  break;
 	  }
 	}
@@ -331,12 +334,12 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id) {
 	    }
 	    // Abort anyone that has read from me
 	    else if(it->read_from_id_ == txn_id){
-	    	LOG(txn_id<<" trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
+	    	LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
 	    	bool result = std::atomic_compare_exchange_strong(it->abort_bit_,
 	    								&it->num_aborted_, it->num_aborted_+1);
 			//If the transaction has actually been aborted by me.
 			if (result){
-				LOG(txn_id<<" adding "<<it->my_tx_id_<<" to abort queue by, new abort bit is "<<it->num_aborted_+1);
+				LOG(txn_id, " adding "<<it->my_tx_id_<<" to abort queue by, new abort bit is "<<it->num_aborted_+1);
 				it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 			}
 			it = read_from_list->erase(it);
