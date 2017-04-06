@@ -66,7 +66,7 @@ class StorageManager {
   //Value* ReadObject(const Key& key);
   Value* SkipOrRead(const Key& key, int& read_state);
   Value* ReadValue(const Key& key, int& read_state);
-  Value* JustRead(const Key& key, int& read_state);
+  Value* ReadLock(const Key& key, int& read_state);
 
   // Some transactions may have this kind of behavior: read a value, if some condition is satisfied, update the
   // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,

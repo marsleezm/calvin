@@ -113,11 +113,16 @@ void StorageManager::Abort(){
 	if (!spec_committed_){
 		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 		{
-			if(it->second.first == WRITE)
+			if(it->second.first == WRITE){
 				actual_storage_->Unlock(it->first, txn_->txn_id());
+				delete it->second.second;
+			}
+			else if(it->second.first == IS_COPY)
+				delete it->second.second;
 		}
 	}
 	else{
+		// Its COPIED data would have been aborted already
 		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 		{
 			if(it->second.first == WRITE)
@@ -135,51 +140,13 @@ void StorageManager::Abort(){
 	num_restarted_ = abort_bit_;
 }
 
-
+// If successfully spec-commit, all data are put into the list and all copied data are deleted
+// If spec-commit fail, all put data are removed, all locked data unlocked and all copied data cleaned
 void StorageManager::ApplyChange(bool is_committing){
-//	LOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing);
-//	int applied_counter = 0;
-//	bool failed_putting = false;
-////	for (set<Key>::iterator it = write_set.begin(); it != write_set.end(); ++it)
-////	{
-////		if (!actual_storage_->PutObject(*it, read_set_[*it].second, txn_->txn_id(), is_committing)){
-////			failed_putting = true;
-////			break;
-////		}
-////		else
-////			++applied_counter;
-////	}
-//	for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
-//	{
-//		if (!actual_storage_->PutObject(it->first, it->second.second, txn_->txn_id(), is_committing)){
-//			failed_putting = true;
-//			break;
-//		}
-//		else
-//			++applied_counter;
-//	}
-//	if(failed_putting){
-//		set<Key>::iterator it = write_set.begin();
-//		for(int i = 0; i<applied_counter; ++i){
-//			actual_storage_->RemoveValue(*it, txn_->txn_id());
-//			read_set_.erase(*it);
-//			++it;
-//		}
-//		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
-//						   it != read_set_.end(); ++it){
-//			if(it->second.first == IS_COPY)
-//				delete it->second.second;
-//		}
-//		read_set_.clear();
-//		write_set.clear();
-//		spec_committed_ = false;
-//	}
-//	else
-//		spec_committed_ = true;
-
 	LOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing);
 	int applied_counter = 0;
 	bool failed_putting = false;
+	// All copied data before applied count are deleted
 	for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 	{
 		if(it->second.first == WRITE){
@@ -187,28 +154,29 @@ void StorageManager::ApplyChange(bool is_committing){
 				failed_putting = true;
 				break;
 			}
-			else
-				++applied_counter;
 		}
 		else if(it->second.first == IS_COPY)
 			delete it->second.second;
+		++applied_counter;
 	}
 	if(failed_putting){
 		unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
 		int counter = 0;
 		while(it != read_set_.end()){
 			if(counter < applied_counter){
-				if(it->second.first == WRITE){
+				if (it->second.first == WRITE){
 					actual_storage_->RemoveValue(it->first, txn_->txn_id());
-					++counter;
 				}
 			}
 			else{
 				if(it->second.first == IS_COPY)
 					delete it->second.second;
-				else if(it->second.first == WRITE)
+				else if (it->second.first == WRITE){
 					actual_storage_->Unlock(it->first, txn_->txn_id());
+					delete it->second.second;
+				}
 			}
+			++counter;
 			++it;
 		}
 		read_set_.clear();
@@ -350,106 +318,6 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state) {
 		return reinterpret_cast<Value*>(TX_ABORTED);
 	}
 	else{
-		if(exec_counter_ < max_counter_){
-			LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
-			++exec_counter_;
-			read_state = SKIP;
-			if(read_set_.count(key) != 0)
-				return read_set_[key].second;
-			else{
-				//ASSERT(remote_objects_.count(key) != 0);
-				if(remote_objects_.count(key) == 0){
-					LOCKLOG(txn_->txn_id(), " WWWWWWTTTTTFFFFF, this is wrong!! Trying to read key "<<key);
-				}
-				return remote_objects_[key];
-			}
-		}
-		else{
-			if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-				//LOG(txn_->txn_id(), "Trying to read local key "<<key);
-				if (read_set_[key].second == NULL){
-					ValuePair result = actual_storage_->ReadObject(key, txn_->txn_id(), &abort_bit_,
-							num_restarted_, &read_set_[key], abort_queue_, pend_queue_);
-					if(abort_bit_ > num_restarted_){
-						LOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
-						max_counter_ = 0;
-						num_restarted_ = abort_bit_;
-						read_state = SPECIAL;
-						return reinterpret_cast<Value*>(TX_ABORTED);
-					}
-					else {
-						if(result.first == SUSPENDED){
-							read_state = SPECIAL;
-							suspended_key = key;
-							return reinterpret_cast<Value*>(SUSPENDED);
-						}
-						else{
-							read_state = NORMAL;
-							LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
-							++exec_counter_;
-							++max_counter_;
-							//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
-							read_set_[key] = result;
-							if (message_){
-								LOG(txn_->txn_id(), "Adding to msg: "<<key);
-								message_->add_keys(key);
-								message_->add_values(result.second == NULL ? "" : *result.second);
-								message_has_value_ = true;
-							}
-							return read_set_[key].second;
-						}
-					}
-				}
-				else{
-					read_state = NORMAL;
-					++exec_counter_;
-					++max_counter_;
-					return read_set_[key].second;
-				}
-			}
-			else // The key is not replicated locally, the writer should wait
-			{
-				if (remote_objects_.count(key) > 0){
-					++exec_counter_;
-					++max_counter_;
-					read_state = NORMAL;
-					return remote_objects_[key];
-				}
-				else{ //Should be blocked
-					LOG(txn_->txn_id(), "Does not have remote key: "<<key);
-					read_state = SPECIAL;
-					// The tranasction will perform the read again
-					++get_blocked_;
-					if (message_has_value_){
-						if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
-							LOG(txn_->txn_id(), ": blocked and sent.");
-							SendLocalReads();
-							return reinterpret_cast<Value*>(WAIT_AND_SENT);
-						}
-						else{
-							LOG(txn_->txn_id(), ": blocked but no sent. ");
-							return reinterpret_cast<Value*>(WAIT_NOT_SENT);
-						}
-					}
-					else{
-						LOG(txn_->txn_id(), ": blocked but has nothign to send. ");
-						return reinterpret_cast<Value*>(WAIT_AND_SENT);
-					}
-				}
-			}
-		}
-	}
-}
-
-Value* StorageManager::JustRead(const Key& key, int& read_state) {
-	if(abort_bit_ > num_restarted_){
-		LOCKLOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
-		max_counter_ = 0;
-		num_restarted_ = abort_bit_;
-		read_state = SPECIAL;
-		return reinterpret_cast<Value*>(TX_ABORTED);
-	}
-	else{
 		if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
 			//LOG(txn_->txn_id(), "Trying to read local key "<<key);
 			if (read_set_[key].second == NULL){
@@ -490,6 +358,102 @@ Value* StorageManager::JustRead(const Key& key, int& read_state) {
 				++exec_counter_;
 				++max_counter_;
 				return read_set_[key].second;
+			}
+		}
+		else // The key is not replicated locally, the writer should wait
+		{
+			if (remote_objects_.count(key) > 0){
+				++exec_counter_;
+				++max_counter_;
+				read_state = NORMAL;
+				return remote_objects_[key];
+			}
+			else{ //Should be blocked
+				LOG(txn_->txn_id(), "Does not have remote key: "<<key);
+				read_state = SPECIAL;
+				// The tranasction will perform the read again
+				++get_blocked_;
+				if (message_has_value_){
+					if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
+						LOG(txn_->txn_id(), ": blocked and sent.");
+						SendLocalReads();
+						return reinterpret_cast<Value*>(WAIT_AND_SENT);
+					}
+					else{
+						LOG(txn_->txn_id(), ": blocked but no sent. ");
+						return reinterpret_cast<Value*>(WAIT_NOT_SENT);
+					}
+				}
+				else{
+					LOG(txn_->txn_id(), ": blocked but has nothign to send. ");
+					return reinterpret_cast<Value*>(WAIT_AND_SENT);
+				}
+			}
+		}
+	}
+}
+
+
+//if (configuration_->LookupPartition(key) == configuration_->this_node_id){
+//		if(abort_bit_ == num_restarted_ && actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
+//			if(read_set_[key].first == NOT_COPY){
+//				read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
+//				LOG(txn_->txn_id(), " trying to create a copy for value "<<reinterpret_cast<int64>(read_set_[key].second));
+//			}
+//			read_set_[key].first = WRITE;
+//			new_pointer = read_set_[key].second;
+//			return true;
+//		}
+//		else{
+//			++abort_bit_;
+//			LOG(txn_->txn_id(), " lock failed, abort bit is "<<abort_bit_);
+//			//std::cout<<txn_->txn_id()<<" lock failed, abort bit is "<<std::endl;
+//			return false;
+//		}
+//    }
+//    else
+//  	  return true;  // The key will be locked by another partition.
+
+Value* StorageManager::ReadLock(const Key& key, int& read_state) {
+	if(abort_bit_ > num_restarted_){
+		LOCKLOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
+		max_counter_ = 0;
+		num_restarted_ = abort_bit_;
+		read_state = SPECIAL;
+		return reinterpret_cast<Value*>(TX_ABORTED);
+	}
+	else{
+		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
+			//LOG(txn_->txn_id(), "Trying to read local key "<<key);
+			if(read_set_[key].first == WRITE){
+				LOG(txn_->txn_id(), "Trying to read local key "<<key<<", addr is "<<reinterpret_cast<int64>(&read_set_[key]));
+				ASSERT(read_set_[key].second != NULL);
+				return read_set_[key].second;
+			}
+			else{
+				ValuePair result = actual_storage_->ReadLock(key, txn_->txn_id(), &abort_bit_,
+									num_restarted_, &read_set_[key], abort_queue_, pend_queue_);
+				if(result.first == SUSPENDED){
+					read_state = SPECIAL;
+					suspended_key = key;
+					read_set_[key].first = WRITE;
+					return reinterpret_cast<Value*>(SUSPENDED);
+				}
+				else{
+					read_state = NORMAL;
+					LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
+					++exec_counter_;
+					++max_counter_;
+					//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
+					read_set_[key] = result;
+					if (message_){
+						LOG(txn_->txn_id(), "Adding to msg: "<<key);
+						message_->add_keys(key);
+						message_->add_values(result.second == NULL ? "" : *result.second);
+						message_has_value_ = true;
+					}
+					return read_set_[key].second;
+				}
 			}
 		}
 		else // The key is not replicated locally, the writer should wait

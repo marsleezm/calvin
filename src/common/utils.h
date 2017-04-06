@@ -29,7 +29,7 @@ using namespace std;
 using tr1::unordered_map;
 
 
-#define NUM_THREADS 4
+#define NUM_THREADS 5
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 20
 
@@ -75,7 +75,7 @@ else if(read_state == NORMAL) assert(object.ParseFromString(*val));
 
 #define PART_READ(storage, type, key, read_state, val) \
 if(storage->ShouldRead()){	\
-	val = storage->JustRead(key, read_state);	\
+	val = storage->ReadValue(key, read_state);	\
 	if (read_state == SPECIAL) return reinterpret_cast<int64>(val);	\
 	else {	\
 		type obj;	\
@@ -681,17 +681,19 @@ public:
 	ValuePair* value_bit_;
 	atomic<int>* abort_bit_;
 	int num_aborted_;
+	bool request_lock_;
 	AtomicQueue<pair<int64_t, int>>* pend_queue_;
 	AtomicQueue<pair<int64_t, int>>* abort_queue_;
 
 	PendingReadEntry(int64_t my_tx_id, ValuePair* value_bit, atomic<int>* abort_bit, int num_aborted,
-			AtomicQueue<pair<int64_t, int>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue){
+			AtomicQueue<pair<int64_t, int>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue, bool request_lock){
 		my_tx_id_ = my_tx_id;
 		value_bit_ = value_bit;
 		abort_bit_ = abort_bit;
 		num_aborted_ = num_aborted;
 		pend_queue_ = pend_queue;
 		abort_queue_ = abort_queue;
+		request_lock_ = request_lock;
 	}
 
 	bool operator== (PendingReadEntry another) const

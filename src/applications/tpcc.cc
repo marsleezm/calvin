@@ -533,7 +533,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	// Read & update the warehouse object
 	Key warehouse_key = txn->read_write_set(0);
 	if(storage->ShouldRead()){
-		val = storage->JustRead(warehouse_key, read_state);
+		val = storage->ReadValue(warehouse_key, read_state);
 		if (read_state == SPECIAL)
 			return reinterpret_cast<int64>(val);
 		else{
@@ -551,7 +551,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	Key district_key = txn->read_write_set(1);
 	read_state = NORMAL;
 	if(storage->ShouldRead()){
-		val = storage->JustRead(district_key, read_state);
+		val = storage->ReadValue(district_key, read_state);
 		if (read_state == SPECIAL)
 			return reinterpret_cast<int64>(val);
 		else{
@@ -682,7 +682,7 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 	for(int i = 0; i < order_line_count; i++) {
 		if(storage->ShouldRead()){
 			snprintf(order_line_key, sizeof(order_line_key), "%sol%d", customer.last_order().c_str(), i);
-			val = storage->JustRead(order_line_key, read_state);
+			val = storage->ReadValue(order_line_key, read_state);
 			if (read_state == SPECIAL) return reinterpret_cast<int64>(val);
 			else {
 				OrderLine order_line;
@@ -709,7 +709,7 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	PART_READ(storage, Warehouse, warehouse_key, read_state, val)
 	// Read & update the warehouse object
 //	if(storage->ShouldRead()){
-//		val = storage->JustRead(warehouse_key, read_state);
+//		val = storage->ReadValue(warehouse_key, read_state);
 //		if (read_state == SPECIAL) return reinterpret_cast<int64>(val);
 //		else {
 //			Warehouse warehouse;
@@ -726,7 +726,7 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 //	FULL_READ(storage, district_key, district, read_state, val)
 	int latest_order_number;
 	if(storage->ShouldRead()){
-		val = storage->JustRead(district_key, read_state);
+		val = storage->ReadValue(district_key, read_state);
 		if (read_state == SPECIAL) return reinterpret_cast<int64>(val);
 		else {
 			District district;
@@ -786,7 +786,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 
 	Key warehouse_key = txn->read_set(0);
 	if(storage->ShouldRead()){
-		val = storage->JustRead(warehouse_key, read_state);
+		val = storage->ReadValue(warehouse_key, read_state);
 		if (read_state == SPECIAL) return reinterpret_cast<int64>(val);
 		else {
 			Warehouse warehouse;
@@ -802,7 +802,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 		read_state = NORMAL;
 		if(storage->ShouldRead()){
 			snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key.c_str(), i);
-			val = storage->JustRead(district_key, read_state);
+			val = storage->ReadValue(district_key, read_state);
 			Value* district_val;
 			if (read_state == SPECIAL) return reinterpret_cast<int64>(val);
 			else{
@@ -845,7 +845,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 
 		read_state = NORMAL;
 		if(storage->ShouldRead()){
-			val = storage->JustRead(order_key, read_state);
+			val = storage->ReadValue(order_key, read_state);
 			if (read_state == NORMAL){
 				Order order;
 				assert(order.ParseFromString(*val));
@@ -880,7 +880,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 	    	snprintf(order_line_key, sizeof(order_line_key), "%sol%d", order_key.c_str(), j);
 	      	read_state = NORMAL;
 	      	if(storage->ShouldRead()){
-	      		val = storage->JustRead(order_line_key, read_state);
+	      		val = storage->ReadValue(order_line_key, read_state);
 				if (read_state == SPECIAL) return reinterpret_cast<int64>(val);
 				else{
 					OrderLine order_line;
@@ -900,7 +900,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 	    //snprintf(customer_key, sizeof(customer_key), "%s", order.customer_id().c_str());
 	    read_state = NORMAL;
 	    if(storage->ShouldRead()){
-	    	val = storage->JustRead(customer_key, read_state);
+	    	val = storage->ReadValue(customer_key, read_state);
 			if (read_state == SPECIAL) return reinterpret_cast<int64>(val);
 			else{
 				Customer customer;

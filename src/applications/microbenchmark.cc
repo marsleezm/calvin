@@ -233,26 +233,49 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 		delete rand;
 	}
 
+//	for (int i = 0; i < kRWSetSize/2; i++) {
+//		int read_state = NORMAL;
+//		Key key = txn->read_write_set(i);
+//		if(storage->ShouldRead()){
+//			Value* val = storage->ReadValue(key, read_state);
+//			//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
+//			if (read_state != NORMAL)
+//				return reinterpret_cast<int64>(val);
+//		}
+//	}
+//
+//	for (int i = kRWSetSize/2; i < kRWSetSize; i++) {
+//		int read_state = NORMAL;
+//		Key key = txn->read_write_set(i);
+//		if(storage->ShouldRead()){
+//			Value* val = storage->ReadLock(key, read_state);
+//			//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
+//			if (read_state == NORMAL){
+//				//*val = IntToString(StringToInt(*val) + 1);
+//				//LOG(txn->txn_id()<<" trying to lock "<<key)
+//				*val = IntToString(StringToInt(*val)+1);
+//			}
+//			else
+//				return reinterpret_cast<int64>(val);
+//		}
+//	}
+
 	for (int i = 0; i < kRWSetSize; i++) {
 		int read_state = NORMAL;
 		Key key = txn->read_write_set(i);
-		Value* val = storage->SkipOrRead(key, read_state);
-		//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
-		if (read_state == NORMAL){
-			//*val = IntToString(StringToInt(*val) + 1);
-			//LOG(txn->txn_id()<<" trying to lock "<<key);
-			Value* val_copy = val;
-			if(storage->LockObject(key, val_copy) == false)
-				return TX_ABORTED;
-			else{
-				*val_copy = IntToString(StringToInt(*val_copy)+1);
+		if(storage->ShouldRead()){
+			Value* val = storage->ReadLock(key, read_state);
+			//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
+			if (read_state == NORMAL){
+				//*val = IntToString(StringToInt(*val) + 1);
+				//LOG(txn->txn_id()<<" trying to lock "<<key)
+				*val = IntToString(StringToInt(*val)+1);
 			}
+			else
+				return reinterpret_cast<int64>(val);
 		}
-		else if(read_state == SKIP)
-			continue;
-		else
-			return reinterpret_cast<int64>(val);
 	}
+
     // Not necessary since storage already has a pointer to val.
     //   storage->PutObject(txn->read_write_set(i), val);
 

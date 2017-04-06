@@ -193,6 +193,9 @@ int main(int argc, char** argv) {
 	signal(SIGINT, &stop);
 	signal(SIGTERM, &stop);
 
+
+	freopen("output.txt","w",stdout);
+
 	// Build this node's configuration object.
 	Configuration config(StringToInt(argv[1]), "deploy-run.conf");
 
@@ -207,7 +210,6 @@ int main(int argc, char** argv) {
 	// #ifdef PAXOS
 	//  StartZookeeper(ZOOKEEPER_CONF);
 	// #endif
-  	//freopen("output.txt","w",stdout);
 	pthread_mutex_init(&mutex_, NULL);
 	pthread_mutex_init(&mutex_for_item, NULL);
 	involed_customers = new vector<Key>;
