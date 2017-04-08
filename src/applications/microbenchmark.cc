@@ -12,6 +12,7 @@
 #include "common/configuration.h"
 #include "proto/txn.pb.h"
 #include <string>
+#include <cmath>
 
 #include "../backend/storage_manager.h"
 
@@ -227,44 +228,17 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 
 	if (storage->ShouldExec())
 	{
-		Rand* rand = new Rand();
-		rand->seed(txn->txn_id());
-		GetKeys(txn, rand);
-		delete rand;
+		Rand rand;
+		rand.seed(txn->txn_id());
+		GetKeys(txn, &rand);
 	}
 
-//	for (int i = 0; i < kRWSetSize/2; i++) {
-//		int read_state = NORMAL;
-//		Key key = txn->read_write_set(i);
-//		if(storage->ShouldRead()){
-//			Value* val = storage->ReadValue(key, read_state);
-//			//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
-//			if (read_state != NORMAL)
-//				return reinterpret_cast<int64>(val);
-//		}
-//	}
-//
-//	for (int i = kRWSetSize/2; i < kRWSetSize; i++) {
-//		int read_state = NORMAL;
-//		Key key = txn->read_write_set(i);
-//		if(storage->ShouldRead()){
-//			Value* val = storage->ReadLock(key, read_state);
-//			//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
-//			if (read_state == NORMAL){
-//				//*val = IntToString(StringToInt(*val) + 1);
-//				//LOG(txn->txn_id()<<" trying to lock "<<key)
-//				*val = IntToString(StringToInt(*val)+1);
-//			}
-//			else
-//				return reinterpret_cast<int64>(val);
-//		}
-//	}
 
 	for (int i = 0; i < kRWSetSize; i++) {
 		int read_state = NORMAL;
 		Key key = txn->read_write_set(i);
 		if(storage->ShouldRead()){
-			Value* val = storage->ReadLock(key, read_state);
+			Value* val = storage->ReadLock(key, read_state, false);
 			//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
 			if (read_state == NORMAL){
 				//*val = IntToString(StringToInt(*val) + 1);
@@ -275,6 +249,51 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 				return reinterpret_cast<int64>(val);
 		}
 	}
+
+//	if (storage->ShouldExec())
+//	{
+//		Rand rand;
+//			rand.seed(txn->txn_id());
+//
+//			Key key1, key2;
+//			key1= IntToString(-(abs(rand.next()) % kDBSize));
+//			do{
+//				key2 = IntToString(-(abs(rand.next()) % kDBSize));
+//			}while(key2 == key1);
+//			txn->add_read_set(key1);
+//			txn->add_read_set(key2);
+//	}
+//
+//
+//	Value* val;
+//	Key key1, key2;
+//	if(storage->ShouldRead()){
+//		key1 = txn->read_set(0);
+//		int read_state = NORMAL;
+//		val = storage->ReadValue(key1, read_state, false);
+//		//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
+//		if (read_state != NORMAL)
+//			return reinterpret_cast<int64>(val);
+//	}
+//
+//	if(storage->ShouldRead()){
+//
+//		int read_state = NORMAL;
+//		key2 = txn->read_set(1);
+//		val = storage->ReadLock(key2, read_state, false);
+//		//LOG(txn->txn_id()<<" finish reading, read state is "<<read_state);
+//		if (read_state != NORMAL)
+//			return reinterpret_cast<int64>(val);
+//		else
+//			*val = 10;
+//	}
+//
+//	Key key = IntToString(kDBSize+txn->txn_id()*2);
+//	if (storage->LockObject(key, val)){
+//		*val = key;
+//	}
+//	else
+//		return TX_ABORTED;
 
     // Not necessary since storage already has a pointer to val.
     //   storage->PutObject(txn->read_write_set(i), val);

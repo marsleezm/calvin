@@ -64,9 +64,10 @@ class StorageManager {
   void SetupTxn(TxnProto* txn);
 
   //Value* ReadObject(const Key& key);
-  Value* SkipOrRead(const Key& key, int& read_state);
-  Value* ReadValue(const Key& key, int& read_state);
-  Value* ReadLock(const Key& key, int& read_state);
+  //Value* SkipOrRead(const Key& key, int& read_state);
+
+  Value* ReadValue(const Key& key, int& read_state, bool new_object);
+  Value* ReadLock(const Key& key, int& read_state, bool new_object);
 
   // Some transactions may have this kind of behavior: read a value, if some condition is satisfied, update the
   // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,
@@ -76,11 +77,13 @@ class StorageManager {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 		if(abort_bit_ == num_restarted_ && actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
-			if(read_set_[key].first == NOT_COPY){
-				read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
-				LOG(txn_->txn_id(), " trying to create a copy for value "<<reinterpret_cast<int64>(read_set_[key].second));
-			}
-			read_set_[key].first = WRITE;
+			// It should always be a new object
+			ASSERT(read_set_.count(key) == 0);
+			read_set_[key] = ValuePair(NEW_MASK | WRITE, new Value);
+			//if(read_set_[key].first & NOT_COPY){
+			read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
+			LOG(txn_->txn_id(), " trying to create a copy for key "<<key);//reinterpret_cast<int64>(read_set_[key].second));
+			//}
 			new_pointer = read_set_[key].second;
 			return true;
 		}
@@ -100,7 +103,8 @@ class StorageManager {
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
 	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_restarted_<<", ABit "<<abort_bit_);
-	  return num_aborted == num_restarted_+1 && num_aborted == abort_bit_;}
+	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
+	  return num_aborted > num_restarted_ && num_aborted == abort_bit_;}
   inline bool ShouldResume(int num_aborted) { return num_aborted == num_restarted_&& num_aborted == abort_bit_;}
   inline bool CanSCToCommit() { return spec_committed_ && num_restarted_ == abort_bit_;}
   inline bool CanCommit() { return num_restarted_ == abort_bit_;}
@@ -108,6 +112,7 @@ class StorageManager {
 
   inline void Init(){
 	  exec_counter_ = 0;
+	  is_suspended_ = false;
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
@@ -208,6 +213,7 @@ class StorageManager {
   TPCCArgs* tpcc_args;
 
  public:
+  bool is_suspended_;
   bool spec_committed_;
   atomic<int> abort_bit_;
   int num_restarted_;

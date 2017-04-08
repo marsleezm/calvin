@@ -31,7 +31,7 @@ using tr1::unordered_map;
 
 #define NUM_THREADS 5
 #define NO_LOCK INT_MAX
-#define GC_THRESHOLD 20
+#define GC_THRESHOLD 5
 
 #define ASSERTS_ON true
 
@@ -53,14 +53,21 @@ using tr1::unordered_map;
 #define WAIT_NOT_SENT 5
 #define TX_ABORTED 6
 #define SUSPENDED 7
-#define IS_COPY 8
-#define NOT_COPY 9
-#define WRITE 10
+
+#define IS_COPY 2
+#define NOT_COPY 4
+#define WRITE 8
+
+#define NEW_MASK 1
+
+#define NEW_COPY 3
+#define NEW_NOT_COPY 5
+#define NEW_WRITE 9
 
 
-#define FULL_READ(storage, key, object, read_state, val) \
+#define FULL_READ(storage, key, object, read_state, val, new_object) \
 read_state = NORMAL; \
-val = storage->ReadValue(key, read_state); \
+val = storage->ReadValue(key, read_state, new_object); \
 if (read_state == SPECIAL) return reinterpret_cast<int64>(val); \
 else assert(object.ParseFromString(*val));
 
@@ -75,7 +82,7 @@ else if(read_state == NORMAL) assert(object.ParseFromString(*val));
 
 #define PART_READ(storage, type, key, read_state, val) \
 if(storage->ShouldRead()){	\
-	val = storage->ReadValue(key, read_state);	\
+	val = storage->ReadValue(key, read_state, false);	\
 	if (read_state == SPECIAL) return reinterpret_cast<int64>(val);	\
 	else {	\
 		type obj;	\
@@ -629,12 +636,27 @@ struct ValuePair{
 	Value* second = NULL;
 
 	ValuePair(){
-		first = NOT_COPY;
+		first = 0;
+		second = NULL;
+	}
+
+	ValuePair(bool new_obj){
+		first = new_obj;
 		second = NULL;
 	}
 
 	ValuePair(int in_first, Value* in_second){
 		first = in_first;
+		second = in_second;
+	}
+	void inline assign_first(int value){
+		ASSERT(first == 0 || first == 1 || (first & WRITE));
+		first = first | value;
+	}
+
+	void inline assign(int value, Value* in_second){
+		ASSERT(first == 0 || first == 1 || (first & WRITE));
+		first = first | value;
 		second = in_second;
 	}
 };

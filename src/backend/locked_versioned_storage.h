@@ -18,6 +18,8 @@
 #include <inttypes.h>
 
 #define CHKPNTDIR "../db/checkpoints"
+#define NUM_NEW_TAB 2
+#define BIT_MASK (NUM_NEW_TAB-1)
 
 using std::tr1::unordered_map;
 using namespace std;
@@ -26,7 +28,8 @@ class LockedVersionedStorage {
  public:
   LockedVersionedStorage() {
     stable_ = 0;
-    pthread_mutex_init(&new_obj_mutex_, NULL);
+    for(int i = 0; i< NUM_NEW_TAB; ++i)
+    	pthread_mutex_init(&new_obj_mutex_[i], NULL);
   }
   virtual ~LockedVersionedStorage() {}
 
@@ -38,16 +41,19 @@ class LockedVersionedStorage {
   // Standard operators in the DB
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
   virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
-  			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue);
+  			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object);
   virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
-    			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue);
+    			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
 			AtomicQueue<pair<int64_t, int>>* abort_queue);
-  virtual bool PutObject(const Key& key, Value* value, int64 txn_id, bool is_committing);
+  virtual bool PutObject(const Key& key, Value* value, int64 txn_id, bool is_committing, bool new_object);
   virtual void PutObject(const Key& key, Value* value);
-  virtual void Unlock(const Key& key, int64 txn_id);
-  virtual void RemoveValue(const Key& key, int64 txn_id);
-  inline bool DeleteObject(const Key& key) { delete objects_[key]; return true; }
+  virtual void Unlock(const Key& key, int64 txn_id, bool new_object);
+  virtual void RemoveValue(const Key& key, int64 txn_id, bool new_object);
+  inline bool DeleteObject(const Key& key) {
+	  //delete objects_[key];
+	  return true;
+  }
   bool DeleteObject(const Key& key, int64 txn_id);
 
   inline Value* StableRead(const Key& key) {return objects_[key]->head->value;}
@@ -93,13 +99,17 @@ class LockedVersionedStorage {
   // it is whatever value was written out at that time.
   unordered_map<Key, KeyEntry*> objects_;
 
+  unordered_map<Key, KeyEntry*> new_objects_[NUM_NEW_TAB];
+  pthread_mutex_t new_obj_mutex_[NUM_NEW_TAB];
+
   // The stable and frozen int64 represent which transaction ID's are stable
   // to write out to storage, and which should be the latest to be overwritten
   // in the current database execution cycle, respectively.
   int64_t stable_;
 
   // The mutex to lock when creating/reading an object that does not exist
-  pthread_mutex_t new_obj_mutex_;
+  //pthread_mutex_t new_obj_mutex_[NUM_MUTEX];
+
 };
 
 

@@ -38,9 +38,11 @@ class Microbenchmark : public Application {
 
   int nparts;
   int hot_records;
-  static const int kRWSetSize = 10;  // MUST BE EVEN
+  //static const int kRWSetSize = 10;  // MUST BE EVEN
+  static const int kRWSetSize = 10;
+
   static const int kDBSize = 1000000;
-  //static const int kDBSize = 500;
+  //static const int kDBSize = 10;
 
   virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
 

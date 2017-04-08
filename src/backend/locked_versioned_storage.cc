@@ -11,28 +11,63 @@
 #include <atomic>
 #include "sequencer/sequencer.h"
 #include <iostream>
+#include <bitset>
 
 #include <gtest/gtest.h>
 
 ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
-			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue) {
+			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object) {
 	// If no one has even created a version of the key
 	//LOCKLOG(txn_id, " reading ["<< key <<"]");
-	if (objects_.count(key) == 0) {
-		pthread_mutex_lock(&new_obj_mutex_);
+//	pthread_mutex_t obj_mutex = new_obj_mutex_[key[key.length()-1] % NUM_MUTEX];
+//	if (objects_.count(key) == 0) {
+//		pthread_mutex_lock(&new_obj_mutex_);
+//		LOG(txn_id, " got new object lock!! ["<<key<<"]");
+//		if(objects_.count(key) == 0){
+//			objects_[key] = new KeyEntry();
+//			objects_[key]->read_from_list->push_back(ReadFromEntry(txn_id, -1, abort_bit, num_aborted, abort_queue));
+//			pthread_mutex_unlock(&new_obj_mutex_);
+//			LOG(txn_id, " reading done");
+//			return ValuePair();
+//		}
+//		else{
+//			pthread_mutex_unlock(&new_obj_mutex_);
+//		}
+//	}
+	//ASSERT(objects_.count(key) != 0);
+
+	// Access new object table, I should take the corresponding mutex. This serves two purposes
+	// 1. To avoid another concurrent transaction to insert elements into the table, which may cause map rehash and invalidate my
+	// value entry
+	// 2. To avoid another concurrent transaction to insert an element that I am just going to read as well as inserting an empty entry,
+	// which causes data races.
+	KeyEntry* entry;
+	if(new_object){
+		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+		// If its empty entry, create a new entry
 		LOG(txn_id, " got new object lock!! ["<<key<<"]");
-		if(objects_.count(key) == 0){
-			objects_[key] = new KeyEntry();
-			objects_[key]->read_from_list->push_back(ReadFromEntry(txn_id, -1, abort_bit, num_aborted, abort_queue));
-			pthread_mutex_unlock(&new_obj_mutex_);
+		if(new_objects_[new_tab_num].count(key) == 0){
+			new_objects_[new_tab_num][key] = new KeyEntry();
+			new_objects_[new_tab_num][key]->read_from_list->push_back(ReadFromEntry(txn_id, -1, abort_bit, num_aborted, abort_queue));
+			pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
 			LOG(txn_id, " reading done");
 			return ValuePair();
 		}
 		else{
-			pthread_mutex_unlock(&new_obj_mutex_);
+			entry = new_objects_[new_tab_num][key];
+			pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
 		}
 	}
-	KeyEntry* entry = objects_[key];
+	else{
+		//If we are accessing the old-object table, then the entry can not be empty!
+//		if(objects_.count(key) == 0){
+//				LOG(txn_id, key<<" does not exist!!! "<<objects_[key]);
+//				ASSERT(1 == 2);
+//			}
+		ASSERT(objects_.count(key) != 0);
+		entry = objects_[key];
+	}
 	// If the transaction that requested the lock is ordered before me, I have to wait for him
 	pthread_mutex_lock(&(entry->mutex_));
 	//LOCKLOG(txn_id, " got entry lock!");
@@ -56,7 +91,7 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 					//LOCKLOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
 					//LOCKLOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
-					value_pair.first = NOT_COPY;
+					value_pair.assign_first(NOT_COPY);
 					value_pair.second = list->value;
 					//LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
@@ -69,7 +104,7 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 					else
 						entry->read_from_list->push_back(ReadFromEntry(txn_id, list->txn_id, abort_bit, num_aborted, abort_queue));
 
-					value_pair.first = IS_COPY;
+					value_pair.assign_first(IS_COPY);
 					value_pair.second = new Value(*list->value);
 					LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", IS COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
@@ -91,9 +126,35 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 
 // If read & write, then this can not be a blind write.
 ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
-  			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue){
-	ASSERT(objects_.count(key) != 0);
-	KeyEntry* entry = objects_[key];
+  			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object){
+	//ASSERT(objects_.count(key) != 0);
+	KeyEntry* entry;
+	if(new_object){
+		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+		// If its empty entry, create a new entry
+		LOG(txn_id, " got new object lock!! ["<<key<<"]");
+		if(new_objects_[new_tab_num].count(key) == 0){
+			pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
+			LOG(txn_id, " can not find any entry!");
+			// This should not happen!!!
+			return ValuePair(SUSPENDED, NULL);
+		}
+		else{
+			entry = new_objects_[new_tab_num][key];
+			pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
+		}
+	}
+	else{
+		//If we are accessing the old-object table, then the entry can not be empty!
+//		if(objects_.count(key) == 0){
+//				LOG(txn_id, key<<" does not exist!!! "<<objects_[key]);
+//				ASSERT(1 == 2);
+//			}
+		ASSERT(objects_.count(key) != 0);
+		entry = objects_[key];
+	}
+
 	pthread_mutex_lock(&entry->mutex_);
 	LOG(txn_id, " trying to get lock for ["<<key<<"].");
 	// Someone before me has locked this version, I should wait
@@ -121,6 +182,8 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 			LOCKLOG(txn_id, " stole lock from aboted tx "<<entry->lock.tx_id_<<" my abort num is "<<num_aborted<<" for "<<key);
 			//std::cout<<txn_id<<" stole lock from aboted tx "<<entry->lock.tx_id_<<" for key "<<key<<std::endl;
 		}
+		else
+			LOG(txn_id, " no one has the lock, so I got for "<<key);
 		entry->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
 
 		// Abort any reader ordered after me but missed my version
@@ -159,7 +222,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 					//LOCKLOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
 					//LOCKLOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
-					value_pair.first = WRITE;
+					value_pair.assign_first(WRITE);
 					value_pair.second = new Value(*list->value);
 					//LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
@@ -172,7 +235,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 					else
 						entry->read_from_list->push_back(ReadFromEntry(txn_id, list->txn_id, abort_bit, num_aborted, abort_queue));
 
-					value_pair.first = WRITE;
+					value_pair.assign_first(WRITE);
 					value_pair.second = new Value(*list->value);
 					LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", IS COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
@@ -190,33 +253,31 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 
 bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
 		AtomicQueue<pair<int64_t, int>>* abort_queue){
+
 	KeyEntry* entry;
-	// If the lock has already been taken by someone
-	if (objects_.count(key) == 0) {
-		pthread_mutex_lock(&new_obj_mutex_);
-		// No one has concurrently created a record on this key, so I will lock it
-		if (objects_.count(key) == 0) {
-			objects_[key] = new KeyEntry();
-			objects_[key]->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
-			pthread_mutex_unlock(&new_obj_mutex_);
-			//LOCKLOG(txn_id, " locking done");
-			return true;
-		}
-		else{
-			//Someone has created the key record meanwhile.. So I can release the new_key_lock
-			pthread_mutex_unlock(&new_obj_mutex_);
-		}
+	// Locking is only called for objects that were never read before, i.e. new objects in this case.
+	int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+	pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+	if(new_objects_[new_tab_num].count(key) == 0){
+		new_objects_[new_tab_num][key] = new KeyEntry();
+		new_objects_[new_tab_num][key]->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
+		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
+		LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock"<<", new tab num is "<<new_tab_num);
+		// This should not happen!!!
+		return true;
+	}
+	else{
+		entry = new_objects_[new_tab_num][key];
+		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
 	}
 
-	entry = objects_[key];
 	if (entry->lock.tx_id_ < txn_id){
-		//LOG(txn_id, " locking directly aborted for ["<<key<<"]");
-		//std::cout<<txn_id<<" locking directly aborted for ["<<key<<"] by"<<entry->lock.tx_id_<<std::endl;
+		LOG(txn_id, " locking directly aborted for ["<<key<<"] by "<<entry->lock.tx_id_);
 		return false;
 	}
 	else{
 		pthread_mutex_lock(&entry->mutex_);
-		LOG(txn_id, " got lock for ["<<key<<"].");
+		LOG(txn_id, " trying to get lock for ["<<key<<"].");
 		//Some reader has created the record, but no one has locked the key yet!
 		if(entry->lock.tx_id_ < txn_id) {
 			pthread_mutex_unlock(&objects_[key]->mutex_);
@@ -278,10 +339,30 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 }
 
 bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
-                                          int64 txn_id, bool is_committing) {
+                                          int64 txn_id, bool is_committing, bool new_object) {
 	//return true;
-	KeyEntry* entry = objects_[key];
-	//LOCKLOG(txn_id, " putting ["<<key<<"]");
+	//ASSERT(objects_.count(key) != 0);
+	LOG(txn_id, " putting data for "<<key);
+	KeyEntry* entry;
+	if(new_object){
+		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+		ASSERT(new_objects_[new_tab_num].count(key) != 0);
+		entry = new_objects_[new_tab_num][key];
+		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
+		LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock");
+	}
+	else{
+		//If we are accessing the old-object table, then the entry can not be empty!
+//		if(objects_.count(key) == 0){
+//				LOG(txn_id, key<<" does not exist!!! "<<objects_[key]);
+//				ASSERT(1 == 2);
+//			}
+		ASSERT(objects_.count(key) != 0);
+		entry = objects_[key];
+	}
+
+	LOCKLOG(txn_id, " trying to put ["<<key<<"], entry addr is "<<reinterpret_cast<int64>(entry));
 	if (entry->lock.tx_id_ != txn_id){
 		LOG(txn_id, " WTF, I don't have the lock??? Key is "<<key<<", lock holder is "<<entry->lock.tx_id_<<", equal "<<(txn_id == entry->lock.tx_id_));
 		return false;
@@ -358,11 +439,11 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 								entry->read_from_list->push_back(ReadFromEntry(it->my_tx_id_, txn_id,
 										it->abort_bit_, it->num_aborted_, it->abort_queue_));
 								Value* v= new Value(*value);
-								*it->value_bit_ = ValuePair(IS_COPY, v);
+								it->value_bit_->assign(IS_COPY, v);
 								LOCKLOG(txn_id, " unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
 							}
 							else{
-								*it->value_bit_ = ValuePair(NOT_COPY, value);
+								it->value_bit_->assign(NOT_COPY, value);
 								LOCKLOG(txn_id, " unblocked reader "<<it->my_tx_id_<<", giving NOT COPY version "<<reinterpret_cast<int64>(value));
 							}
 							it->pend_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_));
@@ -381,7 +462,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 					entry->read_from_list->push_back(ReadFromEntry(oldest_tx->my_tx_id_, txn_id,
 							oldest_tx->abort_bit_, oldest_tx->num_aborted_, oldest_tx->abort_queue_));
 				Value* v = new Value(*value);
-				*oldest_tx->value_bit_ = ValuePair(WRITE, v);
+				oldest_tx->value_bit_->assign(WRITE, v);
 				LOCKLOG(txn_id, " unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(v)
 						<<" to "<<reinterpret_cast<int64>(oldest_tx->value_bit_));
 				entry->lock = LockEntry(oldest_tx->my_tx_id_, oldest_tx->abort_bit_, *oldest_tx->abort_bit_, oldest_tx->abort_queue_);
@@ -412,11 +493,21 @@ void LockedVersionedStorage::PutObject(const Key& key, Value* value) {
 }
 
 
-void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id) {
-	KeyEntry* entry;
-	// If the lock has already been taken by someone
+void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_object) {
 	LOG(txn_id, " unlock "<<key);
-	entry = objects_[key];
+	KeyEntry* entry;
+	if(new_object){
+		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+		ASSERT(new_objects_[new_tab_num].count(key) != 0);
+		entry = new_objects_[new_tab_num][key];
+		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
+	}
+	else{
+		ASSERT(objects_.count(key) != 0);
+		entry = objects_[key];
+	}
+
 	if (entry->lock.tx_id_ == txn_id) {
 		pthread_mutex_lock(&entry->mutex_);
 		if (entry->lock.tx_id_ == txn_id)
@@ -425,11 +516,25 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id) {
 	}
 }
 
-void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id) {
+void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_object) {
+	LOG(txn_id, " unlock "<<key);
 	KeyEntry* entry;
-	entry = objects_[key];
+	if(new_object){
+		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+		ASSERT(new_objects_[new_tab_num].count(key) != 0);
+		entry = new_objects_[new_tab_num][key];
+		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
+		LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock");
+	}
+	else{
+		ASSERT(objects_.count(key) != 0);
+		entry = objects_[key];
+	}
+
 	LOCKLOG(txn_id, " remove "<<key);
 	pthread_mutex_lock(&entry->mutex_);
+
 	DataNode* list = entry->head;
 	while (list) {
 	  if (list->txn_id == txn_id) {
@@ -449,7 +554,7 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id) {
 		  break;
 	  }
 	}
-	ASSERT(list!=NULL);
+	//ASSERT(list!=NULL);
 
 	vector<ReadFromEntry>* read_from_list =entry->read_from_list;
 	vector<ReadFromEntry>::iterator it = read_from_list->begin();

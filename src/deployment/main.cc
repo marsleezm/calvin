@@ -21,7 +21,7 @@
 #include "proto/tpcc_args.pb.h"
 
 #define HOT 100
-//#define HOT 3
+//#define HOT 10
 
 using namespace std;
 map<Key, Key> latest_order_id_for_customer;
@@ -143,16 +143,8 @@ class TClient : public Client {
 	else
 		(*txn)->set_multipartition(false);
 
-//    int random_txn_type = rand() % 100;
-//	if (random_txn_type < 45)  {
-//	  tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-//	} else if(random_txn_type < 88) {
-	  tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-//	} else if(random_txn_type < 92) {
-//	  tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
-//	} else{
-//	  tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
-//	}
+   //int random_txn_type = rand() % 100;
+    tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
     // New order txn
 //   int random_txn_type = rand() % 100;
 //    if (random_txn_type < 45)  {

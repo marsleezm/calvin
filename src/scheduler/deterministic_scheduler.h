@@ -48,7 +48,7 @@ class Client;
 
 #define MAX_SC_NUM 1
 #define MAX_PEND_NUM 1
-#define MAX_SUSPEND 50
+#define MAX_SUSPEND 1
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
