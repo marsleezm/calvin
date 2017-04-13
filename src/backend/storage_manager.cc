@@ -132,7 +132,6 @@ void StorageManager::Abort(){
 
 	//write_set.clear();
 	read_set_.clear();
-	multi_skip_list_.clear();
 	tpcc_args->Clear();
 	tpcc_args ->ParseFromString(txn_->arg());
 	spec_committed_ = false;
@@ -450,7 +449,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				}
 				else{
 					read_state = NORMAL;
-					LOCKLOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_);
+					LOCKLOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
 					++exec_counter_;
 					++max_counter_;
 					//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);

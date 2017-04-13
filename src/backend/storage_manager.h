@@ -33,6 +33,7 @@
 #include "proto/txn.pb.h"
 #include "proto/message.pb.h"
 #include "proto/tpcc_args.pb.h"
+#include "applications/tpcc.h"
 
 using std::vector;
 using std::tr1::unordered_map;
@@ -68,6 +69,11 @@ class StorageManager {
 
   Value* ReadValue(const Key& key, int& read_state, bool new_object);
   Value* ReadLock(const Key& key, int& read_state, bool new_object);
+  inline Value* SafeRead(const Key& key, bool new_object){
+	  return actual_storage_->SafeRead(key, txn_->txn_id(), new_object).second;
+  }
+
+  bool ReadOnly(){ return txn_->txn_type() == TPCC::ORDER_STATUS || txn_->txn_type() == TPCC::STOCK_LEVEL; };
 
   // Some transactions may have this kind of behavior: read a value, if some condition is satisfied, update the
   // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,
@@ -106,9 +112,9 @@ class StorageManager {
 	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
 	  return num_aborted > num_restarted_ && num_aborted == abort_bit_;}
   inline bool ShouldResume(int num_aborted) { return num_aborted == num_restarted_&& num_aborted == abort_bit_;}
-  inline bool CanSCToCommit() { return spec_committed_ && num_restarted_ == abort_bit_;}
+  // Can commit, if the transaction is read-only or has spec-committed.
+  inline bool CanSCToCommit() { return  ReadOnly() || (spec_committed_ && num_restarted_ == abort_bit_) ;}
   inline bool CanCommit() { return num_restarted_ == abort_bit_;}
-  inline Value* StableRead(const Key& key) { return actual_storage_->StableRead(key); }
 
   inline void Init(){
 	  exec_counter_ = 0;
@@ -122,19 +128,19 @@ class StorageManager {
   	  }
   }
 
-  inline bool ShouldExec()
-  {
-	  if (exec_counter_ == max_counter_){
-		++exec_counter_;
-		++max_counter_;
-		return true;
-	}
-	else{
-		LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
-		++exec_counter_;
-		return false;
-	}
-  }
+//  inline bool ShouldExec()
+//  {
+//	  if (exec_counter_ == max_counter_){
+//		++exec_counter_;
+//		++max_counter_;
+//		return true;
+//	}
+//	else{
+//		LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
+//		++exec_counter_;
+//		return false;
+//	}
+//  }
 
   inline bool ShouldRead()
   {
@@ -208,7 +214,6 @@ class StorageManager {
 
   AtomicQueue<pair<int64_t, int>>* abort_queue_;
   AtomicQueue<pair<int64_t, int>>* pend_queue_;
-  vector<pair<int32, int32>> multi_skip_list_;
 
   TPCCArgs* tpcc_args;
 

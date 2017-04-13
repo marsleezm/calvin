@@ -63,6 +63,9 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
     // New Order
     case NEW_ORDER:
+    	{
+    	std::set<int> readers;
+    	readers.insert(config->this_node_id);
 		txn->add_readers(config->this_node_id);
 		txn->add_writers(config->this_node_id);
       // First, we pick a local warehouse
@@ -128,13 +131,18 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 			// Determine if we should add it to read set to avoid duplicates
 			bool needed = true;
 			for (int j = 0; j < txn->read_set_size(); j++) {
-			  if (txn->read_set(j) == remote_warehouse_key)
+			  if (txn->read_set(j) == remote_warehouse_key){
 				needed = false;
+				break;
+			  }
 			}
 			if (needed){
 				txn->add_read_set(remote_warehouse_key);
-				txn->add_readers(remote_node);
-				txn->add_writers(remote_node);
+				if(readers.count(remote_node) == 0){
+					txn->add_readers(remote_node);
+					txn->add_writers(remote_node);
+					readers.insert(remote_node);
+				}
 			}
 
 			// Finally, we set the stock key to the read and write set
@@ -148,6 +156,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
       // Set the order line count in the args
       tpcc_args->add_order_line_count(order_line_count);
+    	}
       break;
 
     // Payment
@@ -242,6 +251,8 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
         txn->add_read_set(district_key);
         txn->add_read_set(customer_key);
 
+        txn->add_readers(config->this_node_id);
+
         break;
      }
 
@@ -260,6 +271,8 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
     	 tpcc_args->set_threshold(rand()%10 + 10);
 
+    	 txn->add_readers(config->this_node_id);
+
     	 break;
       }
 
@@ -275,6 +288,10 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
         	 snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key, i);
         	 txn->add_read_set(district_key);
          }
+
+         txn->add_readers(config->this_node_id);
+         txn->add_writers(config->this_node_id);
+
          break;
       }
 
@@ -314,16 +331,46 @@ int TPCC::Execute(StorageManager* storage) const {
       break;
 
     case ORDER_STATUS:
-      return OrderStatusTransaction(storage);
-      break;
+    	LOG(storage->get_txn()->txn_id(), " executing a read-only txn in normal way!!!!!!!");
+    	// Force quit, this is a bug!
+    	assert(1==2);
+    	return OrderStatusTransaction(storage);
+    	break;
 
     case STOCK_LEVEL:
-      return StockLevelTransaction(storage);
-      break;
+    	LOG(storage->get_txn()->txn_id(), " executing a read-only txn in normal way!!!!!!!");
+    	// Force quit, this is a bug!
+    	return StockLevelTransaction(storage);
+    	break;
 
     case DELIVERY:
-      return DeliveryTransaction(storage);
+    	return DeliveryTransaction(storage);
+    	break;
+
+    // Invalid transaction
+    default:
+      return FAILURE;
       break;
+  }
+
+  return FAILURE;
+}
+
+
+// The execute function takes a single transaction proto and executes it based
+// on what the type of the transaction is.
+int TPCC::ExecuteReadOnly(StorageManager* storage) const {
+  switch (storage->get_txn()->txn_type()) {
+    // Initialize
+
+    case ORDER_STATUS:
+    	return OrderStatusTransactionFast(storage);
+    	break;
+
+    case STOCK_LEVEL:
+    	// Force quit, this is a bug!
+    	return StockLevelTransactionFast(storage);
+    	break;
 
     // Invalid transaction
     default:
@@ -535,6 +582,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 			assert(warehouse.ParseFromString(*val));
 			warehouse.set_year_to_date(warehouse.year_to_date() + amount);
 			assert(warehouse.SerializeToString(val));
+			LOCKLOG(txn->txn_id(), " updating warehouse "<<warehouse_key);
 		}
 	}
 
@@ -678,6 +726,57 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 }
 
 // Read order and orderline new key.
+int TPCC::OrderStatusTransactionFast(StorageManager* storage) const {
+	TxnProto* txn = storage->get_txn();
+	LOCKLOG(txn->txn_id(), "Executing ORDERSTATUS Fast, is multipart? "<<txn->multipartition());
+
+	Value* val;
+
+	// Read & update the warehouse object
+
+	//Warehouse warehouse;
+	Warehouse warehouse;
+	val = storage->SafeRead(txn->read_set(0), false);
+	assert(warehouse.ParseFromString(*val));
+
+	//District district;
+	District district;
+	val = storage->SafeRead(txn->read_set(1), false);
+	assert(district.ParseFromString(*val));
+
+	Customer customer;
+	val = storage->SafeRead(txn->read_set(2), false);
+	assert(customer.ParseFromString(*val));
+
+	if(customer.last_order() == ""){
+		return SUCCESS;
+	}
+
+	//  double customer_balance = customer->balance();
+	// string customer_first = customer.first();
+	// string customer_middle = customer.middle();
+	// string customer_last = customer.last();
+
+	int order_line_count;
+
+	//FULL_READ(storage, customer.last_order(), order, read_state, val)
+	val = storage->SafeRead(customer.last_order(), true);
+	Order order;
+	assert(order.ParseFromString(*val));
+	order_line_count = order.order_line_count();
+
+	char order_line_key[128];
+	for(int i = 0; i < order_line_count; i++) {
+		snprintf(order_line_key, sizeof(order_line_key), "%sol%d", customer.last_order().c_str(), i);
+		val = storage->SafeRead(order_line_key, true);
+		OrderLine order_line;
+		assert(order_line.ParseFromString(*val));
+	}
+
+	return SUCCESS;
+}
+
+// Read order and orderline new key.
 int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	//int low_stock = 0;
 	TxnProto* txn = storage->get_txn();
@@ -702,11 +801,6 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 
 	District district;
 	Key district_key = txn->read_set(1);
-//	read_state = NORMAL;
-//	val = storage->ReadValue(district_key, read_state);
-//	if (read_state == SPECIAL) return reinterpret_cast<int64>(val);
-//	else assert(district.ParseFromString(*val));
-//	FULL_READ(storage, district_key, district, read_state, val)
 	int latest_order_number;
 	if(storage->ShouldRead()){
 		val = storage->ReadValue(district_key, read_state, false);
@@ -748,6 +842,61 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 
 			Stock stock;
 			PART_READ(storage, Stock, stock_key, read_state, val)
+		 }
+	}
+
+	return SUCCESS;
+}
+
+// Read order and orderline new key.
+int TPCC::StockLevelTransactionFast(StorageManager* storage) const {
+	//int low_stock = 0;
+	TxnProto* txn = storage->get_txn();
+	LOCKLOG(txn->txn_id(), "Executing STOCKLEVEL Fast, is multipart? "<<txn->multipartition());
+	storage->Init();
+
+	Value* val;
+	Key warehouse_key = txn->read_set(0);
+	//PART_READ(storage, Warehouse, warehouse_key, read_state, val)
+	// Read & update the warehouse object
+	val = storage->SafeRead(warehouse_key, false);
+	Warehouse warehouse;
+	assert(warehouse.ParseFromString(*val));
+
+	District district;
+	Key district_key = txn->read_set(1);
+	int latest_order_number;
+	val = storage->SafeRead(district_key,false);
+	assert(district.ParseFromString(*val));
+	latest_order_number = district.next_order_id()-1;
+
+	for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 20); i--) {
+		char order_key[128];
+		snprintf(order_key, sizeof(order_key),
+				  "%so%d", district_key.c_str(), i);
+
+		Order order;
+		val = storage->SafeRead(order_key, true);
+		assert(order.ParseFromString(*val));
+
+		int ol_number = order.order_line_count();
+
+		for(int j = 0; j < ol_number;j++) {
+			char order_line_key[128];
+			snprintf(order_line_key, sizeof(order_line_key), "%sol%d",
+						order_key, j);
+			OrderLine order_line;
+			val = storage->SafeRead(order_line_key, true);
+			assert(order_line.ParseFromString(*val));
+
+			string item = order_line.item_id();
+			char stock_key[128];
+			snprintf(stock_key, sizeof(stock_key), "%ss%s",
+						warehouse_key.c_str(), item.c_str());
+
+			Stock stock;
+			val = storage->SafeRead(stock_key, false);
+			assert(stock.ParseFromString(*val));
 		 }
 	}
 
@@ -825,7 +974,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 
 		read_state = NORMAL;
 		if(storage->ShouldRead()){
-			val = storage->ReadLock(order_key, read_state, false);
+			val = storage->ReadLock(order_key, read_state, true);
 			if (read_state == NORMAL){
 				Order order;
 				assert(order.ParseFromString(*val));

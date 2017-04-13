@@ -18,7 +18,7 @@
 #include <inttypes.h>
 
 #define CHKPNTDIR "../db/checkpoints"
-#define NUM_NEW_TAB 2
+#define NUM_NEW_TAB 4
 #define BIT_MASK (NUM_NEW_TAB-1)
 
 using std::tr1::unordered_map;
@@ -42,6 +42,7 @@ class LockedVersionedStorage {
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
   virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object);
+  virtual ValuePair SafeRead(const Key& key, int64 txn_id, bool new_object);
   virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
     			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
@@ -51,7 +52,10 @@ class LockedVersionedStorage {
   virtual void Unlock(const Key& key, int64 txn_id, bool new_object);
   virtual void RemoveValue(const Key& key, int64 txn_id, bool new_object);
   inline bool DeleteObject(const Key& key) {
-	  //delete objects_[key];
+	  int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+	  pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+	  delete objects_[key];
+	  pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
 	  return true;
   }
   bool DeleteObject(const Key& key, int64 txn_id);
@@ -73,6 +77,8 @@ class LockedVersionedStorage {
 		  current = next;
 	  }
   }
+
+
 
   bool FetchEntry(const Key& key, KeyEntry*& entry) {
 	  if (objects_.count(key) == 0)

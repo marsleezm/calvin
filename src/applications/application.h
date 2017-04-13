@@ -39,6 +39,9 @@ class Application {
   // Execute a transaction's application logic given the input 'txn'.
   virtual int Execute(StorageManager* storage) const = 0;
 
+  // Execute read-only transaction.
+  virtual int ExecuteReadOnly(StorageManager* storage) const = 0;
+
   // Storage initialization method.
   virtual void InitializeStorage(LockedVersionedStorage* storage,
                                  Configuration* conf) const = 0;

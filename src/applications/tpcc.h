@@ -15,19 +15,19 @@
 #include "proto/tpcc_args.pb.h"
 
 // High conflict
-#define WAREHOUSES_PER_NODE 4
-#define DISTRICTS_PER_WAREHOUSE 2
-#define DISTRICTS_PER_NODE (WAREHOUSES_PER_NODE * DISTRICTS_PER_WAREHOUSE)
-#define CUSTOMERS_PER_DISTRICT 100
-#define CUSTOMERS_PER_NODE (DISTRICTS_PER_NODE * CUSTOMERS_PER_DISTRICT)
-#define NUMBER_OF_ITEMS 500
-
-//#define WAREHOUSES_PER_NODE 12
-//#define DISTRICTS_PER_WAREHOUSE 10
+//#define WAREHOUSES_PER_NODE 4
+//#define DISTRICTS_PER_WAREHOUSE 2
 //#define DISTRICTS_PER_NODE (WAREHOUSES_PER_NODE * DISTRICTS_PER_WAREHOUSE)
-//#define CUSTOMERS_PER_DISTRICT 3000
+//#define CUSTOMERS_PER_DISTRICT 100
 //#define CUSTOMERS_PER_NODE (DISTRICTS_PER_NODE * CUSTOMERS_PER_DISTRICT)
-//#define NUMBER_OF_ITEMS 100000
+//#define NUMBER_OF_ITEMS 500
+
+#define WAREHOUSES_PER_NODE 12
+#define DISTRICTS_PER_WAREHOUSE 10
+#define DISTRICTS_PER_NODE (WAREHOUSES_PER_NODE * DISTRICTS_PER_WAREHOUSE)
+#define CUSTOMERS_PER_DISTRICT 3000
+#define CUSTOMERS_PER_NODE (DISTRICTS_PER_NODE * CUSTOMERS_PER_DISTRICT)
+#define NUMBER_OF_ITEMS 100000
 
 using std::string;
 
@@ -40,13 +40,13 @@ class Stock;
 class TPCC : public Application {
  public:
   enum TxnType {
-    INITIALIZE = 0,
-    NEW_ORDER = 1,
-    PAYMENT = 2,
-    ORDER_STATUS = 3,
-    DELIVERY = 4,
-    STOCK_LEVEL = 5,
-  };
+	INITIALIZE = 0,
+	NEW_ORDER = 1,
+	PAYMENT = 2,
+	ORDER_STATUS = 3,
+	DELIVERY = 4,
+	STOCK_LEVEL = 5,
+	};
 
   virtual ~TPCC() {}
 
@@ -92,6 +92,8 @@ class TPCC : public Application {
 
   // Simple execution of a transaction using a given storage
   virtual int Execute(StorageManager* storage) const;
+  // Simple execution of a transaction using a given storage
+  virtual int ExecuteReadOnly(StorageManager* storage) const;
 
 /* TODO(Thad): Uncomment once testing friend class exists
  private: */
@@ -117,8 +119,10 @@ class TPCC : public Application {
   int PaymentTransaction(StorageManager* storage) const;
 
   int OrderStatusTransaction(StorageManager* storage) const;
+  int OrderStatusTransactionFast(StorageManager* storage) const;
 
   int StockLevelTransaction(StorageManager* storage) const;
+  int StockLevelTransactionFast(StorageManager* storage) const;
 
   int DeliveryTransaction(StorageManager* storage) const;
 

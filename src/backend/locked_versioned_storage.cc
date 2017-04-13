@@ -124,6 +124,49 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 	}
 }
 
+
+ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool new_object) {
+	//ASSERT(objects_.count(key) != 0);
+
+	// Access new object table, I should take the corresponding mutex. This serves two purposes
+	// 1. To avoid another concurrent transaction to insert elements into the table, which may cause map rehash and invalidate my
+	// value entry
+	// 2. To avoid another concurrent transaction to insert an element that I am just going to read as well as inserting an empty entry,
+	// which causes data races.
+	KeyEntry* entry;
+	if(new_object){
+		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+		// If its empty entry, create a new entry
+		LOG(txn_id, " trying to safe read new obj ["<<key<<"]");
+		assert(new_objects_[new_tab_num].count(key) != 0);
+		entry = new_objects_[new_tab_num][key];
+		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
+	}
+	else{
+		ASSERT(objects_.count(key) != 0);
+		entry = objects_[key];
+	}
+
+	// If the transaction that requested the lock is ordered before me, I have to wait for him
+	pthread_mutex_lock(&(entry->mutex_));
+	ValuePair value_pair;
+	//LOCKLOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
+	for (DataNode* list = entry->head; list; list = list->next) {
+		if (list->txn_id <= txn_id) {
+			ASSERT(list->txn_id <= Sequencer::max_commit_ts);
+			DirtyGC(list, Sequencer::max_commit_ts-GC_THRESHOLD);
+			value_pair.first = NOT_COPY;
+			value_pair.second = list->value;
+			LOCKLOG(txn_id, " safe reading ["<<key<<"] from"<<list->txn_id<<", addr is "<<reinterpret_cast<int64>(value_pair.second));
+			break;
+		}
+	}
+	pthread_mutex_unlock(&(entry->mutex_));
+	ASSERT(value_pair.second!=NULL);
+	return value_pair;
+}
+
 // If read & write, then this can not be a blind write.
 ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object){
@@ -133,7 +176,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
 		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
 		// If its empty entry, create a new entry
-		LOG(txn_id, " got new object lock!! ["<<key<<"]");
+		LOG(txn_id, " trying to get new object lock!! ["<<key<<"]");
 		if(new_objects_[new_tab_num].count(key) == 0){
 			pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
 			LOG(txn_id, " can not find any entry!");
@@ -222,9 +265,10 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 					//LOCKLOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
 					//LOCKLOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
-					value_pair.assign_first(WRITE);
+					LOG(txn_id, key<<" first is "<<value_pair.first);
+					value_pair.first = WRITE | value_bit->first;
 					value_pair.second = new Value(*list->value);
-					//LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
+					LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", GC addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				else{
 					int size = entry->read_from_list->size();
@@ -235,9 +279,9 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 					else
 						entry->read_from_list->push_back(ReadFromEntry(txn_id, list->txn_id, abort_bit, num_aborted, abort_queue));
 
-					value_pair.assign_first(WRITE);
+					value_pair.first = WRITE | value_bit->first;
 					value_pair.second = new Value(*list->value);
-					LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", IS COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
+					LOCKLOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO GC addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				break;
 			}

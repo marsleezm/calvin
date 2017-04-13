@@ -31,7 +31,7 @@ using tr1::unordered_map;
 
 #define NUM_THREADS 5
 #define NO_LOCK INT_MAX
-#define GC_THRESHOLD 5
+#define GC_THRESHOLD 20
 
 #define ASSERTS_ON true
 
@@ -47,7 +47,7 @@ using tr1::unordered_map;
 #define SKIP 1
 #define SPECIAL 2
 
-
+// Tranasction execution return
 #define FINISHED 3
 #define WAIT_AND_SENT 4
 #define WAIT_NOT_SENT 5

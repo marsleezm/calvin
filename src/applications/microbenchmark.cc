@@ -219,6 +219,12 @@ void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, T
 
 }
 
+int Microbenchmark::ExecuteReadOnly(StorageManager* storage) const{
+	LOG(0, " microbench has not read-only version!!!!");
+	assert(1 == 2);
+	return 0;
+}
+
 int Microbenchmark::Execute(StorageManager* storage) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
@@ -226,7 +232,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 	LOG(txn->txn_id(), "Executing, is multipart? "<<(txn->multipartition()));
 	storage->Init();
 
-	if (storage->ShouldExec())
+	if (storage->ShouldRead())
 	{
 		Rand rand;
 		rand.seed(txn->txn_id());
