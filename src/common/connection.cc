@@ -53,12 +53,11 @@ pthread_attr_init(&attr);
 //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 CPU_ZERO(&cpuset);
-CPU_SET(5, &cpuset);
+CPU_SET(0, &cpuset);
 //CPU_SET(4, &cpuset);
 //CPU_SET(5, &cpuset);
 //CPU_SET(6, &cpuset);
 //CPU_SET(7, &cpuset);
-std::cout << "Connection thread starts at core 5"<<std::endl;
 pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 
@@ -99,6 +98,8 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
     delete it->second;
   }
   
+  delete restart_queue;
+
   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
        it != link_unlink_queue_.end(); ++it) {
     delete it->second;
@@ -143,6 +144,27 @@ Connection* ConnectionMultiplexer::NewConnection(const string& channel, AtomicQu
   pthread_mutex_unlock(&new_connection_mutex_);
   return connection;
 }
+
+Connection* ConnectionMultiplexer::NewConnection(const string& channel, AtomicQueue<MessageProto>** aa, AtomicQueue<MessageProto>** bb) {
+  // Disallow concurrent calls to NewConnection/~Connection.
+  pthread_mutex_lock(&new_connection_mutex_);
+  remote_result_[channel] = *aa;
+  restart_queue = *bb;
+  // Register the new connection request.
+  new_connection_channel_ = &channel;
+
+  // Wait for the Run() loop to create the Connection object. (It will reset
+  // new_connection_channel_ to NULL when the new connection has been created.
+  while (new_connection_channel_ != NULL) {}
+
+  Connection* connection = new_connection_;
+  new_connection_ = NULL;
+
+  // Allow future calls to NewConnection/~Connection.
+  pthread_mutex_unlock(&new_connection_mutex_);
+  return connection;
+}
+
 
 void ConnectionMultiplexer::Run() {
   MessageProto message;
@@ -250,15 +272,17 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 }
 
 void ConnectionMultiplexer::Send(const MessageProto& message) {
-
-  if (message.type() == MessageProto::READ_RESULT) {
+  if (message.type() == MessageProto::READ_RESULT || message.type() == MessageProto::DEPENDENT  || message.type() == MessageProto::RECON_READ_RESULT
+		  || message.type() == MessageProto::RECON_INDEX_REQUEST || message.type() == MessageProto::RECON_INDEX_REPLY) {
     if (remote_result_.count(message.destination_channel()) > 0) {
       remote_result_[message.destination_channel()]->Push(message);
     } else {
       undelivered_messages_[message.destination_channel()].push_back(message);
     }
-  } else {
-
+  } else if (message.type() == MessageProto::TXN_RESTART) {
+    restart_queue->Push(message);
+  }else {
+	  //|| message.type() == MessageProto::RECON_INDEX_REQUEST || message.type() == MessageProto::RECON_INDEX_REPLY
     // Prepare message.
     string* message_string = new string();
     message.SerializeToString(message_string);
@@ -280,6 +304,7 @@ void ConnectionMultiplexer::Send(const MessageProto& message) {
       // Message is addressed to valid remote node. Channel validity will be
       // checked by the remote multiplexer.
       pthread_mutex_lock(&send_mutex_[message.destination_node()]);  
+      //LOG(0, " trying to send msg "<<message.type()<<", batch is "<<message.batch_number());
       remote_out_[message.destination_node()]->send(msg);
       pthread_mutex_unlock(&send_mutex_[message.destination_node()]);  
     } 
@@ -311,8 +336,10 @@ Connection::~Connection() {
   pthread_mutex_unlock(&(multiplexer_->new_connection_mutex_));
 }
 
+// Send message to multiplexer.
 void Connection::Send(const MessageProto& message) {
   // Prepare message.
+	//LOG(0, "Before sending msg of "<<message.type());
   string* message_string = new string();
   message.SerializeToString(message_string);
   zmq::message_t msg(reinterpret_cast<void*>(
@@ -321,11 +348,13 @@ void Connection::Send(const MessageProto& message) {
                      DeleteString,
                      message_string);
   // Send message.
+
   socket_out_->send(msg);
 }
 
 void Connection::Send1(const MessageProto& message) {
   // Prepare message.
+	//LOG(0, "Before sending1 msg of "<<message.type());
   string* message_string = new string();
   message.SerializeToString(message_string);
   zmq::message_t msg(reinterpret_cast<void*>(
@@ -333,9 +362,17 @@ void Connection::Send1(const MessageProto& message) {
                      message_string->size(),
                      DeleteString,
                      message_string);
-   pthread_mutex_lock(&multiplexer()->send_mutex_[message.destination_node()]);                    
+   pthread_mutex_lock(&multiplexer()->send_mutex_[message.destination_node()]);
   multiplexer()->remote_out_[message.destination_node()]->send(msg);
   pthread_mutex_unlock(&multiplexer()->send_mutex_[message.destination_node()]);
+}
+
+void Connection::SmartSend(const MessageProto& message) {
+	if(message.destination_node() == multiplexer_->configuration_->this_node_id){
+		Send(message);
+	}
+	else
+		Send1(message);
 }
 
 bool Connection::GetMessage(MessageProto* message) {
@@ -377,4 +414,3 @@ void Connection::UnlinkChannel(const string& channel) {
   m.set_channel_request(channel);
   multiplexer()->link_unlink_queue_[channel_]->Push(m);
 }
-

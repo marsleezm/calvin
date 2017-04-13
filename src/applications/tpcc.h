@@ -11,6 +11,8 @@
 #include "applications/application.h"
 #include "proto/txn.pb.h"
 #include "common/configuration.h"
+#include "proto/tpcc.pb.h"
+#include "proto/tpcc_args.pb.h"
 
 #define WAREHOUSES_PER_NODE 12
 #define DISTRICTS_PER_WAREHOUSE 10
@@ -31,18 +33,19 @@ class TPCC : public Application {
  public:
   enum TxnType {
     INITIALIZE = 0,
-    NEW_ORDER = 1,
-    PAYMENT = 2,
-    ORDER_STATUS = 3,
-    DELIVERY = 4,
-    STOCK_LEVEL = 5,
+    PAYMENT = 6,
+	NEW_ORDER = 7,
+	//NEW_ORDER = 9,
+    ORDER_STATUS = 11,
+    DELIVERY = 12,
+    STOCK_LEVEL = 13,
   };
 
   virtual ~TPCC() {}
 
   // Load generator for a new transaction
-  virtual TxnProto* NewTxn(int64 txn_id, int txn_type, string args,
-                           Configuration* config) const;
+  virtual void NewTxn(int64 txn_id, int txn_type,
+                           Configuration* config, TxnProto* txn) const;
 
   // The key converter takes a valid key (string) and converts it to an id
   // for the checkpoint to use
@@ -82,6 +85,7 @@ class TPCC : public Application {
 
   // Simple execution of a transaction using a given storage
   virtual int Execute(TxnProto* txn, StorageManager* storage) const;
+  virtual int ReconExecute(TxnProto* txn, ReconStorageManager* storage) const;
 
 /* TODO(Thad): Uncomment once testing friend class exists
  private: */
@@ -100,18 +104,26 @@ class TPCC : public Application {
   // A NewOrder call takes a set of args and a transaction id and performs
   // the new order transaction as specified by TPC-C.  The return is 1 for
   // success or 0 for failure.
-  int NewOrderTransaction(TxnProto* txn, StorageManager* storage) const;
+  int NewOrderTransaction(StorageManager* storage) const;
 
   // A Payment call takes a set of args as the parameter and performs the
   // payment transaction, returning a 1 for success or 0 for failure.
-  int PaymentTransaction(TxnProto* txn, StorageManager* storage) const;
+  int PaymentTransaction(StorageManager* storage) const;
 
-  int OrderStatusTransaction(TxnProto* txn, StorageManager* storage) const;
+  int OrderStatusTransaction(StorageManager* storage) const;
 
-  int StockLevelTransaction(TxnProto* txn, StorageManager* storage) const;
+  int StockLevelTransaction(StorageManager* storage) const;
 
-  int DeliveryTransaction(TxnProto* txn, StorageManager* storage) const;
+  int DeliveryTransaction(StorageManager* storage) const;
 
+  // Recon version. Maybe need to delete some old ones
+  int NewOrderReconTransaction(ReconStorageManager* storage) const;
+
+  int OrderStatusReconTransaction(ReconStorageManager* storage) const;
+
+  int StockLevelReconTransaction(ReconStorageManager* storage) const;
+
+  int DeliveryReconTransaction(ReconStorageManager* storage) const;
   // The following are implementations of retrieval and writing for local items
   Value* GetItem(Key key) const;
   void SetItem(Key key, Value* value) const;

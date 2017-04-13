@@ -6,23 +6,34 @@
 #include "backend/simple_storage.h"
 
 Value* SimpleStorage::ReadObject(const Key& key, int64 txn_id) {
-  if (objects_.count(key) != 0) {
-    return objects_[key];
-  } else {
-    return NULL;
-  }
+//	Value* val;
+//	if (objects_.count(key) != 0)
+//		val = objects_[key];
+//	else
+//		val = NULL;
+//    return val;
+	Value* val;
+	//pthread_mutex_lock(&mutex_);
+	if (objects_.count(key) != 0)
+		val = objects_[key];
+	else
+		val = NULL;
+	//pthread_mutex_unlock(&mutex_);
+    return val;
 }
 
 bool SimpleStorage::PutObject(const Key& key, Value* value, int64 txn_id) {
-pthread_mutex_lock(&mutex_);
+	pthread_mutex_lock(&mutex_);
   objects_[key] = value;
-pthread_mutex_unlock(&mutex_);
+  pthread_mutex_unlock(&mutex_);
   return true;
 }
 
 bool SimpleStorage::DeleteObject(const Key& key, int64 txn_id) {
-  objects_.erase(key);
-  return true;
+	//pthread_mutex_lock(&mutex_);
+	objects_.erase(key);
+	//pthread_mutex_unlock(&mutex_);
+	return true;
 }
 
 void SimpleStorage::Initmutex() {

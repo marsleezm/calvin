@@ -11,68 +11,117 @@
 #include "common/utils.h"
 #include "proto/txn.pb.h"
 #include "proto/message.pb.h"
+#include <algorithm>
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
                                Storage* actual_storage, TxnProto* txn)
     : configuration_(config), connection_(connection),
-      actual_storage_(actual_storage), txn_(txn) {
-  MessageProto message;
+      actual_storage_(actual_storage), txn_(txn), got_read_set(0) {
+	Setup(txn);
+  // Scheduler is responsible for calling HandleReadResponse. We're done here.
+}
 
-  // If reads are performed at this node, execute local reads and broadcast
-  // results to all (other) writers.
-  bool reader = false;
-  for (int i = 0; i < txn->readers_size(); i++) {
-    if (txn->readers(i) == configuration_->this_node_id)
-      reader = true;
-  }
+StorageManager::StorageManager(Configuration* config, Connection* connection,
+                               Storage* actual_storage)
+    : configuration_(config), connection_(connection),
+      actual_storage_(actual_storage), txn_(NULL), got_read_set(0) {
 
+}
+
+void StorageManager::Setup(TxnProto* txn){
+	txn_ = txn;
+	MessageProto message;
+	bool reader = false;
+	for (int i = 0; i < txn->readers_size(); i++) {
+	  if (txn->readers(i) == configuration_->this_node_id)
+	      reader = true;
+	}
+
+  message.set_source_node(configuration_->this_node_id);
   if (reader) {
-    message.set_destination_channel(IntToString(txn->txn_id()));
-    message.set_type(MessageProto::READ_RESULT);
+	message.set_destination_channel(IntToString(txn->txn_id()));
+	message.set_type(MessageProto::READ_RESULT);
 
-    // Execute local reads.
-    for (int i = 0; i < txn->read_set_size(); i++) {
-      const Key& key = txn->read_set(i);
-      if (configuration_->LookupPartition(key) ==
-          configuration_->this_node_id) {
-        Value* val = actual_storage_->ReadObject(key);
-        objects_[key] = val;
-        message.add_keys(key);
-        message.add_values(val == NULL ? "" : *val);
-      }
-    }
-    for (int i = 0; i < txn->read_write_set_size(); i++) {
-      const Key& key = txn->read_write_set(i);
-      if (configuration_->LookupPartition(key) ==
-          configuration_->this_node_id) {
-        Value* val = actual_storage_->ReadObject(key);
-        objects_[key] = val;
-        message.add_keys(key);
-        message.add_values(val == NULL ? "" : *val);
-      }
-    }
+	// Execute local reads.
+	for (int i = 0; i < txn->read_set_size(); i++) {
+	  const Key& key = txn->read_set(i);
+	  if (configuration_->LookupPartition(key) ==
+		  configuration_->this_node_id) {
+		Value* val = actual_storage_->ReadObject(key);
+		objects_[key] = val;
+		message.add_keys(key);
+		message.add_values(val == NULL ? "" : *val);
+	  }
+	}
+	for (int i = 0; i < txn->pred_read_set_size(); i++) {
+	  const Key& key = txn->pred_read_set(i);
+	  if (configuration_->LookupPartition(key) ==
+		  configuration_->this_node_id) {
+		Value* val = actual_storage_->ReadObject(key);
+		objects_[key] = val;
+		message.add_keys(key);
+		message.add_values(val == NULL ? "" : *val);
+	  }
+	}
+	for (int i = 0; i < txn->read_write_set_size(); i++) {
+	  const Key& key = txn->read_write_set(i);
+	  //LOG(txn_->txn_id(), " fetching for rw set: "<<key);
+	  if (configuration_->LookupPartition(key) ==
+		  configuration_->this_node_id) {
+		Value* val = actual_storage_->ReadObject(key);
+		//LOG(txn_->txn_id(), " got "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
+		objects_[key] = val;
+		message.add_keys(key);
+		message.add_values(val == NULL ? "" : *val);
+	  }
+	}
+	for (int i = 0; i < txn->pred_read_write_set_size(); i++) {
+	  const Key& key = txn->pred_read_write_set(i);
+	  //LOG(txn_->txn_id(), " fetching for pred rw set: "<<key);
+	  if (configuration_->LookupPartition(key) ==
+		  configuration_->this_node_id) {
+		Value* val = actual_storage_->ReadObject(key);
+		//LOG(txn_->txn_id(), " got "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
+		objects_[key] = val;
+		message.add_keys(key);
+		message.add_values(val == NULL ? "" : *val);
+	  }
+	}
 
-    // Broadcast local reads to (other) writers.
-    for (int i = 0; i < txn->writers_size(); i++) {
-      if (txn->writers(i) != configuration_->this_node_id) {
-        message.set_destination_node(txn->writers(i));
-        connection_->Send1(message);
-      }
-    }
+	// Broadcast local reads to (other) writers.
+	string sent_to = "";
+	for (int i = 0; i < txn->writers_size(); i++) {
+	  if (txn->writers(i) != configuration_->this_node_id) {
+		message.set_destination_node(txn->writers(i));
+		connection_->Send1(message);
+		sent_to += IntToString(txn->writers(i)) + " ";
+	  }
+	}
+	LOG(txn->txn_id(), " sending read results to "<<sent_to);
   }
 
   // Note whether this node is a writer. If not, no need to do anything further.
   writer = false;
   for (int i = 0; i < txn->writers_size(); i++) {
-    if (txn->writers(i) == configuration_->this_node_id)
-      writer = true;
+	if (txn->writers(i) == configuration_->this_node_id)
+	  writer = true;
   }
+  got_read_set += 1;
+}
 
-  // Scheduler is responsible for calling HandleReadResponse. We're done here.
+void StorageManager::ApplyChange(){
+	for (unordered_map<Key, Value>::iterator it = write_set_.begin();
+	       it != write_set_.end(); ++it) {
+		if(objects_.count(it->first) == 0)
+			PutObject(it->first, new Value(it->second));
+		else
+			*objects_[it->first] = it->second;
+	 }
 }
 
 void StorageManager::HandleReadResult(const MessageProto& message) {
   assert(message.type() == MessageProto::READ_RESULT);
+  got_read_set += 1;
   for (int i = 0; i < message.keys_size(); i++) {
     Value* val = new Value(message.values(i));
     objects_[message.keys(i)] = val;
@@ -80,9 +129,66 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
   }
 }
 
+void StorageManager::PrintObjects(){
+	for (unordered_map<Key, Value*>::iterator it = objects_.begin();
+	       it != objects_.end(); ++it) {
+		LOG(txn_->txn_id(), " has key "<<it->first<<", value is "<<it->second);
+	 }
+}
+
 bool StorageManager::ReadyToExecute() {
-  return static_cast<int>(objects_.size()) ==
-         txn_->read_set_size() + txn_->read_write_set_size();
+	if(txn_){
+		string s ="";
+		for(int i = 0; i<txn_->readers_size(); ++i)
+			s += IntToString(txn_->readers(i)) + " ";
+		LOG(txn_->txn_id(), " is ready? "<<got_read_set<<", reader size is "<<txn_->readers_size()<<
+				", readers are "<<s<<", type is "<< txn_->txn_type());
+		// Can finish the transaction if I am not the writer or if I am the writer, I have received everything
+		return	got_read_set == txn_->readers_size();
+	}
+	else
+		return false;
+//	if(static_cast<int>(objects_.size()) ==
+//         txn_->read_set_size() + txn_->read_write_set_size() + txn_->pred_read_set_size() + txn_->pred_read_write_set_size())
+//		return true;
+//	else{
+//		LOG(txn_->txn_id(), " txn type is "<<txn_->txn_type());
+//		vector<string> objects;
+//		for (unordered_map<Key, Value*>::iterator it = objects_.begin();
+//			       it != objects_.end(); ++it)
+//			objects.push_back(it->first);
+//		sort(objects.begin(), objects.end());
+//		string oj = "";
+//		for(uint i = 0 ; i<objects.size(); ++i)
+//			oj+= objects[i]+",";
+//
+//		LOG(txn_->txn_id(), "objects size is "<<objects_.size());
+//		LOG(txn_->txn_id(), "objects are "<<oj);
+//		LOG(txn_->txn_id(), "readset size is "<<txn_->read_set_size());
+//		LOG(txn_->txn_id(), "read_write_set size is "<<txn_->read_write_set_size());
+//
+//		set<string> pred_read_set;
+//		for(int i =0 ; i<txn_->pred_read_set_size(); ++i){
+//			if(pred_read_set.count(txn_->pred_read_set(i)))
+//				LOG(txn_->txn_id(), " added twice!!"<<txn_->pred_read_set(i));
+//			pred_read_set.insert(txn_->pred_read_set(i));
+//		}
+//
+//		for(uint i = 0 ; i<objects.size(); ++i)
+//			if(pred_read_set.count(objects[i]))
+//				pred_read_set.erase(objects[i]);
+//
+//		string pr ="";
+//		for (set<string>::iterator it = pred_read_set.begin();
+//			       it != pred_read_set.end(); ++it)
+//			pr += *it;
+//
+//
+//		LOG(txn_->txn_id(), "pred readset size is "<<pred_read_set.size());
+//		LOG(txn_->txn_id(), "pred readset  is "<<pr);
+//		LOG(txn_->txn_id(), "pred read_write_set size is "<<txn_->pred_read_write_set_size());
+//		return false;
+//	}
 }
 
 StorageManager::~StorageManager() {
@@ -94,6 +200,14 @@ StorageManager::~StorageManager() {
 }
 
 Value* StorageManager::ReadObject(const Key& key) {
+//	if(objects_.count(key) == 0){
+//		LOG(txn_->txn_id(), " WTF, we do not have "<<key<<", but we have ");
+//		for (unordered_map<Key, Value*>::iterator it = objects_.begin();
+//		       it != objects_.end(); ++it) {
+//		    	LOG(txn_->txn_id(), " Key: "<<it->first<<", Value: "<<it->second);
+//		  }
+//		Spin(2);
+//	}
   return objects_[key];
 }
 

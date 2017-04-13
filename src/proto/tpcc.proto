@@ -40,6 +40,7 @@ message District {
   optional double tax = 20;
   optional double year_to_date = 21;
   optional int32  next_order_id = 22;
+  optional int32  smallest_order_id = 23;
 }
 
 message Customer {
@@ -49,6 +50,7 @@ message Customer {
   required bytes id = 1;
   required bytes district_id = 2;
   required bytes warehouse_id = 3;
+  optional bytes last_order = 4;
 
   // The following are informational fields for a customer as defined by the
   // TPC-C standards

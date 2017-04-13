@@ -32,6 +32,15 @@ message TxnProto {
 
   // Keys of objects read AND modified by this transaction.
   repeated bytes read_write_set = 22;
+  
+  // Keys of objects read (but not modified) by this transaction.
+  repeated bytes pred_read_set = 200;
+
+  // Keys of objects modified (but not read) by this transaction.
+  repeated bytes pred_write_set = 210;
+
+  // Keys of objects read AND modified by this transaction.
+  repeated bytes pred_read_write_set = 220;
 
   // Arguments to be passed when invoking the stored procedure to execute this
   // transaction. 'arg' is a serialized protocol message. The client and backend
@@ -39,6 +48,7 @@ message TxnProto {
   // based on 'txn_type'.
   optional bytes arg = 23;
 
+  required int64 seed = 24;	
   // Transaction status.
   //
   // TODO(alex): Should this be here?

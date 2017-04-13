@@ -15,10 +15,11 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
-#include <unordered_map>
+#include <tr1/unordered_map>
 #include <utility>
 #include <sched.h>
 #include <map>
+#include <algorithm>
 
 #include "applications/application.h"
 #include "common/utils.h"
@@ -26,6 +27,7 @@
 #include "common/connection.h"
 #include "backend/storage.h"
 #include "backend/storage_manager.h"
+#include "backend/recon_storage_manager.h"
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
 #include "scheduler/deterministic_lock_manager.h"
@@ -67,8 +69,10 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 											   int queue_mode)
     : configuration_(conf), batch_connection_(batch_connection),
       storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode) {
-      ready_txns_ = new std::deque<TxnProto*>();
-  lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
+	ready_txns_ = new std::deque<TxnProto*>();
+
+	pthread_mutex_init(&recon_mutex_, NULL);
+    lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
   
   txns_queue = new AtomicQueue<TxnProto*>();
   done_queue = new AtomicQueue<TxnProto*>();
@@ -76,6 +80,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
   for (int i = 0; i < NUM_THREADS; i++) {
     message_queues[i] = new AtomicQueue<MessageProto>();
   }
+  recon_queue_ = new AtomicQueue<MessageProto>();
+  recon_connection = batch_connection_->multiplexer()->NewConnection("recon", &recon_queue_);
 
 Spin(2);
 
@@ -86,7 +92,7 @@ Spin(2);
   //pthread_attr_setdetachstate(&attr1, PTHREAD_CREATE_DETACHED);
   
 CPU_ZERO(&cpuset);
-CPU_SET(4, &cpuset);
+CPU_SET(3, &cpuset);
 std::cout << "Central locking thread starts at 4"<<std::endl;
   pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
   pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
@@ -105,7 +111,7 @@ std::cout << "Central locking thread starts at 4"<<std::endl;
 	pthread_attr_init(&attr);
 	CPU_ZERO(&cpuset);
 	//if (i == 0 || i == 1)
-	CPU_SET(i, &cpuset);
+	CPU_SET(i+3, &cpuset);
 	std::cout << "Worker thread #"<<i<<" starts at core "<<i<<std::endl;
 	//else
 	//CPU_SET(i+2, &cpuset);
@@ -137,77 +143,206 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
   unordered_map<string, StorageManager*> active_txns;
-  int counter = 0;
-  double old_time = GetTime(), now_time;
+  unordered_map<string, ReconStorageManager*> recon_pending_txns;
+  std::queue<TxnProto*> recon_txns;
+
+  //bool is_recon = false;
+  TxnProto* txn;
 
   // Begin main loop.
-  MessageProto message;
+  MessageProto message, reply_recon_msg;
+  reply_recon_msg.set_type(MessageProto::RECON_INDEX_REPLY);
+  reply_recon_msg.set_destination_channel("sequencer");
+  reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
   while (true) {
-	bool got_message = scheduler->message_queues[thread]->Pop(&message);
-    if (got_message == true) {
-      // Remote read result.
-      assert(message.type() == MessageProto::READ_RESULT);
-      StorageManager* manager = active_txns[message.destination_channel()];
-      manager->HandleReadResult(message);
-      if (manager->ReadyToExecute()) {
-        // Execute and clean up.
-        TxnProto* txn = manager->txn_;
-        scheduler->application_->Execute(txn, manager);
-        delete manager;
+	  if (scheduler->message_queues[thread]->Pop(&message)){
 
-        scheduler->thread_connections_[thread]->
-            UnlinkChannel(IntToString(txn->txn_id()));
-        active_txns.erase(message.destination_channel());
-        // Respond to scheduler;
-        //scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
-        scheduler->done_queue->Push(txn);
-      }
-    } else {
-      // No remote read result found, start on next txn if one is waiting.
-     TxnProto* txn;
-     bool got_it;
-     if (scheduler->queue_mode_ == SELF_QUEUE){
-		  got_it = true;
-		  scheduler->client_->GetTxn(&txn, counter++);
-		  scheduler->add_readers_writers(txn);
-     } else{
-    	 got_it = scheduler->txns_queue->Pop(&txn);
-     }
-      if (got_it == true) {
-        // Create manager.
-        StorageManager* manager =
-            new StorageManager(scheduler->configuration_,
-                               scheduler->thread_connections_[thread],
-                               scheduler->storage_, txn);
+		  // If I get read_result when executing a transaction
+		  if (message.type() == MessageProto::READ_RESULT) {
+			  // Remote read result.
 
-          // Writes occur at this node.
-          if (manager->ReadyToExecute()) {
-            // No remote reads. Execute and clean up.
-            scheduler->application_->Execute(txn, manager);
-            delete manager;
+			  StorageManager* manager;
+			  if(active_txns.count(message.destination_channel()) == 0){
+				  manager = new StorageManager(scheduler->configuration_,
+				  							scheduler->thread_connections_[thread],
+				  							scheduler->storage_);
+				  active_txns[message.destination_channel()] = manager;
+				  //LOG(StringToInt(message.destination_channel()), " got read result for uninitialized txn");
+			  }
+			  else{
+				  manager = active_txns[message.destination_channel()];
+				  //LOG(StringToInt(message.destination_channel()), " got read result for old txn");
+			  }
 
-            // Respond to scheduler;
-            //scheduler->SendTxnPtr(scheduler->responses_out_[thread], txn);
-            if (scheduler->queue_mode_!= SELF_QUEUE){
-            	scheduler->done_queue->Push(txn);
-            }
-          } else {
-        	  scheduler->thread_connections_[thread]->
-			  	  LinkChannel(IntToString(txn->txn_id()));
-        	  // There are outstanding remote reads.
-        	  active_txns[IntToString(txn->txn_id())] = manager;
-          }
-      }
-    }
+			  manager->HandleReadResult(message);
+			  if (manager->ReadyToExecute()) {
+				  // Execute and clean up.
+				  //LOG(StringToInt(message.destination_channel()), " ready to execute!");
+				  TxnProto* txn = manager->txn_;
+				  // If successfully finished
+				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
+					  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+					  txn->set_status(TxnProto::ABORTED);
+				  }
 
-    if (scheduler->queue_mode_ == SELF_QUEUE){
-    	if (counter == 100000){
-    		now_time = GetTime();
-    		std::cout << "Throughput is "<< counter / (now_time-old_time) << " txns/sec"<< now_time << old_time<< std::endl;
-    		old_time = now_time;
-    		counter = 0;
-    	}
-    }
+				  delete manager;
+				  scheduler->thread_connections_[thread]->UnlinkChannel(IntToString(txn->txn_id()));
+				  active_txns.erase(message.destination_channel());
+				  // Respond to scheduler;
+				  scheduler->done_queue->Push(txn);
+			  }
+		  }
+		  else{
+			  //LOG(StringToInt(message.destination_channel()), " got recon read result");
+			  assert(message.type() == MessageProto::RECON_READ_RESULT);
+			  ReconStorageManager* manager;
+
+			  if(recon_pending_txns.count(message.destination_channel()) == 0)
+			  {
+				  manager = new ReconStorageManager(scheduler->configuration_,
+								   scheduler->thread_connections_[thread],
+								   scheduler->storage_);
+				  manager->HandleReadResult(message);
+				  recon_pending_txns[message.destination_channel()] = manager;
+				  manager->HandleReadResult(message);
+			  }
+			  else{
+				  manager = recon_pending_txns[message.destination_channel()];
+				  if(manager->get_txn()){
+					  //LOG(StringToInt(message.destination_channel()), " handling recon read results");
+					  manager->HandleReadResult(message);
+					  TxnProto* txn = manager->GetTxn();
+					  int result = scheduler->application_->ReconExecute(txn, manager);
+					  if(result == RECON_SUCCESS){
+						  // Clean up transaction
+						  LOG(txn->txn_id(), " finished recon phase");
+						  delete manager;
+						  recon_pending_txns.erase(message.destination_channel());
+						  scheduler->thread_connections_[thread]->UnlinkChannel(message.destination_channel());
+
+						  // Only one of all receivers for a multi-part dependent txn replies RECON msg
+						  if(txn->readers(0) == scheduler->configuration_->this_node_id){
+							  string txn_data;
+							  txn->SerializeToString(&txn_data);
+							  reply_recon_msg.add_data(txn_data);
+							  // Resume the execution.
+
+							  pthread_mutex_lock(&scheduler->recon_mutex_);
+							  scheduler->recon_connection->SmartSend(reply_recon_msg);
+							  reply_recon_msg.clear_data();
+							  pthread_mutex_unlock(&scheduler->recon_mutex_);
+						  }
+					  }
+					  else if(result == SUSPENDED){
+						  //LOG(txn->txn_id(), " suspended!");
+						  continue;
+					  }
+					  else {
+						  std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
+					  }
+				  }
+			  }
+		  }
+	  }
+	  else if(scheduler->txns_queue->Pop(&txn)){
+		  // No remote read result found, start on next txn if one is waiting.
+		  // Create manager.
+		  StorageManager* manager;
+		  if(active_txns.count(IntToString(txn->txn_id()))){
+			  manager = active_txns[IntToString(txn->txn_id())];
+			  manager->Setup(txn);
+			  //LOG(txn->txn_id(), " starting txn from before");
+		  }
+		  else{
+			  manager =
+					 new StorageManager(scheduler->configuration_,
+								scheduler->thread_connections_[thread],
+								scheduler->storage_, txn);
+			  //LOG(txn->txn_id(), " starting txn from scratch");
+		  }
+
+		  // Writes occur at this node.
+		  if (manager->ReadyToExecute()) {
+			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
+				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+				  delete manager;
+				  // Respond to scheduler;
+				  scheduler->done_queue->Push(txn);
+			  }
+			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
+			  else{
+				  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+				  delete manager;
+
+				  txn->set_status(TxnProto::ABORTED);
+				  scheduler->done_queue->Push(txn);
+			  }
+
+		  } else {
+			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
+			  active_txns[IntToString(txn->txn_id())] = manager;
+		  }
+	  }
+	  // Try to handle recon_txns
+	  else if(recon_txns.size()){
+
+		  TxnProto* txn = recon_txns.front();
+		  //LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
+		  recon_txns.pop();
+		  ReconStorageManager* manager;
+		  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
+			  manager = new ReconStorageManager(scheduler->configuration_,
+			  		  									scheduler->thread_connections_[thread],
+			  		  									scheduler->storage_, txn);
+			  recon_pending_txns[IntToString(txn->txn_id())] = manager;
+		  }
+		  else{
+			  manager = recon_pending_txns[IntToString(txn->txn_id())];
+			  manager->Setup(txn);
+		  }
+
+		  int result = scheduler->application_->ReconExecute(txn, manager);
+		  if(result == RECON_SUCCESS){
+			  delete manager;
+			  recon_pending_txns.erase(IntToString(txn->txn_id()));
+
+			  // Only one of all receivers for a multi-part dependent txn replies RECON msg
+			  if(txn->readers(0) == scheduler->configuration_->this_node_id){
+				  string txn_data;
+				  txn->SerializeToString(&txn_data);
+				  reply_recon_msg.add_data(txn_data);
+				  // Resume the execution.
+
+				  pthread_mutex_lock(&scheduler->recon_mutex_);
+				  scheduler->recon_connection->SmartSend(reply_recon_msg);
+				  reply_recon_msg.clear_data();
+				  pthread_mutex_unlock(&scheduler->recon_mutex_);
+			  }
+		  }
+		  else if(result == SUSPENDED){
+			  //LOG(txn->txn_id(), " recon suspend!");
+			  recon_pending_txns[IntToString(txn->txn_id())] = manager;
+			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
+			  continue;
+		  }
+		  else {
+			  std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
+		  }
+	  }
+	  // If I need to execute some dependent txns to get its read/write set AND only if I am not processing
+	  // a batch of reconnainssance message
+	  else if(scheduler->recon_queue_->Pop(&message))
+	  {
+		  //LOG(-1, " got new recon batch: "<<message.batch_number());
+		  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
+		  for (int i = 0; i < message.data_size(); i++) {
+	          TxnProto* txn = new TxnProto();
+	          txn->ParseFromString(message.data(i));
+	          //LOG(txn->txn_id(), " is added as recon txn");
+	          recon_txns.push(txn);
+		  }
+		  //is_recon = true;
+	  }
   }
   return NULL;
 }
@@ -228,7 +363,7 @@ MessageProto* GetBatch(int batch_id, Connection* connection) {
     while (connection->GetMessage(message)) {
       assert(message->type() == MessageProto::TXN_BATCH);
       if (message->batch_number() == batch_id) {
-        return message;
+    	  return message;
       } else {
         batches[message->batch_number()] = message;
         message = new MessageProto();
@@ -251,26 +386,63 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
   int pending_txns = 0;
   int batch_offset = 0;
   int batch_number = 0;
-//int test = 0;
+int test = 0;
+int abort_number = 0;
+
+	MessageProto restart_msg;
+	restart_msg.set_destination_channel("sequencer");
+	restart_msg.set_destination_node(scheduler->configuration_->this_node_id);
+	restart_msg.set_type(MessageProto::TXN_RESTART);
+	restart_msg.set_source_node(scheduler->configuration_->this_node_id);
+
+	//set<int> locked;
+	//set<int> executing;
+
   while (true) {
     TxnProto* done_txn;
     bool got_it = scheduler->done_queue->Pop(&done_txn);
     if (got_it == true) {
-      // We have received a finished transaction back, release the lock
-      scheduler->lock_manager_->Release(done_txn);
-      executing_txns--;
+    	// We have received a finished transaction back, release the lock
+    	LOG(done_txn->txn_id(), " unlock txn");
+    	scheduler->lock_manager_->Release(done_txn);
+    	executing_txns--;
+    	//executing.erase((int)done_txn->txn_id());
 
-      if(done_txn->writers_size() == 0 || rand() % done_txn->writers_size() == 0)
-        txns++;
-      //else
-    	//  std::cout<<"WTF, not true? Writer size is "<<done_txn->writers_size()<<std::endl;
-      delete done_txn;
+    	// Must be dependent txn
+    	if (done_txn->status() == TxnProto::ABORTED) {
+    		// Must be a dependent transaction
+    		assert(done_txn->txn_type() & DEPENDENT_MASK);
+    		int to_deal_node_id = done_txn->seed() % done_txn->readers_size();
+    		// Make sure that only one node would add this transaction back to node.
+    		if (scheduler->configuration_->this_node_id == done_txn->readers(to_deal_node_id)) {
+    			abort_number++;
+    			done_txn->set_status(TxnProto::ACTIVE);
+    			done_txn->clear_pred_read_write_set();
 
-    } else if (scheduler->queue_mode_ == NORMAL_QUEUE){
+    			bytes txn_data;
+    			done_txn->SerializeToString(&txn_data);
+    			restart_msg.add_data(txn_data);
+    			if(restart_msg.data_size() >= ABORT_MSG_SIZE){
+    				scheduler->batch_connection_->SmartSend(restart_msg);
+    				restart_msg.clear_data();
+    			}
+    		}
+    		delete done_txn;
+    	}
+    	else {
+    		// WTF is this magic code doing???
+    		if(done_txn->writers_size() == 0 || rand() % done_txn->writers_size() == 0) {
+    			txns++;
+    		}
+    		delete done_txn;
+    	}
+
+    } else {
       // Have we run out of txns in our batch? Let's get some new ones.
       if (batch_message == NULL) {
         batch_message = GetBatch(batch_number, scheduler->batch_connection_);
-
+        //if (batch_message)
+        //	LOG(-1, " got batch message, batch number is "<<batch_message->batch_number()<<", size is "<<batch_message->data_size());
       // Done with current batch, get next.
       } else if (batch_offset >= batch_message->data_size()) {
         batch_offset = 0;
@@ -280,7 +452,6 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 
       // Current batch has remaining txns, grab up to 10.
       } else if (executing_txns + pending_txns < 2000) {
-
         for (int i = 0; i < 100; i++) {
           if (batch_offset >= batch_message->data_size()) {
             // Oops we ran out of txns in this batch. Stop adding txns for now.
@@ -289,26 +460,13 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
           batch_offset++;
-
+          LOG(txn->txn_id(), " is being locked, batch is "<<batch_message->batch_number());
           scheduler->lock_manager_->Lock(txn);
           pending_txns++;
+          //locked.insert((int)txn->txn_id());
         }
 
       }
-    }
-    else if (scheduler->queue_mode_ == DIRECT_QUEUE){
-    	if (executing_txns + pending_txns < 2000){
-			for (int i = 0; i < 100; i++) {
-				TxnProto* txn;
-				if(scheduler->to_lock_txns->Empty())
-					break;
-				else{
-					scheduler->to_lock_txns->Pop(&txn);
-					scheduler->lock_manager_->Lock(txn);
-					pending_txns++;
-				}
-			}
-    	}
     }
 
     // Start executing any and all ready transactions to get them off our plate
@@ -319,6 +477,8 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
       executing_txns++;
 
       scheduler->txns_queue->Push(txn);
+      //locked.erase((int)txn->txn_id());
+      //executing.insert((int)txn->txn_id());
       //scheduler->SendTxnPtr(scheduler->requests_out_, txn);
 
     }
@@ -328,13 +488,16 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
       double total_time = GetTime() - time;
       std::cout << "Completed " << (static_cast<double>(txns) / total_time)
                 << " txns/sec, "
-                //<< test<< " for drop speed , " 
+                << abort_number<< " transaction restart, "
+                << test << "  second,  "
                 << executing_txns << " executing, "
-                << pending_txns << " pending\n" << std::flush;
+                << pending_txns << " pending \n"
+				<< std::flush;
       // Reset txn count.
       time = GetTime();
       txns = 0;
-      //test ++;
+      abort_number = 0;
+      test++;
     }
   }
   return NULL;

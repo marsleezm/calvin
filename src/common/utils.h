@@ -17,6 +17,7 @@
 #include <tr1/unordered_map>
 //#include <unordered_map>
 
+#include "common/logging.h"
 #include "common/types.h"
 
 using std::string;
@@ -24,13 +25,37 @@ using std::vector;
 using std::tr1::unordered_map;
 //using std::unordered_map;
 
+// Queue modes
 #define NORMAL_QUEUE 1
 #define SELF_QUEUE 2
 #define DIRECT_QUEUE 3
 
+#define NORMAL 1
+
+// Transactin states
+#define  SUCCESS 0
+#define  FAILURE  1
+#define  REDO  2
+#define  RECON_SUCCESS 3
+#define  SUSPENDED  4
+
+// Loading parameters
+#define NUM_THREADS 4
+#define MAX_BATCH_SIZE 150
+#define RECON_BATCH_SIZE 100
+#define ABORT_MSG_SIZE 80
+#define DEPENDENT_PERCENT 100
+
+#define DEPENDENT_MASK 8
+
 #define ASSERTS_ON true
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)
+
+#define try_until(expr)							\
+  while(!(expr)) {\
+	continue;  \
+  }
 
 // Status code for return values.
 struct Status {

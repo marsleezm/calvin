@@ -20,7 +20,6 @@
 #define COLD_CUTOFF 990000
 
 //#define MAX_BATCH_SIZE 56
-#define MAX_BATCH_SIZE 150
 
 #define SAMPLES 100000
 #define SAMPLE_RATE 999
@@ -36,6 +35,8 @@ class Configuration;
 class Connection;
 class Storage;
 class TxnProto;
+class MessageProto;
+class ConnectionMultiplexer;
 
 #ifdef LATENCY_TEST
 extern double sequencer_recv[SAMPLES];
@@ -59,7 +60,7 @@ class Sequencer {
  public:
   // The constructor creates background threads and starts the Sequencer's main
   // loops running.
-  Sequencer(Configuration* conf, Connection* connection, Client* client,
+  Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer, Client* client,
             Storage* storage, int queue_mode);
 
   // Halts the main loops.
@@ -118,7 +119,10 @@ class Sequencer {
   Configuration* configuration_;
 
   // Connection for sending and receiving protocol messages.
+  // Connection for sending and receiving protocol messages.
   Connection* connection_;
+
+  ConnectionMultiplexer* multiplexer_;
 
   // Client from which to get incoming txns.
   Client* client_;
@@ -138,8 +142,10 @@ class Sequencer {
   queue<string> batch_queue_;
   pthread_mutex_t mutex_;
 
-  int queue_mode_;
+  AtomicQueue<MessageProto>* message_queues;
+  AtomicQueue<MessageProto>* restart_queues;
 
+  int queue_mode_;
   int fetched_txn_num_;
 
   AtomicQueue<TxnProto*>* txns_queue_;

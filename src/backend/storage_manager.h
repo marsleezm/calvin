@@ -44,10 +44,18 @@ class StorageManager {
   // TODO(alex): Document this class correctly.
   StorageManager(Configuration* config, Connection* connection,
                  Storage* actual_storage, TxnProto* txn);
+  // In case the txn receives its remote before its txn manager is iniialized locally
+  StorageManager(Configuration* config, Connection* connection,
+                 Storage* actual_storage);
+
+  void Setup(TxnProto* txn);
 
   ~StorageManager();
 
   Value* ReadObject(const Key& key);
+  inline void WriteToBuffer(const Key& key, const Value& value){
+	  write_set_[key] = value;
+  }
   bool PutObject(const Key& key, Value* value);
   bool DeleteObject(const Key& key);
 
@@ -55,6 +63,11 @@ class StorageManager {
   bool ReadyToExecute();
 
   Storage* GetStorage() { return actual_storage_; }
+  TxnProto* get_txn(){ return txn_; }
+
+  void ApplyChange();
+  void PrintObjects();
+
 
   // Set by the constructor, indicating whether 'txn' involves any writes at
   // this node.
@@ -80,8 +93,11 @@ class StorageManager {
   //
   // TODO(alex): Should these be pointers to reduce object copying overhead?
   unordered_map<Key, Value*> objects_;
+  unordered_map<Key, Value> write_set_;
 
   vector<Value*> remote_reads_;
+
+  int got_read_set;
 
 };
 

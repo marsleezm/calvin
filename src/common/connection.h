@@ -1,6 +1,6 @@
-// Author: Kun Ren (kun.ren@yale.edu)
 // Author: Shu-chun Weng (scweng@cs.yale.edu)
 // Author: Alexander Thomson (thomson@cs.yale.edu)
+// Author: Kun Ren (kun.ren@yale.edu)
 //
 // Library for handling messaging between system nodes. Each node generally owns
 // a ConnectionMultiplexer object as well as a Configuration object.
@@ -15,7 +15,6 @@
 #include <string>
 #include <vector>
 #include <tr1/unordered_map>
-//#include <unordered_map>
 
 
 #include "common/zmq.hpp"
@@ -27,7 +26,6 @@ using std::set;
 using std::string;
 using std::vector;
 using std::tr1::unordered_map;
-//using std::unordered_map;
 
 class Configuration;
 
@@ -51,6 +49,8 @@ class ConnectionMultiplexer {
   Connection* NewConnection(const string& channel);
   
   Connection* NewConnection(const string& channel, AtomicQueue<MessageProto>** aa);
+
+  Connection* NewConnection(const string& channel, AtomicQueue<MessageProto>** aa, AtomicQueue<MessageProto>** bb);
 
   zmq::context_t* context() { return &context_; }
 
@@ -99,6 +99,8 @@ class ConnectionMultiplexer {
   
   unordered_map<string, AtomicQueue<MessageProto>*> link_unlink_queue_;
 
+  AtomicQueue<MessageProto>* restart_queue;
+
   // Stores messages addressed to local channels that do not exist at the time
   // the message is received (so that they may be delivered if a connection is
   // ever created with the specified channel name).
@@ -141,6 +143,9 @@ class Connection {
   void Send(const MessageProto& message);
   
   void Send1(const MessageProto& message);
+
+  // Send either local or remote
+  void SmartSend(const MessageProto& message);
 
   // Loads the next incoming MessageProto into 'message'. Returns true, unless
   // no message is queued up to be delivered, in which case false is returned.

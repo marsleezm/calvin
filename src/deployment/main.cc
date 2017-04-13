@@ -39,7 +39,7 @@ pthread_mutex_t mutex_for_item;
 class MClient : public Client {
  public:
   MClient(Configuration* config, int mp)
-      : microbenchmark(config->all_nodes.size(), HOT), config_(config),
+      : microbenchmark(config->all_nodes.size(), HOT, config->this_node_id), config_(config),
         percent_mp_(mp) {
   }
   virtual ~MClient() {}
@@ -56,12 +56,22 @@ class MClient : public Client {
         other2 = rand() % config_->all_nodes.size();
       } while (other2 == config_->this_node_id || other2 == other1);
 
+      if (rand() %100 < DEPENDENT_PERCENT)
+    	  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
+      else
+    	  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
 
-      *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
+      (*txn)->set_multipartition(true);
     } else {
       // Single-partition txn.
-      *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
+      if (rand() %100 < DEPENDENT_PERCENT)
+    	  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
+      else
+    	  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
+
+      (*txn)->set_multipartition(false);
     }
+    (*txn)->set_seed(GetTime());
   }
 
  private:
@@ -77,45 +87,41 @@ class TClient : public Client {
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id) {
     TPCC tpcc;
-    TPCCArgs args;
+    *txn = new TxnProto();
 
-    args.set_system_time(GetTime());
     if (rand() % 100 < percent_mp_)
-      args.set_multipartition(true);
+      (*txn)->set_multipartition(true);
     else
-      args.set_multipartition(false);
-
-    string args_string;
-    args.SerializeToString(&args_string);
+    	(*txn)->set_multipartition(false);
 
     // New order txn
 
-    int random_txn_type = rand() % 100;
-     // New order txn
-	if (random_txn_type < 45)  {
-	  *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
-	} else if(random_txn_type < 88) {
-	  *txn = tpcc.NewTxn(txn_id, TPCC::PAYMENT, args_string, config_);
-	}  else {
-	  *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
-	  args.set_multipartition(false);
-	}
+//    int random_txn_type = rand() % 100;
+//     // New order txn
+//	if (random_txn_type < 45)  {
+//	  tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+//	} else if(random_txn_type < 88) {
+//	 	 tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+//	}  else {
+//	  *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
+//	  args.set_multipartition(false);
+//	}
 
    int random_txn_type = rand() % 100;
     // New order txn
     if (random_txn_type < 45)  {
-      *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
+      tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
     } else if(random_txn_type < 88) {
-      *txn = tpcc.NewTxn(txn_id, TPCC::PAYMENT, args_string, config_);
+      tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
     } else if(random_txn_type < 92) {
-      *txn = tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, args_string, config_);
-      args.set_multipartition(false);
+      tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+      (*txn)->set_multipartition(false);
     } else if(random_txn_type < 96){
-      *txn = tpcc.NewTxn(txn_id, TPCC::DELIVERY, args_string, config_);
-      args.set_multipartition(false);
+      tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
+      (*txn)->set_multipartition(false);
     } else {
-      *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
-      args.set_multipartition(false);
+      tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+      (*txn)->set_multipartition(false);
     }
   }
 
@@ -138,6 +144,9 @@ int main(int argc, char** argv) {
             argv[0]);
     exit(1);
   }
+
+  //freopen("output.txt","w",stdout);
+
   bool useFetching = false;
   if (argc > 4 && argv[4][0] == 'f')
     useFetching = true;
@@ -175,7 +184,7 @@ involed_customers = new vector<Key>;
 	  TPCC().InitializeStorage(storage, &config);
   } else if((argv[2][0] == 'm')){
 	  std::cout << "Micro benchmark" << std::endl;
-	  Microbenchmark(config.all_nodes.size(), HOT).InitializeStorage(storage, &config);
+	  Microbenchmark(config.all_nodes.size(), HOT, config.this_node_id).InitializeStorage(storage, &config);
   }
 
   int queue_mode;
@@ -193,7 +202,7 @@ involed_customers = new vector<Key>;
   }
 
   // Initialize sequencer component and start sequencer thread running.
-  Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), client,
+  Sequencer sequencer(&config, &multiplexer, client,
                       storage, queue_mode);
 
   // Run scheduler in main thread.
@@ -207,7 +216,7 @@ involed_customers = new vector<Key>;
     DeterministicScheduler scheduler(&config,
                                      multiplexer.NewConnection("scheduler_"),
                                      storage,
-                                     new Microbenchmark(config.all_nodes.size(), HOT),
+                                     new Microbenchmark(config.all_nodes.size(), HOT, config.this_node_id),
 									 sequencer.GetTxnsQueue(),
 									 client, queue_mode);
   }

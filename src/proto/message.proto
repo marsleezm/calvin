@@ -15,7 +15,7 @@ message MessageProto {
   optional int32 source_node = 3;
 
   // Channel from which the message originated.
-  optional int32 source_channel = 4;
+  optional string source_channel = 4;
 
   // Every type of network message should get an entry here.
   enum MessageType {
@@ -27,6 +27,12 @@ message MessageProto {
     UNLINK_CHANNEL = 5;  // [Connection implementation specific.]
     TXN_PTR = 6;
     MESSAGE_PTR = 7;
+    DEPENDENT = 8;
+    TXN_RESTART = 9;
+    RECON_INDEX_REQUEST = 10;
+    RECON_INDEX_REPLY = 11;
+    RECON_READ_RESULT = 12;
+
   };
   required MessageType type = 9;
 
@@ -56,5 +62,8 @@ message MessageProto {
   // For (UN)LINK_CHANNEL messages, specifies the channel to be (un)linked
   // to the requesting Connection object.
   optional string channel_request = 1002;
+  
+  optional int32 restart = 2001;
+  
+  optional string txn_id = 2003;
 }
-

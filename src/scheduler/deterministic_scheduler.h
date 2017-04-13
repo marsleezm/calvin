@@ -37,7 +37,6 @@ class Storage;
 class TxnProto;
 class Client;
 
-#define NUM_THREADS 4
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
@@ -94,6 +93,8 @@ class DeterministicScheduler : public Scheduler {
   // Client
   Client* client_;
 
+  pthread_mutex_t recon_mutex_;
+
   // The per-node lock manager tracks what transactions have temporary ownership
   // of what database objects, allowing the scheduler to track LOCAL conflicts
   // and enforce equivalence to transaction orders.
@@ -112,6 +113,9 @@ class DeterministicScheduler : public Scheduler {
   AtomicQueue<TxnProto*>* txns_queue;
   AtomicQueue<TxnProto*>* done_queue;
   
+  AtomicQueue<MessageProto>* recon_queue_;
+  Connection* recon_connection;
+
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
   
   int queue_mode_;
