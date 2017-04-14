@@ -14,6 +14,7 @@
 #include "common/utils.h"
 #include "proto/txn.pb.h"
 #include "common/configuration.h"
+#include "common/config_reader.h"
 
 //#define PAXOS
 //#define PREFETCHING
@@ -144,6 +145,10 @@ class Sequencer {
 
   AtomicQueue<MessageProto>* message_queues;
   AtomicQueue<MessageProto>* restart_queues;
+
+  int max_batch_size = atoi(ConfigReader::Value("General", "max_batch_size").c_str());
+  int dependent_percent = atoi(ConfigReader::Value("General", "dependent_percent").c_str());
+  int recon_batch_size;
 
   int queue_mode_;
   int fetched_txn_num_;

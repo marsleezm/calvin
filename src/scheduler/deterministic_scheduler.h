@@ -119,6 +119,7 @@ class DeterministicScheduler : public Scheduler {
   AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
   
   int queue_mode_;
+  int abort_batch_size;
 
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

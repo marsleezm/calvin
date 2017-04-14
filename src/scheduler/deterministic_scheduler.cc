@@ -71,6 +71,9 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
       storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode) {
 	ready_txns_ = new std::deque<TxnProto*>();
 
+	abort_batch_size = atoi(ConfigReader::Value("General", "max_batch_size").c_str())
+			*atoi(ConfigReader::Value("General", "dependent_percent").c_str())/200;
+
 	pthread_mutex_init(&recon_mutex_, NULL);
     lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
   
@@ -422,7 +425,7 @@ int abort_number = 0;
     			bytes txn_data;
     			done_txn->SerializeToString(&txn_data);
     			restart_msg.add_data(txn_data);
-    			if(restart_msg.data_size() >= ABORT_MSG_SIZE){
+    			if(restart_msg.data_size() >= scheduler->abort_batch_size){
     				scheduler->batch_connection_->SmartSend(restart_msg);
     				restart_msg.clear_data();
     			}

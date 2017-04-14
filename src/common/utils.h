@@ -41,10 +41,10 @@ using std::tr1::unordered_map;
 
 // Loading parameters
 #define NUM_THREADS 4
-#define MAX_BATCH_SIZE 150
-#define RECON_BATCH_SIZE 100
-#define ABORT_MSG_SIZE 80
-#define DEPENDENT_PERCENT 100
+//#define MAX_BATCH_SIZE 100
+//#define RECON_BATCH_SIZE 50
+//#define ABORT_MSG_SIZE 50
+//#define DEPENDENT_PERCENT 0
 
 #define DEPENDENT_MASK 8
 

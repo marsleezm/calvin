@@ -11,6 +11,7 @@
 #include <string>
 
 #include "applications/application.h"
+#include "common/config_reader.h"
 
 using std::set;
 using std::string;
@@ -29,10 +30,8 @@ class Microbenchmark : public Application {
   };
 
 
-  Microbenchmark(int nodecount, int hotcount, int node_id) {
+  Microbenchmark(int nodecount, int node_id) {
     nparts = nodecount;
-    hot_records = hotcount;
-    index_records = hotcount;
     this_node_id = node_id;
   }
 
@@ -50,12 +49,12 @@ class Microbenchmark : public Application {
   TxnProto* MicroTxnDependentMP(int64 txn_id, int part1, int part2, int part3);
 
   int nparts;
-  int hot_records;
+  int hot_records = atoi(ConfigReader::Value("Access", "index_size").c_str());
+  int index_records = atoi(ConfigReader::Value("Access", "index_size").c_str());
   int this_node_id;
-  int index_records;
-  static const int indexAccessNum = 2;
-  static const int kRWSetSize = 10;  // MUST BE EVEN
-  static const int kDBSize = 1000000;
+  int kRWSetSize = atoi(ConfigReader::Value("Access", "rw_set_size").c_str());
+  int indexAccessNum = atoi(ConfigReader::Value("Access", "index_num").c_str());
+  int kDBSize = atoi(ConfigReader::Value("Access", "total_key").c_str());
 
   virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
 

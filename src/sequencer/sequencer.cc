@@ -63,7 +63,8 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
 
-cpu_set_t cpuset;
+  cpu_set_t cpuset;
+  recon_batch_size = max_batch_size*dependent_percent/100;
 
 if(queue_mode == DIRECT_QUEUE){
 	CPU_ZERO(&cpuset);
@@ -216,6 +217,8 @@ void Sequencer::RunWriter() {
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
 
+  vector<string> recon_txn_queue;
+
   for (int batch_number = configuration_->this_node_id;
        !deconstructor_invoked_;
        batch_number += configuration_->all_nodes.size()) {
@@ -228,13 +231,12 @@ void Sequencer::RunWriter() {
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
-      if (txn_id_offset < MAX_BATCH_SIZE && batch.data_size() < MAX_BATCH_SIZE) {
+      if (txn_id_offset < max_batch_size && batch.data_size() < max_batch_size) {
         TxnProto* txn;
         string txn_string;
         MessageProto recv_message;
 
-        bool got_message = message_queues->Pop(&recv_message);
-        if(got_message == true) {
+        if (message_queues->Pop(&recv_message)) {
         	// Receive the result of depedent transaction query
           if (recv_message.type() == MessageProto::RECON_INDEX_REPLY) {
         	  for(int i = 0; i<recv_message.data_size(); ++i){
@@ -247,21 +249,20 @@ void Sequencer::RunWriter() {
         }
         else {
             // Restart aborted dependent transactions if there are still any
-        	if(restart_queues->Size()){
-            	got_message = restart_queues->Pop(&recv_message);
-                assert(recv_message.type() == MessageProto::TXN_RESTART);
-                for(int i =0; i<recv_message.data_size() && txn_id_offset < MAX_BATCH_SIZE; ++i){
-                	TxnProto txn;
-                	string txn_data = recv_message.data(i);
+        	if(recon_txn_queue.size()){
+        		vector<string>::iterator qit = recon_txn_queue.begin();
+        		while(qit!=recon_txn_queue.end() && txn_id_offset < max_batch_size){
+        			TxnProto txn;
+        			string txn_data = *qit;
 					txn.ParseFromString(txn_data);
-					txn.set_txn_id(batch_number * MAX_BATCH_SIZE + txn_id_offset);
+					txn.set_txn_id(batch_number * max_batch_size + txn_id_offset);
 					txn_id_offset++;
 					txn.SerializeToString(&txn_data);
 
 					google::protobuf::RepeatedField<int>::const_iterator  it;
-		            for (it = txn.readers().begin(); it != txn.readers().end(); ++it){
-		            	recon_msgs[*it].add_data(txn_data);
-						if(recon_msgs[*it].data_size() >= RECON_BATCH_SIZE){
+					for (it = txn.readers().begin(); it != txn.readers().end(); ++it){
+						recon_msgs[*it].add_data(txn_data);
+						if(recon_msgs[*it].data_size() >= recon_batch_size){
 							pthread_mutex_lock(&mutex_);
 							connection_->SmartSend(recon_msgs[*it]);
 							pthread_mutex_unlock(&mutex_);
@@ -269,12 +270,44 @@ void Sequencer::RunWriter() {
 							//LOG(0, " new RESTART batch number is "<<recon_msgs[*it].batch_number());
 							recon_msgs[*it].clear_data();
 						}
-		            }
+					}
+					qit = recon_txn_queue.erase(qit);
+        		}
+        	}
+        	else if(restart_queues->Size()){
+            	restart_queues->Pop(&recv_message);
+                assert(recv_message.type() == MessageProto::TXN_RESTART);
+                for(int i =0; i<recv_message.data_size(); ++i){
+
+                	string txn_data = recv_message.data(i);
+                	if(txn_id_offset < max_batch_size){
+                		TxnProto txn;
+						txn.ParseFromString(txn_data);
+						txn.set_txn_id(batch_number * max_batch_size + txn_id_offset);
+						txn_id_offset++;
+						txn.SerializeToString(&txn_data);
+
+						google::protobuf::RepeatedField<int>::const_iterator  it;
+						for (it = txn.readers().begin(); it != txn.readers().end(); ++it){
+							recon_msgs[*it].add_data(txn_data);
+							if(recon_msgs[*it].data_size() >= recon_batch_size){
+								pthread_mutex_lock(&mutex_);
+								connection_->SmartSend(recon_msgs[*it]);
+								pthread_mutex_unlock(&mutex_);
+								recon_msgs[*it].set_batch_number(recon_msgs[*it].batch_number()+configuration_->all_nodes.size());
+								//LOG(0, " new RESTART batch number is "<<recon_msgs[*it].batch_number());
+								recon_msgs[*it].clear_data();
+							}
+						}
+                	}
+                	else {
+                		recon_txn_queue.push_back(txn_data);
+                	}
                 }
         	}
             // Otherwise, just start new transactions
             else{
-            	client_->GetTxn(&txn, batch_number * MAX_BATCH_SIZE + txn_id_offset);
+            	client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset);
             	txn_id_offset++;
             	//LOG(txn->txn_id(), " type is  "<<txn->txn_type());
             	// If it's dependent transaction!!
@@ -286,7 +319,7 @@ void Sequencer::RunWriter() {
 		            for (it = txn->readers().begin(); it != txn->readers().end(); ++it){
 		            	//LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
 		            	recon_msgs[*it].add_data(txn_data);
-						if(recon_msgs[*it].data_size() >= RECON_BATCH_SIZE){
+						if(recon_msgs[*it].data_size() >= recon_batch_size){
 							pthread_mutex_lock(&mutex_);
 							connection_->SmartSend(recon_msgs[*it]);
 							pthread_mutex_unlock(&mutex_);
@@ -303,7 +336,7 @@ void Sequencer::RunWriter() {
 				}
             }
           }
-      } else if (txn_id_offset >= MAX_BATCH_SIZE && batch.data_size() < MAX_BATCH_SIZE) {
+      } else if (txn_id_offset >= max_batch_size && batch.data_size() < max_batch_size) {
     	  MessageProto recv_message;
 
     	  bool got_message = message_queues->Pop(&recv_message);

@@ -20,26 +20,28 @@
 #include "sequencer/sequencer.h"
 #include "proto/tpcc_args.pb.h"
 
-#define HOT 100
+//#define HOT 100
 
-map<Key, Key> latest_order_id_for_customer;
-map<Key, int> latest_order_id_for_district;
-map<Key, int> smallest_order_id_for_district;
-map<Key, Key> customer_for_order;
-unordered_map<Key, int> next_order_id_for_district;
-map<Key, int> item_for_order_line;
-map<Key, int> order_line_number;
+//map<Key, Key> latest_order_id_for_customer;
+//map<Key, int> latest_order_id_for_district;
+//map<Key, int> smallest_order_id_for_district;
+//map<Key, Key> customer_for_order;
+//unordered_map<Key, int> next_order_id_for_district;
+//map<Key, int> item_for_order_line;
+//map<Key, int> order_line_number;
+//
+//vector<Key>* involed_customers;
+//
+//pthread_mutex_t mutex_;
+//pthread_mutex_t mutex_for_item;
 
-vector<Key>* involed_customers;
-
-pthread_mutex_t mutex_;
-pthread_mutex_t mutex_for_item;
+int dependent_percent;
 
 // Microbenchmark load generation client.
 class MClient : public Client {
  public:
   MClient(Configuration* config, int mp)
-      : microbenchmark(config->all_nodes.size(), HOT, config->this_node_id), config_(config),
+      : microbenchmark(config->all_nodes.size(), config->this_node_id), config_(config),
         percent_mp_(mp) {
   }
   virtual ~MClient() {}
@@ -56,7 +58,7 @@ class MClient : public Client {
         other2 = rand() % config_->all_nodes.size();
       } while (other2 == config_->this_node_id || other2 == other1);
 
-      if (rand() %100 < DEPENDENT_PERCENT)
+      if (rand() %100 < dependent_percent)
     	  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
       else
     	  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
@@ -64,7 +66,7 @@ class MClient : public Client {
       (*txn)->set_multipartition(true);
     } else {
       // Single-partition txn.
-      if (rand() %100 < DEPENDENT_PERCENT)
+      if (rand() %100 < dependent_percent)
     	  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
       else
     	  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
@@ -147,6 +149,9 @@ int main(int argc, char** argv) {
 
   //freopen("output.txt","w",stdout);
 
+  ConfigReader::Initialize("myconfig.conf");
+  dependent_percent = atoi(ConfigReader::Value("General", "dependent_percent").c_str());
+
   bool useFetching = false;
   if (argc > 4 && argv[4][0] == 'f')
     useFetching = true;
@@ -162,15 +167,15 @@ int main(int argc, char** argv) {
 
   // Artificial loadgen clients.
   Client* client = (argv[2][0] == 't') ?
-		  reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3]))) :
-		  reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3])));
+		  reinterpret_cast<Client*>(new TClient(&config, atoi(ConfigReader::Value("General", "distribute_percent").c_str()))) :
+		  reinterpret_cast<Client*>(new MClient(&config, atoi(ConfigReader::Value("General", "distribute_percent").c_str())));
 
 // #ifdef PAXOS
 //  StartZookeeper(ZOOKEEPER_CONF);
 // #endif
-pthread_mutex_init(&mutex_, NULL);
-pthread_mutex_init(&mutex_for_item, NULL);
-involed_customers = new vector<Key>;
+//pthread_mutex_init(&mutex_, NULL);
+//pthread_mutex_init(&mutex_for_item, NULL);
+//involed_customers = new vector<Key>;
 
   Storage* storage;
   if (!useFetching) {
@@ -179,12 +184,25 @@ involed_customers = new vector<Key>;
     storage = FetchingStorage::BuildStorage();
   }
   storage->Initmutex();
+	std::cout<<"General params: "<<std::endl;
+	std::cout<<"	Distribute txn percent: "<<ConfigReader::Value("General", "distribute_percent")<<std::endl;
+	std::cout<<"	Dependent txn percent: "<<ConfigReader::Value("General", "dependent_percent")<<std::endl;
+	std::cout<<"	Max batch size: "<<ConfigReader::Value("General", "max_batch_size")<<std::endl;
+	std::cout<<"	Num of threads: "<<NUM_THREADS<<std::endl;
+
+
   if (argv[2][0] == 't') {
+	  std::cout<<"TPC-C benchmark. No extra parameters."<<std::endl;
 	  std::cout << "TPC-C benchmark" << std::endl;
 	  TPCC().InitializeStorage(storage, &config);
   } else if((argv[2][0] == 'm')){
-	  std::cout << "Micro benchmark" << std::endl;
-	  Microbenchmark(config.all_nodes.size(), HOT, config.this_node_id).InitializeStorage(storage, &config);
+		std::cout<<"Micro benchmark. Parameters: "<<std::endl;
+		std::cout<<"	Key per txn: "<<ConfigReader::Value("Access", "rw_set_size")<<std::endl;
+		std::cout<<"	Per partition #keys: "<<ConfigReader::Value("Access", "total_key")
+		<<", index size: "<<ConfigReader::Value("Access", "index_size")
+		<<", index num: "<<ConfigReader::Value("Access", "index_num")
+		<<std::endl;
+	  Microbenchmark(config.all_nodes.size(), config.this_node_id).InitializeStorage(storage, &config);
   }
 
   int queue_mode;
@@ -216,7 +234,7 @@ involed_customers = new vector<Key>;
     DeterministicScheduler scheduler(&config,
                                      multiplexer.NewConnection("scheduler_"),
                                      storage,
-                                     new Microbenchmark(config.all_nodes.size(), HOT, config.this_node_id),
+                                     new Microbenchmark(config.all_nodes.size(), config.this_node_id),
 									 sequencer.GetTxnsQueue(),
 									 client, queue_mode);
   }
