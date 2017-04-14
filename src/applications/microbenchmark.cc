@@ -285,10 +285,14 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			Value* index_val, *next_val;
 			Key indexed_key;
 			if(storage->ShouldRead()){
+				if(StringToInt(txn->read_write_set(i)) < 0 )
+					std::cout<<" something is wrong! "<<txn->read_write_set(i)<<std::endl;
 				index_val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL){
 					indexed_key = *index_val;
 					tpcc_args->add_indexed_keys(indexed_key);
+					if(StringToInt(indexed_key) < 0 )
+						std::cout<<" indexed is wrong! "<<indexed_key<<std::endl;
 					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 				}
 				else
