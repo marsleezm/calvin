@@ -308,27 +308,31 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	  else if(retry_txns.size()){
+		  LOCKLOG(retry_txns.front()->get_txn()->txn_id(), " before retrying txn ");
 		  retry_mgr = scheduler->ExecuteTxn(retry_txns.front(), thread, active_txns);
 		  if(retry_mgr == NULL)
 			  retry_txns.pop();
 	  }
 	  // Try to start a new transaction
 	  else if (my_to_sc_txns->size() <= MAX_SC_NUM && my_pend_txns->size() <= MAX_PEND_NUM && scheduler->num_suspend[thread]<=MAX_SUSPEND) {
-		  bool got_it = true;
+		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
-		  scheduler->txns_queue_->Pop(&txn);
+		  got_it = scheduler->txns_queue_->Pop(&txn);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
+		  LOCKLOG(txn->txn_id(), " before starting txn ");
 
 		  if (got_it == true) {
 			  // Create manager.
-			  StorageManager* manager = active_txns[txn->txn_id()];
-			  if (manager == NULL)
+			  StorageManager* manager;
+			  if (active_txns.count(txn->txn_id()) == 0)
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, abort_queue, waiting_queue, txn);
-			  else
+			  else{
+				  manager = active_txns[txn->txn_id()];
 				  manager->SetupTxn(txn);
+			  }
 			  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
 			  if(retry_mgr != NULL)
 				  retry_txns.push(retry_mgr);
@@ -375,20 +379,20 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		}
 		else if (result == WAIT_AND_SENT){
 			// There are outstanding remote reads.
-			LOG(txn->txn_id(),  " wait and sent for remote read");
+			LOCKLOG(txn->txn_id(),  " wait and sent for remote read");
 			active_txns[txn->txn_id()] = manager;
 			//++Sequencer::num_pend_txns_;
 			return NULL;
 		}
 		else if (result == WAIT_NOT_SENT) {
-			LOG(txn->txn_id(),  " wait but not sent for remote read");
+			LOCKLOG(txn->txn_id(),  " wait but not sent for remote read");
 			pending_txns_[thread]->push(MyTuple<int64_t, int64_t, bool>(txn->txn_id(), txn->local_txn_id(), TO_SEND));
 			active_txns[txn->txn_id()] = manager;
 			//++Sequencer::num_pend_txns_;
 			return NULL;
 		}
 		else if(result == TX_ABORTED) {
-			LOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
+			LOCKLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 			manager->Abort();
 			++Sequencer::num_aborted_;
 			return manager;

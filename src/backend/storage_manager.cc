@@ -21,6 +21,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	tpcc_args = new TPCCArgs();
+	txn_ = NULL;
 }
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
