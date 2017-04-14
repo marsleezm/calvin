@@ -249,7 +249,7 @@ int main(int argc, char** argv) {
 	Connection* batch_connection = multiplexer.NewConnection("scheduler_");
   	// Initialize sequencer component and start sequencer thread running.
 
-	int queue_mode;
+
 	// Run scheduler in main thread.
 //	if (argv[2][1] == 'n') {
 //		queue_mode = NORMAL_QUEUE;
@@ -265,6 +265,7 @@ int main(int argc, char** argv) {
 //		cout << "Multiple-queue by sequencer mode" << endl;
 //	}
 	assert(argv[2][1] == 'n');
+	int queue_mode = NORMAL_QUEUE;
 
 	Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), batch_connection,
 		  	  client, storage, queue_mode);

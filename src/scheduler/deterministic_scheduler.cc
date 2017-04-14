@@ -317,7 +317,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  bool got_it = true;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
-		  txns_queue_->Pop(&txn);
+		  scheduler->txns_queue_->Pop(&txn);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
 
 		  if (got_it == true) {
