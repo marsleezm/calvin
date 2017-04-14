@@ -656,7 +656,7 @@ struct ValuePair{
 		first = first | value;
 	}
 
-	bool inline assign(int value, Value* in_second){
+	void inline assign(int value, Value* in_second){
 		if(first == 0 || first == 1 || (first & WRITE)){
 			first = first | value;
 			second = in_second;
