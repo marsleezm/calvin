@@ -33,7 +33,7 @@ using tr1::unordered_map;
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 20
 
-#define NUM_THREADS 1
+#define NUM_THREADS 5
 
 #define ASSERTS_ON true
 
@@ -656,10 +656,16 @@ struct ValuePair{
 		first = first | value;
 	}
 
-	void inline assign(int value, Value* in_second){
-		ASSERT(first == 0 || first == 1 || (first & WRITE));
-		first = first | value;
-		second = in_second;
+	bool inline assign(int value, Value* in_second){
+		if(first == 0 || first == 1 || (first & WRITE)){
+			first = first | value;
+			second = in_second;
+			return true;
+		}
+		else{
+			std::cout<<"First is "<<first<<", value is "<<value<<std::endl;
+			return false;
+		}
 	}
 };
 

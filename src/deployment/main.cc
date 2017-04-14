@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
 	ConfigReader::Initialize("myconfig.conf");
 	dependent_percent = atoi(ConfigReader::Value("General", "dependent_percent").c_str());
 
-	freopen("output.txt","w",stdout);
+	//freopen("output.txt","w",stdout);
 
 	// Build this node's configuration object.
 	Configuration config(StringToInt(argv[1]), "deploy-run.conf");
