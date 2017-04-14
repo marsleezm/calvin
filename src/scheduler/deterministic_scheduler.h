@@ -156,7 +156,5 @@ class DeterministicScheduler : public Scheduler {
   int num_suspend[num_threads];
 
   AtomicQueue<MessageProto>* message_queues[num_threads];
-  AtomicQueue<pair<int64_t, int>>* abort_queues[num_threads];
-  AtomicQueue<pair<int64_t, int>>* waiting_queues[num_threads];
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

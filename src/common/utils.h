@@ -238,6 +238,14 @@ public:
 		second = t2;
 		third = t3;
 	}
+
+	MyTuple(){}
+
+	//MyTuple(const MyTuple& a) :
+	//	first(a.first), first(a.second), first(a.third)
+	//{
+//
+//	}
 };
 
 
@@ -656,16 +664,16 @@ struct ValuePair{
 		first = first | value;
 	}
 
-	void inline assign(int value, Value* in_second){
+	bool inline assign(int value, Value* in_second){
 		if(first == 0 || first == 1 || (first & WRITE)){
 			first = first | value;
 			second = in_second;
-			//return true;
+			return true;
 		}
 		else{
 			std::cout<<"First is "<<first<<", value is "<<value<<std::endl;
-			ASSERT(1==2);
-			//return false;
+			//ASSERT(1==2);
+			return false;
 		}
 	}
 };
@@ -709,17 +717,15 @@ public:
 class PendingReadEntry{
 public:
 	int64_t my_tx_id_;
-	ValuePair* value_bit_;
 	atomic<int>* abort_bit_;
 	int num_aborted_;
 	bool request_lock_;
-	AtomicQueue<pair<int64_t, int>>* pend_queue_;
+	AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue_;
 	AtomicQueue<pair<int64_t, int>>* abort_queue_;
 
-	PendingReadEntry(int64_t my_tx_id, ValuePair* value_bit, atomic<int>* abort_bit, int num_aborted,
-			AtomicQueue<pair<int64_t, int>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue, bool request_lock){
+	PendingReadEntry(int64_t my_tx_id, atomic<int>* abort_bit, int num_aborted,
+			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue, bool request_lock){
 		my_tx_id_ = my_tx_id;
-		value_bit_ = value_bit;
 		abort_bit_ = abort_bit;
 		num_aborted_ = num_aborted;
 		pend_queue_ = pend_queue;
@@ -730,7 +736,6 @@ public:
 	bool operator== (PendingReadEntry another) const
 	{
 		return (my_tx_id_ == another.my_tx_id_
-				&& value_bit_ == another.value_bit_
 				&& abort_bit_ == another.abort_bit_
 				&& num_aborted_ == another.num_aborted_
 				&& pend_queue_ == another.pend_queue_
@@ -739,10 +744,10 @@ public:
 
 	friend inline std::ostream &operator<<(std::ostream &os, PendingReadEntry const &m) {
 		if(m.abort_bit_)
-			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< m.value_bit_->first <<", "<< *m.value_bit_->second <<", "<<*m.abort_bit_<<
+			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<<*m.abort_bit_<<
 				m.num_aborted_<<", pend_queue, abort_queue]";
 		else
-			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< m.value_bit_->first <<", "<< *m.value_bit_->second <<", "<<m.abort_bit_<<
+			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<<m.abort_bit_<<
 							m.num_aborted_<<", , pend_queue, abort_queue]";
 	}
 };

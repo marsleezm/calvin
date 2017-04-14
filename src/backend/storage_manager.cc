@@ -14,7 +14,7 @@
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		LockedVersionedStorage* actual_storage,  AtomicQueue<pair<int64_t, int>>* abort_queue,
-								 AtomicQueue<pair<int64_t, int>>* pend_queue)
+								 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
 	  pend_queue_(pend_queue), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
@@ -26,7 +26,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-								 AtomicQueue<pair<int64_t, int>>* pend_queue, TxnProto* txn)
+			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
 	  pend_queue_(pend_queue), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
@@ -325,7 +325,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 			if (read_set_[key].second == NULL){
 				read_set_[key].first = read_set_[key].first | new_obj;
 				ValuePair result = actual_storage_->ReadObject(key, txn_->txn_id(), &abort_bit_,
-						num_restarted_, &read_set_[key], abort_queue_, pend_queue_, new_obj);
+						num_restarted_, abort_queue_, pend_queue_, new_obj);
 				if(abort_bit_ > num_restarted_){
 					LOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
 					max_counter_ = 0;
@@ -437,9 +437,8 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 			}
 			else{
 				// The value has never been read
-				read_set_[key] = ValuePair(new_object, NULL);
 				ValuePair result = actual_storage_->ReadLock(key, txn_->txn_id(), &abort_bit_,
-									num_restarted_, &read_set_[key], abort_queue_, pend_queue_, new_object);
+									num_restarted_, abort_queue_, pend_queue_, new_object);
 				if(result.first == SUSPENDED){
 					LOCKLOG(txn_->txn_id(), " suspended when read&lock "<<key<<", exec counter is "<<exec_counter_);
 					read_state = SPECIAL;
@@ -453,6 +452,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					++exec_counter_;
 					++max_counter_;
 					//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
+					result.first = result.first | new_object;
 					read_set_[key] = result;
 					if (message_){
 						LOG(txn_->txn_id(), "Adding to msg: "<<key);

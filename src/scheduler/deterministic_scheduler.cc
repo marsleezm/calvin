@@ -78,8 +78,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	//pending_txns_ = new pair<int64_t, int32_t>[PEND_NUM];
 	for (int i = 0; i < num_threads; i++) {
 		message_queues[i] = new AtomicQueue<MessageProto>();
-		abort_queues[i] = new AtomicQueue<pair<int64_t, int>>();
-		waiting_queues[i] = new AtomicQueue<pair<int64_t, int>>();
 		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
 		pending_txns_[i] = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>();
 		num_suspend[i] = 0;
@@ -140,8 +138,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	  = scheduler->to_sc_txns_[thread];
   priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns
   	  = scheduler->pending_txns_[thread];
-  AtomicQueue<pair<int64_t, int>>* abort_queue = scheduler->abort_queues[thread];
-  AtomicQueue<pair<int64_t, int>>* waiting_queue = scheduler->waiting_queues[thread];
+//  AtomicQueue<pair<int64_t, int>>* abort_queue = scheduler->abort_queues[thread];
+//  AtomicQueue<pair<int64_t, int>>* waiting_queue = scheduler->waiting_queues[thread];
+//  AtomicQueue<pair<int64_t, int>>* abort_queues[num_threads];
+//  AtomicQueue<AtomicQueue<MyTuple<int64_t, int, ValuePair>>>* waiting_queues[num_threads];
+  AtomicQueue<pair<int64_t, int>>* abort_queue = new AtomicQueue<pair<int64_t, int>>();
+  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* waiting_queue = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>();
 
   // Begin main loop.
   MessageProto message;
@@ -181,19 +183,23 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 
 	  if(!waiting_queue->Empty()){
-		  pair<int64_t, int> to_wait_txn;
+		  MyTuple<int64_t, int, ValuePair> to_wait_txn;
 		  waiting_queue->Pop(&to_wait_txn);
 		  LOG(-1, " In to-wait, the first one is "<< to_wait_txn.first);
 		  if(to_wait_txn.first > Sequencer::max_commit_ts){
 			  LOG(-1, " To waiting txn is " << to_wait_txn.first);
 			  StorageManager* manager = active_txns[to_wait_txn.first];
-			  if (manager && manager->ShouldResume(to_wait_txn.second)){
+			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
 				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
 				  --scheduler->num_suspend[thread];
 				  if(retry_mgr != NULL)
 					  retry_txns.push(retry_mgr);
 			  }
 			  else{
+				  // The txn is aborted, delete copied value! TODO: Maybe we could leave the value in case we need it
+				  // again
+				  if(to_wait_txn.third.first == IS_COPY)
+					  delete to_wait_txn.third.second;
 				  LOG(-1, to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second
 						  <<", "<< active_txns[to_wait_txn.first]->num_restarted_
 						  <<", "<<active_txns[to_wait_txn.first]->abort_bit_);
@@ -344,6 +350,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //				  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
 //	  }
   }
+  delete abort_queue;
+  delete waiting_queue;
   return NULL;
 }
 
@@ -437,8 +445,8 @@ DeterministicScheduler::~DeterministicScheduler() {
 		delete to_sc_txns_[i];
 		delete pending_txns_[i];
 		delete message_queues[i];
-		delete waiting_queues[i];
-		delete abort_queues[i];
+		//delete waiting_queues[i];
+		//delete abort_queues[i];
 		delete to_sc_txns_[i];
 		delete pending_txns_[i];
 	}

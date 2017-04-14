@@ -40,11 +40,11 @@ class LockedVersionedStorage {
 
   // Standard operators in the DB
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
-  virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
-  			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object);
+  virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted,
+  			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
   virtual ValuePair SafeRead(const Key& key, int64 txn_id, bool new_object);
-  virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted, ValuePair* value_bit,
-    			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<pair<int64_t, int>>* pend_queue, bool new_object);
+  virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted,
+    			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
 			AtomicQueue<pair<int64_t, int>>* abort_queue);
   virtual bool PutObject(const Key& key, Value* value, int64 txn_id, bool is_committing, bool new_object);

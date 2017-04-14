@@ -52,11 +52,11 @@ class StorageManager {
   // TODO(alex): Document this class correctly.
   StorageManager(Configuration* config, Connection* connection,
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-				 AtomicQueue<pair<int64_t, int>>* pend_queue, TxnProto* txn);
+				 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn);
 
   StorageManager(Configuration* config, Connection* connection,
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-				 AtomicQueue<pair<int64_t, int>>* pend_queue);
+		  	  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue);
 
   ~StorageManager();
 
@@ -111,7 +111,16 @@ class StorageManager {
 	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_restarted_<<", ABit "<<abort_bit_);
 	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
 	  return num_aborted > num_restarted_ && num_aborted == abort_bit_;}
-  inline bool ShouldResume(int num_aborted) { return num_aborted == num_restarted_&& num_aborted == abort_bit_;}
+  inline bool TryToResume(int num_aborted, ValuePair v) {
+	  if(num_aborted == num_restarted_&& num_aborted == abort_bit_){
+		  v.first = v.first | read_set_[suspended_key].first;
+		  read_set_[suspended_key] = v;
+		  return true;
+	  }
+	  else
+		  return false;
+  }
+
   // Can commit, if the transaction is read-only or has spec-committed.
   inline bool CanSCToCommit() { return  ReadOnly() || (spec_committed_ && num_restarted_ == abort_bit_) ;}
   inline bool CanCommit() { return num_restarted_ == abort_bit_;}
@@ -213,7 +222,7 @@ class StorageManager {
   int max_counter_;
 
   AtomicQueue<pair<int64_t, int>>* abort_queue_;
-  AtomicQueue<pair<int64_t, int>>* pend_queue_;
+  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue_;
 
   TPCCArgs* tpcc_args;
 
