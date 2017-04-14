@@ -76,7 +76,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	//pending_reads_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>[NUM_THREADS];
 	//to_sc_txns_ = new pair<int64_t, int32_t>[TO_SC_NUM];
 	//pending_txns_ = new pair<int64_t, int32_t>[PEND_NUM];
-	for (int i = 0; i < NUM_THREADS; i++) {
+	for (int i = 0; i < num_threads; i++) {
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		abort_queues[i] = new AtomicQueue<pair<int64_t, int>>();
 		waiting_queues[i] = new AtomicQueue<pair<int64_t, int>>();
@@ -90,7 +90,7 @@ Spin(2);
 //  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
   // Start all worker threads.
-  for (int i = 0; i < NUM_THREADS; i++) {
+  for (int i = 0; i < num_threads; i++) {
     string channel("scheduler");
     channel.append(IntToString(i));
     thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
@@ -99,9 +99,9 @@ Spin(2);
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     CPU_ZERO(&cpuset);
-    CPU_SET(i, &cpuset);
+    CPU_SET(i+3, &cpuset);
     pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
-    std::cout << "Worker thread #"<<i<<" starts at core "<<i<<std::endl;
+    std::cout << "Worker thread #"<<i<<" starts at core "<<i+3<<std::endl;
 
     pthread_create(&(threads_[i]), &attr, RunWorkerThread,
                    reinterpret_cast<void*>(
@@ -156,12 +156,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  to_sc_txn = my_to_sc_txns->top();
 		  if ( to_sc_txn.second == Sequencer::num_lc_txns_){
 			  if (!active_txns[to_sc_txn.first]->CanSCToCommit()){
-				  LOG(-1, "Popping out "<<to_sc_txn.first<<", values are "<<active_txns[to_sc_txn.first]->spec_committed_<<", "
+				  LOCKLOG(-1, " popping out "<<to_sc_txn.first<<", values are "<<active_txns[to_sc_txn.first]->spec_committed_<<", "
 						  <<active_txns[to_sc_txn.first]->abort_bit_<<", "<<active_txns[to_sc_txn.first]->num_restarted_);
 				  my_to_sc_txns->pop();
 			  }
 			  else{
-				  LOG(to_sc_txn.first, " committed!");
+				  LOCKLOG(to_sc_txn.first, " committed!");
 				  ASSERT(Sequencer::max_commit_ts < to_sc_txn.first);
 				  Sequencer::max_commit_ts = to_sc_txn.first;
 				  ++Sequencer::num_lc_txns_;
@@ -315,7 +315,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // Try to start a new transaction
 	  else if (my_to_sc_txns->size() <= MAX_SC_NUM && my_pend_txns->size() <= MAX_PEND_NUM && scheduler->num_suspend[thread]<=MAX_SUSPEND) {
 		  bool got_it = true;
-		  TxnProto* txn = scheduler->GetTxn(got_it, thread);
+		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
+		  TxnProto* txn;
+		  txns_queue_->Pop(&txn);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
 
 		  if (got_it == true) {
@@ -363,9 +365,10 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		}
 	}
 	else{
+		LOCKLOG(txn->txn_id(), " starting executing");
 		int result = application_->Execute(manager);
 		if (result == SUSPENDED){
-			LOG(txn->txn_id(),  " suspended");
+			LOCKLOG(txn->txn_id(),  " suspended");
 			active_txns[txn->txn_id()] = manager;
 			++num_suspend[thread];
 			return NULL;
@@ -393,7 +396,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		else{
 			if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
 				if(manager->CanCommit()){
-					LOG(txn->txn_id(), " committed! New num_lc_txns will be "<<Sequencer::num_lc_txns_+1);
+					LOCKLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<Sequencer::num_lc_txns_+1);
 					ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 					manager->ApplyChange(true);
 					Sequencer::max_commit_ts = txn->txn_id();
@@ -413,7 +416,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			else{
 				//++Sequencer::num_sc_txns_;
 				manager->ApplyChange(false);
-				LOG(txn->txn_id(), " spec-committing, num committed txn is "<<Sequencer::num_lc_txns_);
+				LOCKLOG(txn->txn_id(), " spec-committing, num committed txn is "<<Sequencer::num_lc_txns_);
 				active_txns[txn->txn_id()] = manager;
 				LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 				to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
@@ -426,7 +429,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 DeterministicScheduler::~DeterministicScheduler() {
 	cout << "Already destroyed!" << endl;
 
-	for (int i = 0; i < NUM_THREADS; i++) {
+	for (int i = 0; i < num_threads; i++) {
 		delete to_sc_txns_[i];
 		delete pending_txns_[i];
 		delete message_queues[i];

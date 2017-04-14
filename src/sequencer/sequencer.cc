@@ -73,7 +73,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
   if (queue_mode == FROM_SEQ_DIST)
-	  txns_queue_ = new AtomicQueue<TxnProto*>[NUM_THREADS];
+	  txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
   else
 	  txns_queue_ = new AtomicQueue<TxnProto*>();
 
@@ -87,17 +87,17 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 		CPU_ZERO(&cpuset);
 		//CPU_SET(4, &cpuset);
 		//CPU_SET(5, &cpuset);
-		CPU_SET(6, &cpuset);
+		CPU_SET(1, &cpuset);
 		//CPU_SET(7, &cpuset);
 		pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
-		std::cout << "Sequencer writer starts at core 6"<<std::endl;
+		std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
 		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 			  reinterpret_cast<void*>(this));
 
 		CPU_ZERO(&cpuset);
-		CPU_SET(7, &cpuset);
-		std::cout << "Sequencer reader starts at core 7"<<std::endl;
+		CPU_SET(2, &cpuset);
+		std::cout << "Sequencer reader starts at core 2"<<std::endl;
 		pthread_attr_t attr_reader;
 		pthread_attr_init(&attr_reader);
 		pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
@@ -107,8 +107,8 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
   }
   else{
 		CPU_ZERO(&cpuset);
-		CPU_SET(7, &cpuset);
-		std::cout << "Sequencer reader starts at core 7"<<std::endl;
+		CPU_SET(1, &cpuset);
+		std::cout << "Sequencer reader starts at core 1"<<std::endl;
 		pthread_attr_t simple_loader;
 		pthread_attr_init(&simple_loader);
 		pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
@@ -214,7 +214,7 @@ void Sequencer::RunWriter() {
            GetTime() < epoch_start + epoch_duration_) {
       multimap<double, TxnProto*>::iterator it = fetching_txns.begin();
       if (it == fetching_txns.end() || it->first > GetTime() ||
-          batch.data_size() >= MAX_BATCH_SIZE) {
+          batch.data_size() >= max_batch_size) {
         break;
       }
       TxnProto* txn = it->second;
@@ -231,10 +231,10 @@ void Sequencer::RunWriter() {
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
-      if (batch.data_size() < MAX_BATCH_SIZE) {
+      if (batch.data_size() < max_batch_size) {
         TxnProto* txn;
         string txn_string;
-        client_->GetTxn(&txn, batch_number * MAX_BATCH_SIZE + txn_id_offset, GetUTime());
+        client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime());
 #ifdef LATENCY_TEST
         if (txn->txn_id() % SAMPLE_RATE == 0) {
           sequencer_recv[txn->txn_id() / SAMPLE_RATE] =
@@ -267,8 +267,8 @@ void Sequencer::RunWriter() {
       }
     }
 
-	//std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * MAX_BATCH_SIZE <<
-	//		"to" <<  batch_number * MAX_BATCH_SIZE+MAX_BATCH_SIZE << std::endl;
+	//std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * max_batch_size <<
+	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
 #ifdef PAXOS
@@ -304,6 +304,7 @@ void Sequencer::RunReader() {
 
   int txn_count = 0;
   int batch_count = 0;
+  int last_aborted = 0;
   int batch_number = configuration_->this_node_id;
 
 #ifdef LATENCY_TEST
@@ -391,16 +392,33 @@ void Sequencer::RunReader() {
 				<< "txns \n" << std::flush;
 #endif
       std::cout << "Completed " <<
-		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
-			<< " txns/sec, "
-			<< num_sc_txns_ << " spec-committed, "
-			//<< test<< " for drop speed , "
-			//<< executing_txns << " executing, "
-			<< num_pend_txns_ << " pending\n" << std::flush;
+      		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
+      			<< " txns/sec, "
+      			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
+      			<< " txns/sec aborted, "
+      			<< num_sc_txns_ << " spec-committed, "
+      			//<< test<< " for drop speed , "
+      			//<< executing_txns << " executing, "
+      			<< num_pend_txns_ << " pending\n" << std::flush;
+//	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
+//		  for(int i = 0; i<NUM_THREADS; ++i){
+//			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
+//				  <<", num committed txn is "<<Sequencer::num_lc_txns_
+//				  <<", waiting queue is"<<std::endl;
+//			  for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
+//				  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
+//				  std::cout<<t.first<<",";
+//			  }
+//			  std::cout<<"\n";
+//		  }
+//	  }
 
 
       // Reset txn count.
       time = now_time;
+	  last_committed = Sequencer::num_lc_txns_;
+	  last_aborted = Sequencer::num_aborted_;
+
       txn_count = 0;
       batch_count = 0;
       num_fetched_this_round = 0;
@@ -432,7 +450,7 @@ void Sequencer::RunLoader(){
 			//<< executing_txns << " executing, "
 			<< num_pend_txns_ << " pending\n" << std::flush;
 	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
-		  for(int i = 0; i<NUM_THREADS; ++i){
+		  for(int i = 0; i<num_threads; ++i){
 			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
 				  <<", num committed txn is "<<Sequencer::num_lc_txns_
 				  <<", waiting queue is"<<std::endl;
@@ -494,7 +512,7 @@ void* Sequencer::FetchMessage() {
 			  TxnProto* txn;
 			  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
 			  txn->set_local_txn_id(fetched_txn_num_);
-			  txns_queue_[(fetched_txn_num_/BUFFER_TXNS_NUM)%NUM_THREADS].Push(txn);
+			  txns_queue_[(fetched_txn_num_/BUFFER_TXNS_NUM)%num_threads].Push(txn);
 			  ++fetched_txn_num_;
 			  ++i;
 		  }

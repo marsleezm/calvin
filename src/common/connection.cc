@@ -53,8 +53,8 @@ pthread_attr_init(&attr);
 //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 CPU_ZERO(&cpuset);
-CPU_SET(5, &cpuset);
-LOG(-1, "Connection thread starts at core 5");
+CPU_SET(0, &cpuset);
+LOG(-1, "Connection thread starts at core 0");
 //CPU_SET(4, &cpuset);
 //CPU_SET(5, &cpuset);
 //CPU_SET(6, &cpuset);

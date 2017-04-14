@@ -131,6 +131,7 @@ void StorageManager::Abort(){
 	}
 
 	//write_set.clear();
+	suspended_key = "";
 	read_set_.clear();
 	tpcc_args->Clear();
 	tpcc_args ->ParseFromString(txn_->arg());
@@ -309,6 +310,7 @@ StorageManager::~StorageManager() {
 
 
 Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) {
+	read_state = NORMAL;
 	if(abort_bit_ > num_restarted_){
 		LOCKLOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
 		max_counter_ = 0;
@@ -338,7 +340,6 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 						return reinterpret_cast<Value*>(SUSPENDED);
 					}
 					else{
-						read_state = NORMAL;
 						LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
 						++exec_counter_;
 						++max_counter_;
@@ -355,7 +356,6 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 				}
 			}
 			else{
-				read_state = NORMAL;
 				++exec_counter_;
 				++max_counter_;
 				return read_set_[key].second;
@@ -366,7 +366,6 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 			if (remote_objects_.count(key) > 0){
 				++exec_counter_;
 				++max_counter_;
-				read_state = NORMAL;
 				return remote_objects_[key];
 			}
 			else{ //Should be blocked
@@ -416,6 +415,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 //  	  return true;  // The key will be locked by another partition.
 
 Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object) {
+	read_state = NORMAL;
 	if(abort_bit_ > num_restarted_){
 		LOCKLOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
 		max_counter_ = 0;
@@ -427,7 +427,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 			// The value has been read already
 			if(read_set_.count(key)){
-				LOCKLOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
+				LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
 				LOG(txn_->txn_id(), "Trying to read local key "<<key<<", addr is "<<reinterpret_cast<int64>(&read_set_[key]));
 				ASSERT(read_set_[key].second != NULL);
 				++exec_counter_;
@@ -448,8 +448,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					return reinterpret_cast<Value*>(SUSPENDED);
 				}
 				else{
-					read_state = NORMAL;
-					LOCKLOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
+					LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
 					++exec_counter_;
 					++max_counter_;
 					//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
@@ -469,7 +468,6 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 			if (remote_objects_.count(key) > 0){
 				++exec_counter_;
 				++max_counter_;
-				read_state = NORMAL;
 				return remote_objects_[key];
 			}
 			else{ //Should be blocked

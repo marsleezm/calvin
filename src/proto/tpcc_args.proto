@@ -26,8 +26,10 @@ message TPCCArgs {
   optional int32 order_number = 41;
 
   optional int32 lastest_order_number  = 42;
+  
   optional int32 threshold = 51;
   repeated int32 order_line_count = 52;
+  repeated bytes indexed_keys = 53;
   
   // Needed for transaction exection;
   optional bytes warehouse_key = 60;
@@ -35,4 +37,5 @@ message TPCCArgs {
   optional bytes customer_key = 62;
   optional bytes order_key = 63;
   optional bytes item_id = 64;
+  
 }

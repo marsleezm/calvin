@@ -26,6 +26,7 @@
 #include "sequencer/sequencer.h"
 #include "backend/locked_versioned_storage.h"
 #include "backend/storage_manager.h"
+#include "common/config_reader.h"
 
 using std::deque;
 
@@ -76,31 +77,31 @@ class DeterministicScheduler : public Scheduler {
 	  active_txns.erase(txn_id);
   }
 
-  inline TxnProto* GetTxn(bool& got_it, int thread){
-  	  TxnProto* txn;
-  	  if(queue_mode == FROM_SELF){
-  		  client_->GetTxn(&txn, Sequencer::num_lc_txns_, GetUTime());
-  		  txn->set_local_txn_id(Sequencer::num_lc_txns_);
-  		  return txn;
-  	  }
-  	  else if (queue_mode == NORMAL_QUEUE){
-  		  got_it = txns_queue_->Pop(&txn);
-  		  return txn;
-  	  }
-  	  else if (queue_mode == FROM_SEQ_SINGLE){
-  		  got_it = txns_queue_->Pop(&txn);
-  		  return txn;
-  	  }
-  	  else if (queue_mode == FROM_SEQ_DIST){
-  		  got_it = txns_queue_[thread].Pop(&txn);
-  		  return txn;
-  	  }
-  	  else{
-  		  std::cout<< "!!!!!!!!!!!!WRONG!!!!!!!!!!!!!!" << endl;
-  		  got_it = false;
-  		  return txn;
-  	  }
-    }
+//  inline TxnProto* GetTxn(bool& got_it, int thread){
+//  	  TxnProto* txn;
+//  	  if(queue_mode == FROM_SELF){
+//  		  client_->GetTxn(&txn, Sequencer::num_lc_txns_, GetUTime());
+//  		  txn->set_local_txn_id(Sequencer::num_lc_txns_);
+//  		  return txn;
+//  	  }
+//  	  else if (queue_mode == NORMAL_QUEUE){
+//  		  got_it = txns_queue_->Pop(&txn);
+//  		  return txn;
+//  	  }
+//  	  else if (queue_mode == FROM_SEQ_SINGLE){
+//  		  got_it = txns_queue_->Pop(&txn);
+//  		  return txn;
+//  	  }
+//  	  else if (queue_mode == FROM_SEQ_DIST){
+//  		  got_it = txns_queue_[thread].Pop(&txn);
+//  		  return txn;
+//  	  }
+//  	  else{
+//  		  std::cout<< "!!!!!!!!!!!!WRONG!!!!!!!!!!!!!!" << endl;
+//  		  got_it = false;
+//  		  return txn;
+//  	  }
+//    }
 
   StorageManager* ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*>& active_txns);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
@@ -111,9 +112,11 @@ class DeterministicScheduler : public Scheduler {
   // Configuration specifying node & system settings.
   Configuration* configuration_;
 
+  const static int num_threads = NUM_THREADS;
+  //int num_threads = 5;
   // Thread contexts and their associated Connection objects.
-  pthread_t threads_[NUM_THREADS];
-  Connection* thread_connections_[NUM_THREADS];
+  pthread_t threads_[num_threads];
+  Connection* thread_connections_[num_threads];
 
   //pthread_t lock_manager_thread_;
   // Connection for receiving txn batches from sequencer.
@@ -145,15 +148,15 @@ class DeterministicScheduler : public Scheduler {
   // The queue of fetched transactions
 
   // Transactions that can be committed if all its previous txns have been local-committed
-  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* to_sc_txns_[NUM_THREADS];
+  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* to_sc_txns_[num_threads];
 
   // Transactions that can only resume execution after all its previous txns have been local-committed
-  priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* pending_txns_[NUM_THREADS];
+  priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* pending_txns_[num_threads];
 
-  int num_suspend[NUM_THREADS];
+  int num_suspend[num_threads];
 
-  AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
-  AtomicQueue<pair<int64_t, int>>* abort_queues[NUM_THREADS];
-  AtomicQueue<pair<int64_t, int>>* waiting_queues[NUM_THREADS];
+  AtomicQueue<MessageProto>* message_queues[num_threads];
+  AtomicQueue<pair<int64_t, int>>* abort_queues[num_threads];
+  AtomicQueue<pair<int64_t, int>>* waiting_queues[num_threads];
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

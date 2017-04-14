@@ -13,13 +13,13 @@
 #include "common/utils.h"
 #include <tr1/unordered_map>
 #include <atomic>
+#include "common/config_reader.h"
 
 //#define PAXOS
 //#define PREFETCHING
 #define COLD_CUTOFF 990000
 
 //#define MAX_BATCH_SIZE 56
-#define MAX_BATCH_SIZE 200
 
 #define SAMPLES 100000
 #define SAMPLE_RATE 999
@@ -36,6 +36,7 @@ class LockedVersionedStorage;
 class TxnProto;
 class MessageProto;
 class DeterministicScheduler;
+class ConfigReader;
 
 #ifdef LATENCY_TEST
 extern double sequencer_recv[SAMPLES];
@@ -159,6 +160,10 @@ class Sequencer {
   AtomicQueue<TxnProto*>* txns_queue_;
 
   int num_queues_;
+
+  int max_batch_size = atoi(ConfigReader::Value("General", "max_batch_size").c_str());
+  int dependent_percent = atoi(ConfigReader::Value("General", "dependent_percent").c_str());
+  int num_threads = NUM_THREADS;
 
   // Queue mode
   int queue_mode;

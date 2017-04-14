@@ -11,6 +11,7 @@
 #include <string>
 
 #include "applications/application.h"
+#include "common/config_reader.h"
 
 using std::set;
 using std::string;
@@ -21,11 +22,13 @@ class Microbenchmark : public Application {
 	INITIALIZE = 0,
 	MICROTXN_SP = 1,
 	MICROTXN_MP = 2,
+	MICROTXN_DEP_SP = 9,
+	MICROTXN_DEP_MP = 10
   };
 
-  Microbenchmark(int nodecount, int hotcount) {
+  Microbenchmark(int nodecount, int node_id) {
     nparts = nodecount;
-    hot_records = hotcount;
+    this_node_id = node_id;
   }
 
   virtual ~Microbenchmark() {}
@@ -34,16 +37,20 @@ class Microbenchmark : public Application {
   virtual int Execute(StorageManager* storage) const;
   virtual int ExecuteReadOnly(StorageManager* storage) const;
 
-  TxnProto* MicroTxnSP(int64 txn_id, int64 seed, int part);
-  TxnProto* MicroTxnMP(int64 txn_id, int64 seed, int part1, int part2, int part3);
+  TxnProto* InitializeTxn();
+  TxnProto* MicroTxnSP(int64 txn_id, int part);
+  TxnProto* MicroTxnMP(int64 txn_id, int part1, int part2, int part3);
+  TxnProto* MicroTxnDependentSP(int64 txn_id, int part);
+  TxnProto* MicroTxnDependentMP(int64 txn_id, int part1, int part2, int part3);
 
   int nparts;
-  int hot_records;
+  int hot_records = atoi(ConfigReader::Value("Access", "index_size").c_str());
+  int index_records = atoi(ConfigReader::Value("Access", "index_size").c_str());
+  int this_node_id;
   //static const int kRWSetSize = 10;  // MUST BE EVEN
-  static const int kRWSetSize = 10;
-
-  static const int kDBSize = 1000000;
-  //static const int kDBSize = 10;
+  int kRWSetSize = atoi(ConfigReader::Value("Access", "rw_set_size").c_str());
+  int indexAccessNum = atoi(ConfigReader::Value("Access", "index_num").c_str());
+  int kDBSize = atoi(ConfigReader::Value("Access", "total_key").c_str());
 
   virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
 
@@ -52,6 +59,15 @@ class Microbenchmark : public Application {
                      int key_limit, int part, Rand* rand) const;
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part) const;
+  inline int RandomLocalKey(const int key_start, const int key_limit, const int part) const {
+		return key_start + part + nparts * (rand() % ((key_limit - key_start)/nparts));
+  }
+  inline int RandomLocalKey(const int key_start, const int key_limit, const int part, Rand* rand) const {
+		return key_start + part + nparts * (rand->next() % ((key_limit - key_start)/nparts));
+  }
+  inline int NotSoRandomLocalKey(const int rand_num, const int key_start, const int key_limit, const int part) const {
+		return key_start + part + nparts * (rand_num % ((key_limit - key_start)/nparts));
+  }
   void GetKeys(TxnProto* txn) const;
   void GetKeys(TxnProto* txn, Rand* rand) const;
   Microbenchmark() {}
