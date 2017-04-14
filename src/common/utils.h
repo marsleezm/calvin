@@ -660,11 +660,11 @@ struct ValuePair{
 		if(first == 0 || first == 1 || (first & WRITE)){
 			first = first | value;
 			second = in_second;
-			return true;
+			//return true;
 		}
 		else{
 			std::cout<<"First is "<<first<<", value is "<<value<<std::endl;
-			return false;
+			//return false;
 		}
 	}
 };

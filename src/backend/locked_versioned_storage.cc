@@ -194,7 +194,12 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 //				LOG(txn_id, key<<" does not exist!!! "<<objects_[key]);
 //				ASSERT(1 == 2);
 //			}
-		ASSERT(objects_.count(key) != 0);
+
+		if(objects_.count(key) == 0){
+			std::cout<<"Key is "<<key<<",  txn is "<<txn_id<<", check again "<<objects_.count(key<<std::endl;
+			//ASSERT(objects_.count(key) != 0);
+			assert(1==2);
+		}
 		entry = objects_[key];
 	}
 
