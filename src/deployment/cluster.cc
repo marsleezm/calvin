@@ -22,6 +22,8 @@
 
 #include "common/configuration.h"
 
+#define KEY
+
 using std::map;
 using std::vector;
 
@@ -208,7 +210,7 @@ void DeployOne(int nodeID,
   char copy_config[1024];
 
   std::stringstream ss;
-  ss << "scp -i ~/.ssh/id_rsa -rp deploy-run.conf %s:" << cwd << "/deploy-run.conf";
+  ss << "scp -rp deploy-run.conf %s:" << cwd << "/deploy-run.conf";
   std::string s = ss.str();
   snprintf(copy_config, sizeof(copy_config),
            s.c_str(),
@@ -236,7 +238,7 @@ void DeployOne(int nodeID,
     dup2(pipefd[1], 1);
     dup2(pipefd[1], 2);
     close(pipefd[1]);
-    execlp("ssh", "ssh", "-i", "~/.ssh/id_rsa", remote_opt1, remote_opt2, remote_opt3, NULL);
+    execlp("ssh", "ssh", remote_opt1, remote_opt2, remote_opt3, NULL);
     printf("Node %d spawning failed\n", nodeID);
     exit(-1);
   } else if (pid < 0) {
