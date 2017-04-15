@@ -239,7 +239,7 @@ int main(int argc, char** argv) {
 									 client, queue_mode);
   }
 
-  Spin(ConfigReader::Value("General", "duration"));
+  Spin(atoi(ConfigReader::Value("General", "duration").c_str()));
   return 0;
 }
 
