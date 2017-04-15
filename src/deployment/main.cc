@@ -287,7 +287,7 @@ int main(int argc, char** argv) {
 
 	sequencer.SetScheduler(scheduler);
 
-	Spin(180);
+	Spin(atoi(ConfigReader::Value("General", "duration").c_str()));
 	DeterministicScheduler::terminate();
 	delete scheduler;
 	return 0;
