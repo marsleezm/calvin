@@ -22,6 +22,12 @@ Configuration::Configuration(int node_id, const string& filename)
     exit(0);
 }
 
+Configuration::~Configuration()
+{
+	for(map<int, Node*>::iterator it = all_nodes.begin(); it!=all_nodes.end(); ++it)
+		delete it->second;
+}
+
 // TODO(alex): Implement better (application-specific?) partitioning.
 int Configuration::LookupPartition(const Key& key) const {
   if (key.find("w") == 0)  // TPCC

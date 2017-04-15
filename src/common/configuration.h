@@ -71,6 +71,7 @@ struct Node {
 class Configuration {
  public:
   Configuration(int node_id, const string& filename);
+  ~Configuration();
 
   // Returns the node_id of the partition at which 'key' is stored.
   int LookupPartition(const Key& key) const;
