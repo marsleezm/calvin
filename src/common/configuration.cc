@@ -24,8 +24,8 @@ Configuration::Configuration(int node_id, const string& filename)
 
 Configuration::~Configuration()
 {
-	for(map<int, Node*>::iterator it = all_nodes.begin(); it!=all_nodes.end(); ++it)
-		delete it->second;
+//	for(map<int, Node*>::iterator it = all_nodes.begin(); it!=all_nodes.end(); ++it)
+//		delete it->second;
 }
 
 // TODO(alex): Implement better (application-specific?) partitioning.

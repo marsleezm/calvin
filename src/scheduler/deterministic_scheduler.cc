@@ -448,7 +448,6 @@ DeterministicScheduler::~DeterministicScheduler() {
 		//delete waiting_queues[i];
 		//delete abort_queues[i];
 		delete to_sc_txns_[i];
-		delete pending_txns_[i];
 	}
 }
 
