@@ -239,7 +239,7 @@ int main(int argc, char** argv) {
 									 client, queue_mode);
   }
 
-  Spin(180);
+  Spin(ConfigReader::Value("General", "duration"));
   return 0;
 }
 
