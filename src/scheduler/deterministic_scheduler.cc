@@ -261,7 +261,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  }
 				  else{
 					  ASSERT(result == SUCCESS);
-					  LOG(txn->txn_id(),  " committed!"<<Sequencer::max_commit_ts);
+					  LOG(txn->txn_id(),  " committed! Max commit ts is "<<Sequencer::max_commit_ts);
 					  ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 					  manager->ApplyChange(true);
 					  Sequencer::max_commit_ts = txn->txn_id();

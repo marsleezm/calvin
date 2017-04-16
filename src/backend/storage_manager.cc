@@ -198,15 +198,16 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	LOCKLOG(txn_->txn_id(), " committing and cleaning tx "<<txn_->txn_id());
+	LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
 		LOG(txn_->txn_id(), "Has message");
 		if (message_has_value_){
-			LOG(txn_->txn_id(), "Sending message to remote");
+
 			for (int i = 0; i < txn_->writers().size(); i++) {
 			  if (txn_->writers(i) != configuration_->this_node_id) {
 				  message_->set_destination_node(txn_->writers(i));
-				connection_->Send1(*message_);
+				  LOG(txn_->txn_id(), "Sending message to remote "<<txn_->writers(i));
+				  connection_->Send1(*message_);
 			  }
 			}
 			++sent_msg_;
