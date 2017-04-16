@@ -366,6 +366,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  ", num suspend is "<<scheduler->num_suspend[thread]);
 			  if(my_to_sc_txns->size())
 				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
+			  if(my_pend_txns->size())
+				  LOG(-1, my_pend_txns->top().first<<", lc is  "<<my_pend_txns->top().second<<", third is "<<my_pend_txns->top().third);
 			  out_counter1 = 0;
 		  }
 		  ++out_counter1;
