@@ -330,7 +330,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  TxnProto* txn;
 		  got_it = scheduler->txns_queue_->Pop(&txn);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
-		  LOCKLOG(txn->txn_id(), " before starting txn ");
+		  //LOCKLOG(txn->txn_id(), " before starting txn ");
 
 		  if (got_it == true) {
 			  // Create manager.
@@ -381,7 +381,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		}
 	}
 	else{
-		LOCKLOG(txn->txn_id(), " starting executing");
+		//LOCKLOG(txn->txn_id(), " starting executing");
 		int result = application_->Execute(manager);
 		if (result == SUSPENDED){
 			LOCKLOG(txn->txn_id(),  " suspended");
