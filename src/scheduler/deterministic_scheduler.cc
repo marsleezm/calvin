@@ -261,7 +261,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  }
 				  else{
 					  ASSERT(result == SUCCESS);
-					  LOG(txn->txn_id(),  " committed! Max commit ts is "<<Sequencer::max_commit_ts);
+					  LOG(txn->txn_id(),  " committed! Max commit ts is "<<Sequencer::max_commit_ts<<", old lc is "<<Sequencer::num_lc_txns_);
 					  ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 					  manager->ApplyChange(true);
 					  Sequencer::max_commit_ts = txn->txn_id();
@@ -349,12 +349,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  if(retry_mgr != NULL)
 				  retry_txns.push(retry_mgr);
 		  }
+		  else{
+			  LOG(-1, " WTF, got no txn?");
+		  }
 	  }
 	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
-//	  else{
-//		  std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
-//				  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
-//	  }
+	  else{
+		  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
+				  ", num suspend is "<<scheduler->num_suspend[thread]);
+		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
+		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
+	  }
   }
   delete abort_queue;
   delete waiting_queue;
