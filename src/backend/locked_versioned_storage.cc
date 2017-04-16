@@ -392,7 +392,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
                                           int64 txn_id, bool is_committing, bool new_object) {
 	//return true;
 	//ASSERT(objects_.count(key) != 0);
-	LOG(txn_id, " putting data for "<<key);
+	//LOG(txn_id, " putting data for "<<key);
 	KeyEntry* entry;
 	if(new_object){
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
@@ -412,7 +412,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 		entry = objects_[key];
 	}
 
-	LOG(txn_id, " trying to put ["<<key<<"], entry addr is "<<reinterpret_cast<int64>(entry));
+	//LOG(txn_id, " trying to put ["<<key<<"], entry addr is "<<reinterpret_cast<int64>(entry));
 	if (entry->lock.tx_id_ != txn_id){
 		LOG(txn_id, " WTF, I don't have the lock??? Key is "<<key<<", lock holder is "<<entry->lock.tx_id_<<", equal "<<(txn_id == entry->lock.tx_id_));
 		return false;
@@ -465,13 +465,13 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 			vector<PendingReadEntry>::iterator it = pend_list->begin(), oldest_tx;
 			int64 oldest_tx_id = INT_MAX;
 			while(it != pend_list->end()) {
-				LOG(txn_id, "'s pend reader is "<<it->my_tx_id_);
+				//LOG(txn_id, "'s pend reader is "<<it->my_tx_id_);
 				// This txn is ordered after me, I should
 				if(it->my_tx_id_ > txn_id) {
 					//LOG(it->my_tx_id_<<"'s abort bit is "<<*(it->abort_bit_)<<", num aborted is "<<it->num_aborted_);
 					// If this transaction wants the lock
 					if (*(it->abort_bit_) != it->num_aborted_){
-						LOG(txn_id, " should not give "<<it->my_tx_id_<<" lock, because he has already aborted.");
+						//LOG(txn_id, " should not give "<<it->my_tx_id_<<" lock, because he has already aborted.");
 						it = pend_list->erase(it);
 					}
 					else{
@@ -484,7 +484,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 						}
 						// If this transaction is only trying to read
 						else{
-							LOG(txn_id, "Adding ["<<it->my_tx_id_<<","<< it->num_aborted_<<"] to waiting queue by "<<txn_id);
+							//LOG(txn_id, "Adding ["<<it->my_tx_id_<<","<< it->num_aborted_<<"] to waiting queue by "<<txn_id);
 							ValuePair vp;
 							if(!is_committing){
 								entry->read_from_list->push_back(ReadFromEntry(it->my_tx_id_, txn_id,
@@ -519,7 +519,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 				vp.second = new Value(*value);
 				LOG(txn_id, " unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
 				entry->lock = LockEntry(oldest_tx->my_tx_id_, oldest_tx->abort_bit_, *oldest_tx->abort_bit_, oldest_tx->abort_queue_);
-				LOG(txn_id, " adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
+				//LOG(txn_id, " adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
 				oldest_tx->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(oldest_tx->my_tx_id_, oldest_tx->num_aborted_, vp));
 				pend_list->erase(oldest_tx);
 			}
@@ -547,7 +547,7 @@ void LockedVersionedStorage::PutObject(const Key& key, Value* value) {
 
 
 void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_object) {
-	LOG(txn_id, " unlock "<<key);
+	//LOG(txn_id, " unlock "<<key);
 	KeyEntry* entry;
 	if(new_object){
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
@@ -619,9 +619,9 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 				ValuePair vp;
 				vp.first = WRITE;
 				vp.second = new Value(*value);
-				LOG(txn_id, " aborted, but unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
+				//LOG(txn_id, " aborted, but unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
 				entry->lock = LockEntry(oldest_tx->my_tx_id_, oldest_tx->abort_bit_, *oldest_tx->abort_bit_, oldest_tx->abort_queue_);
-				LOG(txn_id, " aborted, but adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
+				//LOG(txn_id, " aborted, but adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
 				oldest_tx->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(oldest_tx->my_tx_id_, oldest_tx->num_aborted_, vp));
 				pend_list->erase(oldest_tx);
 			}
