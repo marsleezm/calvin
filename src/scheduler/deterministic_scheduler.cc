@@ -152,6 +152,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   StorageManager* retry_mgr= NULL;
   queue<StorageManager*> retry_txns;
 
+  uint max_pend = atoi(ConfigReader::Value("General", "max_pend").c_str());
+  int max_suspend = atoi(ConfigReader::Value("General", "max_suspend").c_str());
+  uint max_sc = atoi(ConfigReader::Value("General", "max_sc").c_str());
+
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
@@ -320,7 +324,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  retry_txns.pop();
 	  }
 	  // Try to start a new transaction
-	  else if (my_to_sc_txns->size() <= MAX_SC_NUM && my_pend_txns->size() <= MAX_PEND_NUM && scheduler->num_suspend[thread]<=MAX_SUSPEND) {
+	  else if (my_to_sc_txns->size() <= max_sc && my_pend_txns->size() <= max_pend && scheduler->num_suspend[thread]<=max_suspend) {
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;

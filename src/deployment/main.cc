@@ -35,7 +35,7 @@ using namespace std;
 //pthread_mutex_t mutex_;
 //pthread_mutex_t mutex_for_item;
 
-int dependent_percent;
+float dependent_percent;
 
 // Microbenchmark load generation client.
 class MClient : public Client {
@@ -48,7 +48,7 @@ class MClient : public Client {
   virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
 	//srand(seed);
 
-	if (config_->all_nodes.size() > 1 && rand() % 100 < percent_mp_) {
+	if (config_->all_nodes.size() > 1 && abs(rand())%10000 /100.0 < percent_mp_) {
 	  // Multipartition txn.
 	  int other1;
 	  int other2;
@@ -60,7 +60,7 @@ class MClient : public Client {
 		other2 = rand() % config_->all_nodes.size();
 	  } while (other2 == config_->this_node_id || other2 == other1);
 
-	  if (rand() %100 < dependent_percent)
+	  if (abs(rand())%10000/100.0 < dependent_percent)
 		  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
 	  else
 		  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
@@ -68,7 +68,7 @@ class MClient : public Client {
 	  (*txn)->set_multipartition(true);
 	} else {
 	  // Single-partition txn.
-	  if (rand() %100 < dependent_percent)
+	  if (abs(rand())%10000/100.0 < dependent_percent)
 		  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
 	  else
 		  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
@@ -82,7 +82,7 @@ class MClient : public Client {
 
   virtual void GetDetTxn(TxnProto** txn, int txn_id, int seed) {
 	  srand(seed);
-	  if (config_->all_nodes.size() > 1 && rand() % 100 < percent_mp_) {
+	  if (config_->all_nodes.size() > 1 && abs(rand())%10000/100.0 < percent_mp_) {
 		  // Multipartition txn.
 		  int other1;
 		  int other2;
@@ -102,7 +102,7 @@ class MClient : public Client {
 		  (*txn)->set_multipartition(true);
 	  } else {
 		  // Single-partition txn.
-		  if (rand() %100 < dependent_percent)
+		  if (abs(rand())%10000/100.0 < dependent_percent)
 			  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
 		  else
 			  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
@@ -115,7 +115,7 @@ class MClient : public Client {
  private:
   Microbenchmark microbenchmark;
   Configuration* config_;
-  int percent_mp_;
+  float percent_mp_;
 };
 
 // TPCC load generation client.
@@ -126,7 +126,7 @@ class TClient : public Client {
   virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
     TPCC tpcc;
     *txn = new TxnProto();
-    if (rand() % 100 < percent_mp_)
+    if (abs(rand())%10000/100.0 < percent_mp_)
         (*txn)->set_multipartition(true);
 	else
 		(*txn)->set_multipartition(false);
@@ -154,7 +154,7 @@ class TClient : public Client {
     TPCC tpcc;
     srand(seed);
     *txn = new TxnProto();
-    if (rand() % 100 < percent_mp_)
+    if (abs(rand())%10000/100.0 < percent_mp_)
         (*txn)->set_multipartition(true);
 	else
 		(*txn)->set_multipartition(false);
@@ -183,7 +183,7 @@ class TClient : public Client {
 
  private:
   Configuration* config_;
-  int percent_mp_;
+  float percent_mp_;
 };
 
 void stop(int sig) {
@@ -205,7 +205,7 @@ int main(int argc, char** argv) {
 	signal(SIGINT, &stop);
 	signal(SIGTERM, &stop);
 	ConfigReader::Initialize("myconfig.conf");
-	dependent_percent = atoi(ConfigReader::Value("General", "dependent_percent").c_str());
+	dependent_percent = stof(ConfigReader::Value("General", "dependent_percent").c_str());
 
 	//freopen("output.txt","w",stdout);
 
@@ -217,8 +217,8 @@ int main(int argc, char** argv) {
 
 	// Artificial loadgen clients.
 	Client* client = (argv[2][0] == 'm') ?
-			reinterpret_cast<Client*>(new MClient(&config, atoi(ConfigReader::Value("General", "distribute_percent").c_str()))) :
-			reinterpret_cast<Client*>(new TClient(&config, atoi(ConfigReader::Value("General", "distribute_percent").c_str())));
+			reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("General", "distribute_percent").c_str()))) :
+			reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("General", "distribute_percent").c_str())));
 
 	// #ifdef PAXOS
 	//  StartZookeeper(ZOOKEEPER_CONF);
