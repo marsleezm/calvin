@@ -223,15 +223,16 @@ int main(int argc, char** argv) {
   Sequencer sequencer(&config, &multiplexer, client,
                       storage, queue_mode);
 
+  DeterministicScheduler* scheduler;
   // Run scheduler in main thread.
   if (argv[2][0] == 't') {
-	  DeterministicScheduler scheduler(&config,
+	  scheduler = new DeterministicScheduler(&config,
 	                                       multiplexer.NewConnection("scheduler_"),
 	                                       storage,
 	                                       new TPCC(), sequencer.GetTxnsQueue(), client, queue_mode);
   }
   else{
-    DeterministicScheduler scheduler(&config,
+	  scheduler = new DeterministicScheduler(&config,
                                      multiplexer.NewConnection("scheduler_"),
                                      storage,
                                      new Microbenchmark(config.all_nodes.size(), config.this_node_id),
@@ -240,6 +241,7 @@ int main(int argc, char** argv) {
   }
 
   Spin(atoi(ConfigReader::Value("General", "duration").c_str()));
+  delete scheduler;
   return 0;
 }
 

@@ -76,56 +76,53 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
 	pthread_mutex_init(&recon_mutex_, NULL);
     lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
-  
-    std::cout<<"conf initialized "<<configuration_<<std::endl;
 
+    txns_queue = new AtomicQueue<TxnProto*>();
+    done_queue = new AtomicQueue<TxnProto*>();
 
-  txns_queue = new AtomicQueue<TxnProto*>();
-  done_queue = new AtomicQueue<TxnProto*>();
+    for (int i = 0; i < NUM_THREADS; i++) {
+    	message_queues[i] = new AtomicQueue<MessageProto>();
+    }
+    recon_queue_ = new AtomicQueue<MessageProto>();
+    recon_connection = batch_connection_->multiplexer()->NewConnection("recon", &recon_queue_);
 
-  for (int i = 0; i < NUM_THREADS; i++) {
-    message_queues[i] = new AtomicQueue<MessageProto>();
-  }
-  recon_queue_ = new AtomicQueue<MessageProto>();
-  recon_connection = batch_connection_->multiplexer()->NewConnection("recon", &recon_queue_);
-
-Spin(2);
+    Spin(2);
 
   // start lock manager thread
     cpu_set_t cpuset;
     pthread_attr_t attr1;
-  pthread_attr_init(&attr1);
+    pthread_attr_init(&attr1);
   //pthread_attr_setdetachstate(&attr1, PTHREAD_CREATE_DETACHED);
   
-CPU_ZERO(&cpuset);
-CPU_SET(3, &cpuset);
-std::cout << "Central locking thread starts at 4"<<std::endl;
-  pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
-  pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
+    CPU_ZERO(&cpuset);
+    CPU_SET(3, &cpuset);
+    std::cout << "Central locking thread starts at 4"<<std::endl;
+    pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
+    pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
                  reinterpret_cast<void*>(this));
 
 
-//  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    //  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-  // Start all worker threads.
-  for (int i = 0; i < NUM_THREADS; i++) {
-    string channel("scheduler");
-    channel.append(IntToString(i));
-    thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
+    // Start all worker threads.
+    for (int i = 0; i < NUM_THREADS; i++) {
+    	string channel("scheduler");
+    	channel.append(IntToString(i));
+    	thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
-	pthread_attr_t attr;
-	pthread_attr_init(&attr);
-	CPU_ZERO(&cpuset);
-	//if (i == 0 || i == 1)
-	CPU_SET(i+3, &cpuset);
-	std::cout << "Worker thread #"<<i<<" starts at core "<<i<<std::endl;
-	//else
-	//CPU_SET(i+2, &cpuset);
-    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
+		pthread_attr_t attr;
+		pthread_attr_init(&attr);
+		CPU_ZERO(&cpuset);
+		//if (i == 0 || i == 1)
+		CPU_SET(i+3, &cpuset);
+		std::cout << "Worker thread #"<<i<<" starts at core "<<i<<std::endl;
+		//else
+		//CPU_SET(i+2, &cpuset);
+		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
-    pthread_create(&(threads_[i]), &attr, RunWorkerThread,
-                   reinterpret_cast<void*>(
-                   new pair<int, DeterministicScheduler*>(i, this)));
+		pthread_create(&(threads_[i]), &attr, RunWorkerThread,
+					   reinterpret_cast<void*>(
+					   new pair<int, DeterministicScheduler*>(i, this)));
   }
 
 }
