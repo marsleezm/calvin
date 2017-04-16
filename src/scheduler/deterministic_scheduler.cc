@@ -432,7 +432,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			else{
 				//++Sequencer::num_sc_txns_;
 				manager->ApplyChange(false);
-				LOCKLOG(txn->txn_id(), " spec-committing, num committed txn is "<<Sequencer::num_lc_txns_);
+				LOCKLOG(txn->txn_id(), " spec-committing, num committed txn is "<<Sequencer::num_lc_txns_<<", last commit ts is "<<Sequencer::max_commit_ts);
 				active_txns[txn->txn_id()] = manager;
 				LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 				to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
