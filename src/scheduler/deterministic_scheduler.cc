@@ -364,6 +364,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if(out_counter1 & 67108864){
 			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
 					  ", num suspend is "<<scheduler->num_suspend[thread]);
+			  if(my_to_sc_txns->size())
+				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
 			  out_counter1 = 0;
 		  }
 		  ++out_counter1;
