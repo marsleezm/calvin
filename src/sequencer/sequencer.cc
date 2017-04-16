@@ -306,6 +306,7 @@ void Sequencer::RunReader() {
   int batch_count = 0;
   int last_aborted = 0;
   int batch_number = configuration_->this_node_id;
+  int second = 0;
 
 #ifdef LATENCY_TEST
   int watched_txn = -1;
@@ -391,7 +392,7 @@ void Sequencer::RunReader() {
                 << batch_count << " batches, fetched"<< num_fetched_this_round
 				<< "txns \n" << std::flush;
 #endif
-      std::cout << "Completed " <<
+      std::cout << " Completed " <<
       		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
       			<< " txns/sec, "
       			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
@@ -399,7 +400,7 @@ void Sequencer::RunReader() {
       			<< num_sc_txns_ << " spec-committed, "
       			//<< test<< " for drop speed , "
       			//<< executing_txns << " executing, "
-      			<< num_pend_txns_ << " pending\n" << std::flush;
+      			<< num_pend_txns_ << " pending, time is "<<second++<<"\n" << std::flush;
 //	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
 //		  for(int i = 0; i<NUM_THREADS; ++i){
 //			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first

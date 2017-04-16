@@ -443,15 +443,15 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 }
 
 DeterministicScheduler::~DeterministicScheduler() {
-	cout << "Already destroyed!" << endl;
-
-	for (int i = 0; i < num_threads; i++) {
-		delete to_sc_txns_[i];
-		delete pending_txns_[i];
-		delete message_queues[i];
-		//delete waiting_queues[i];
-		//delete abort_queues[i];
-		delete to_sc_txns_[i];
-	}
+//	cout << "Already destroyed!" << endl;
+//
+//	for (int i = 0; i < num_threads; i++) {
+//		delete to_sc_txns_[i];
+//		delete pending_txns_[i];
+//		delete message_queues[i];
+//		//delete waiting_queues[i];
+//		//delete abort_queues[i];
+//		delete to_sc_txns_[i];
+//	}
 }
 
