@@ -272,10 +272,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  delete manager;
 					  //finished = true;
 					  active_txns.erase(txn->txn_id());
-					  if(!my_pend_txns->empty())
-						  LOG(txn->txn_id(), " first is "<<my_pend_txns->top().first);
-					  while (!my_pend_txns->empty() && my_pend_txns->top().first == txn->txn_id())
+
+					  bool popped_out = false;
+					  while (!my_pend_txns->empty() && my_pend_txns->top().first == txn->txn_id()){
 						  my_pend_txns->pop();
+						  popped_out = true;
+						  LOG(txn->txn_id(), " poping out");
+					  }
+					  if(popped_out == false && !my_pend_txns->empty())
+						  LOG(txn->txn_id(), " first is "<<my_pend_txns->top().first);
 				  }
 			  }
 			  else{
