@@ -156,6 +156,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   int max_suspend = atoi(ConfigReader::Value("General", "max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("General", "max_sc").c_str());
 
+  int out_counter = 0;
+
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
@@ -348,6 +350,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
 			  if(retry_mgr != NULL)
 				  retry_txns.push(retry_mgr);
+		  }
+		  else{
+			  if(out_counter & 4096){
+				  LOG(-1, " WTF, got no txn?");
+				  out_counter = 0;
+			  }
+			  ++out_counter;
 		  }
 	  }
 	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
