@@ -38,6 +38,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		message_ = new MessageProto();
 		message_->set_destination_channel(IntToString(txn_->txn_id()));
 		message_->set_type(MessageProto::READ_RESULT);
+		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
 	}
 	else
@@ -104,6 +105,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 
 	txn_ = txn;
 	message_ = new MessageProto();
+	message_->set_source_node(configuration_->this_node_id);
 	message_->set_destination_channel(IntToString(txn_->txn_id()));
 	message_->set_type(MessageProto::READ_RESULT);
 	connection_->LinkChannel(IntToString(txn_->txn_id()));
@@ -470,6 +472,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 			if (remote_objects_.count(key) > 0){
 				++exec_counter_;
 				++max_counter_;
+				LOG(txn_->txn_id(), " got remote key "<<key<<", txn's exec counter is "<<exec_counter_);
 				return remote_objects_[key];
 			}
 			else{ //Should be blocked

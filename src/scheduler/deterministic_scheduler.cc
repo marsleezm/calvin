@@ -284,12 +284,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
 		  MyTuple<int64_t, int64_t, bool> pend_txn = my_pend_txns->top();
 
+		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.third);
+
 		  while (!my_pend_txns->empty() &&  my_pend_txns->top().first == pend_txn.first){
 			  my_pend_txns->pop();
 		  }
 
 		  if(pend_txn.third == TO_SEND){
-			  LOG(-1, pend_txn.first <<" send remote message!!!");
+			  LOG(pend_txn.first," send remote message!!!");
 			  active_txns[pend_txn.first]->SendLocalReads();
 		  }
 		  else{
