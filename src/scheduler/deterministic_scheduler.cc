@@ -269,18 +269,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  Sequencer::max_commit_ts = txn->txn_id();
 					  ++Sequencer::num_lc_txns_;
 					  //--Sequencer::num_pend_txns_;
-					  delete manager;
-					  //finished = true;
-					  active_txns.erase(txn->txn_id());
 
-					  bool popped_out = false;
-					  while (!my_pend_txns->empty() && my_pend_txns->top().first == txn->txn_id()){
+					  while (!my_pend_txns->empty() && my_pend_txns->top().first == txn->txn_id())
 						  my_pend_txns->pop();
-						  popped_out = true;
-						  LOG(txn->txn_id(), " poping out");
-					  }
-					  if(popped_out == false && !my_pend_txns->empty())
-						  LOG(txn->txn_id(), " first is "<<my_pend_txns->top().first);
+					  active_txns.erase(txn->txn_id());
+					  delete manager;
 				  }
 			  }
 			  else{
@@ -322,8 +315,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  ++Sequencer::num_lc_txns_;
 				  //--Sequencer::num_pend_txns_;
 				  //scheduler->num_suspend[thread] -= manager->was_suspended_;
-				  delete manager;
 				  active_txns.erase(pend_txn.first);
+				  delete manager;
 				  LOG(-1, pend_txn.first<< " committed!");
 			  }
 		  }
