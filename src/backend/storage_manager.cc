@@ -431,8 +431,8 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 			// The value has been read already
 			if(read_set_.count(key)){
-				LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
-				LOG(txn_->txn_id(), "Trying to read local key "<<key<<", addr is "<<reinterpret_cast<int64>(&read_set_[key]));
+				//LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
+				//LOG(txn_->txn_id(), "Trying to read local key "<<key<<", addr is "<<reinterpret_cast<int64>(&read_set_[key]));
 				ASSERT(read_set_[key].second != NULL);
 				++exec_counter_;
 				++max_counter_;
@@ -443,7 +443,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				ValuePair result = actual_storage_->ReadLock(key, txn_->txn_id(), &abort_bit_,
 									num_restarted_, abort_queue_, pend_queue_, new_object);
 				if(result.first == SUSPENDED){
-					LOCKLOG(txn_->txn_id(), " suspended when read&lock "<<key<<", exec counter is "<<exec_counter_);
+					//LOCKLOG(txn_->txn_id(), " suspended when read&lock "<<key<<", exec counter is "<<exec_counter_);
 					read_state = SPECIAL;
 					suspended_key = key;
 					read_set_[key].first = WRITE | new_object;
@@ -451,7 +451,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					return reinterpret_cast<Value*>(SUSPENDED);
 				}
 				else{
-					LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
+					//LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
 					++exec_counter_;
 					++max_counter_;
 					//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
@@ -472,7 +472,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 			if (remote_objects_.count(key) > 0){
 				++exec_counter_;
 				++max_counter_;
-				LOG(txn_->txn_id(), " got remote key "<<key<<", txn's exec counter is "<<exec_counter_);
+				//LOG(txn_->txn_id(), " got remote key "<<key<<", txn's exec counter is "<<exec_counter_);
 				return remote_objects_[key];
 			}
 			else{ //Should be blocked
