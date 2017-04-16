@@ -156,7 +156,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   MessageProto message, reply_recon_msg;
   reply_recon_msg.set_type(MessageProto::RECON_INDEX_REPLY);
   reply_recon_msg.set_destination_channel("sequencer");
-  std::cout<<"conf is "<<scheduler->configuration_<<std::endl;
   reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
   while (true) {
 	  if (scheduler->message_queues[thread]->Pop(&message)){
