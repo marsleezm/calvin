@@ -364,6 +364,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if(out_counter1 & 2097152){
 			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
 					  ", num suspend is "<<scheduler->num_suspend[thread]);
+			  out_counter1 = 0;
 		  }
 		  ++out_counter1;
 		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
