@@ -566,64 +566,66 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 		if (entry->lock.tx_id_ == txn_id){
 			entry->lock.tx_id_ = NO_LOCK;
 
-			Value* value = entry->head->value;
-			int64 read_from_txn = entry->head->txn_id;
-			// When I unlock my key, try to notify a blocked transaction. Although doing this may
-			// increase abort rate, it is necessary because the unlocking transaction may not access
-			// this key anymore so I don't unlock txns waiting for me, there may be risk of deadlocking.
-			vector<PendingReadEntry>* pend_list =entry->pend_list;
-			vector<PendingReadEntry>::iterator it = pend_list->begin(), oldest_tx;
-			int64 oldest_tx_id = INT_MAX;
-			while(it != pend_list->end()) {
-				LOG(txn_id, "'s pend reader is "<<it->my_tx_id_);
-				// This txn is ordered after me, I should
-				if(it->my_tx_id_ > txn_id && it->my_tx_id_ < oldest_tx_id) {
-					//LOG(it->my_tx_id_<<"'s abort bit is "<<*(it->abort_bit_)<<", num aborted is "<<it->num_aborted_);
-					// If this transaction wants the lock
-					if (*(it->abort_bit_) != it->num_aborted_){
-						LOG(txn_id, " should not give "<<it->my_tx_id_<<" lock, because he has already aborted.");
-						it = pend_list->erase(it);
-					}
-					else{
-						if(it->request_lock_ == true){
-							if(it->my_tx_id_ < oldest_tx_id){
-								oldest_tx = it;
-								oldest_tx_id = it->my_tx_id_;
-							}
-							++it;
-						}
-						// If this transaction is only trying to read
-						else{
-							LOG(txn_id, " aborted, but adding ["<<it->my_tx_id_<<","<< it->num_aborted_<<"] to waiting queue by "<<txn_id);
-							ValuePair vp;
-							entry->read_from_list->push_back(ReadFromEntry(it->my_tx_id_, read_from_txn,
-									it->abort_bit_, it->num_aborted_, it->abort_queue_));
-							Value* v= new Value(*value);
-							vp.first = IS_COPY;
-							vp.second = v;
-							LOG(txn_id, " aborted, but unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
-							it->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(it->my_tx_id_, it->num_aborted_, vp));
+			if(entry->head != NULL){
+				Value* value = entry->head->value;
+				int64 read_from_txn = entry->head->txn_id;
+				// When I unlock my key, try to notify a blocked transaction. Although doing this may
+				// increase abort rate, it is necessary because the unlocking transaction may not access
+				// this key anymore so I don't unlock txns waiting for me, there may be risk of deadlocking.
+				vector<PendingReadEntry>* pend_list =entry->pend_list;
+				vector<PendingReadEntry>::iterator it = pend_list->begin(), oldest_tx;
+				int64 oldest_tx_id = INT_MAX;
+				while(it != pend_list->end()) {
+					LOG(txn_id, "'s pend reader is "<<it->my_tx_id_);
+					// This txn is ordered after me, I should
+					if(it->my_tx_id_ > txn_id && it->my_tx_id_ < oldest_tx_id) {
+						//LOG(it->my_tx_id_<<"'s abort bit is "<<*(it->abort_bit_)<<", num aborted is "<<it->num_aborted_);
+						// If this transaction wants the lock
+						if (*(it->abort_bit_) != it->num_aborted_){
+							LOG(txn_id, " should not give "<<it->my_tx_id_<<" lock, because he has already aborted.");
 							it = pend_list->erase(it);
 						}
+						else{
+							if(it->request_lock_ == true){
+								if(it->my_tx_id_ < oldest_tx_id){
+									oldest_tx = it;
+									oldest_tx_id = it->my_tx_id_;
+								}
+								++it;
+							}
+							// If this transaction is only trying to read
+							else{
+								LOG(txn_id, " aborted, but adding ["<<it->my_tx_id_<<","<< it->num_aborted_<<"] to waiting queue by "<<txn_id);
+								ValuePair vp;
+								entry->read_from_list->push_back(ReadFromEntry(it->my_tx_id_, read_from_txn,
+										it->abort_bit_, it->num_aborted_, it->abort_queue_));
+								Value* v= new Value(*value);
+								vp.first = IS_COPY;
+								vp.second = v;
+								LOG(txn_id, " aborted, but unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
+								it->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(it->my_tx_id_, it->num_aborted_, vp));
+								it = pend_list->erase(it);
+							}
+						}
 					}
+					// TODO: this means someone before me is actually executing, so probably I should abort myself?
+					else
+						++it;
 				}
-				// TODO: this means someone before me is actually executing, so probably I should abort myself?
-				else
-					++it;
-			}
-			// Give lock to this guy: set the lock as his entry and set its value bit.
-			if (oldest_tx_id != INT_MAX){
-				ASSERT(oldest_tx_id == oldest_tx->my_tx_id_);
-				entry->read_from_list->push_back(ReadFromEntry(oldest_tx->my_tx_id_, read_from_txn,
-						oldest_tx->abort_bit_, oldest_tx->num_aborted_, oldest_tx->abort_queue_));
-				ValuePair vp;
-				vp.first = WRITE;
-				vp.second = new Value(*value);
-				//LOG(txn_id, " aborted, but unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
-				entry->lock = LockEntry(oldest_tx->my_tx_id_, oldest_tx->abort_bit_, *oldest_tx->abort_bit_, oldest_tx->abort_queue_);
-				//LOG(txn_id, " aborted, but adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
-				oldest_tx->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(oldest_tx->my_tx_id_, oldest_tx->num_aborted_, vp));
-				pend_list->erase(oldest_tx);
+				// Give lock to this guy: set the lock as his entry and set its value bit.
+				if (oldest_tx_id != INT_MAX){
+					ASSERT(oldest_tx_id == oldest_tx->my_tx_id_);
+					entry->read_from_list->push_back(ReadFromEntry(oldest_tx->my_tx_id_, read_from_txn,
+							oldest_tx->abort_bit_, oldest_tx->num_aborted_, oldest_tx->abort_queue_));
+					ValuePair vp;
+					vp.first = WRITE;
+					vp.second = new Value(*value);
+					//LOG(txn_id, " aborted, but unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
+					entry->lock = LockEntry(oldest_tx->my_tx_id_, oldest_tx->abort_bit_, *oldest_tx->abort_bit_, oldest_tx->abort_queue_);
+					//LOG(txn_id, " aborted, but adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
+					oldest_tx->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(oldest_tx->my_tx_id_, oldest_tx->num_aborted_, vp));
+					pend_list->erase(oldest_tx);
+				}
 			}
 		}
 		pthread_mutex_unlock(&entry->mutex_);
