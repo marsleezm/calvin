@@ -146,8 +146,8 @@ class Sequencer {
   AtomicQueue<MessageProto>* message_queues;
   AtomicQueue<MessageProto>* restart_queues;
 
-  int max_batch_size = atoi(ConfigReader::Value("General", "max_batch_size").c_str());
-  int dependent_percent = atoi(ConfigReader::Value("General", "dependent_percent").c_str());
+  int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
+  int dependent_percent = atoi(ConfigReader::Value("dependent_percent").c_str());
   int recon_batch_size;
 
   int queue_mode_;

@@ -71,8 +71,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
       storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode) {
 	ready_txns_ = new std::deque<TxnProto*>();
 
-	abort_batch_size = atoi(ConfigReader::Value("General", "max_batch_size").c_str())
-			*atoi(ConfigReader::Value("General", "dependent_percent").c_str())/200;
+	abort_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str())
+			*atoi(ConfigReader::Value("dependent_percent").c_str())/200;
 
 	pthread_mutex_init(&recon_mutex_, NULL);
     lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);

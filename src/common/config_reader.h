@@ -18,7 +18,7 @@ public:
 public:
 	static void Initialize(std::string const& configFile);
 
-	static string Value(std::string const& section, std::string const& entry);
+	static string Value(std::string const& entry);
 
 	//static string Value(std::string const& section, std::string const& entry, double value);
 	//static string Value(std::string const& section, std::string const& entry, std::string const& value);
