@@ -479,8 +479,9 @@ void* Sequencer::FetchMessage() {
   //int pending_txns = 0;
 
   //TxnProto* done_txn;
-
+  LOG(-1, " trying to get message!");
   if (txns_queue_->Size() < 1000){
+	  LOG(-1, " ye trying to get msg!");
 	  if (queue_mode == NORMAL_QUEUE){
 		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
 		  	  // Have we run out of txns in our batch? Let's get some new ones.
