@@ -97,7 +97,7 @@ class StorageManager {
 			++abort_bit_;
 			LOG(txn_->txn_id(), " lock failed, abort bit is "<<abort_bit_);
 			//std::cout<<txn_->txn_id()<<" lock failed, abort bit is "<<std::endl;
-			return LOCK_FAIL;
+			return LOCK_FAILED;
 		}
     }
     else
