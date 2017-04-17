@@ -484,7 +484,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 				order_line_amount_total += (quantity * item.price());
 
 				// Finally, we write the order line to storage
-				bool result = storage->LockObject(order_line_key, val_copy);
+				int result = storage->LockObject(order_line_key, val_copy);
 				if(result  == LOCK_FAILED)
 					return TX_ABORTED;
 				else if(result == LOCKED){
@@ -521,7 +521,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
     }
 
 	// We write the order to storage
-    bool result = storage->LockObject(order_key, val_copy);
+    int result = storage->LockObject(order_key, val_copy);
 	if(result == LOCK_FAILED)
 		return TX_ABORTED;
 	else if (result == LOCKED){
@@ -654,7 +654,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	history.set_data(history_data);
 
 	// Write the history object to disk
-	bool result = storage->LockObject(history_key, val);
+	int result = storage->LockObject(history_key, val);
 	if(result == LOCK_FAILED)
 		return TX_ABORTED;
 	else if (result == LOCKED)
