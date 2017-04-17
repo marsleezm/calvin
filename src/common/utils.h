@@ -384,6 +384,7 @@ class AtomicQueue {
       front_ = size_;
       back_ = size_ + count;
       size_ *= 2;
+      LOG(-1, " size is "<<size_);
     }
     // Push item to back of queue.
     queue_[back_] = item;
