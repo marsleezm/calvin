@@ -260,7 +260,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 
 		// Read the latest version and leave read dependency
 		ValuePair value_pair;
-		//LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
+		LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
 		for (DataNode* list = entry->head; list; list = list->next) {
 			if (list->txn_id <= txn_id) {
 				// Read the version and

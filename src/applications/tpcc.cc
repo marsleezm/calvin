@@ -484,9 +484,10 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 				order_line_amount_total += (quantity * item.price());
 
 				// Finally, we write the order line to storage
-				if(storage->LockObject(order_line_key, val_copy) == false)
+				bool result = storage->LockObject(order_line_key, val_copy);
+				if(result  == LOCK_FAILED)
 					return TX_ABORTED;
-				else{
+				else if(result == LOCKED){
 					assert(order_line.SerializeToString(val_copy));
 				}
 			}
@@ -520,9 +521,10 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
     }
 
 	// We write the order to storage
-	if(storage->LockObject(order_key, val_copy) == false)
+    bool result = storage->LockObject(order_key, val_copy);
+	if(result == LOCK_FAILED)
 		return TX_ABORTED;
-	else{
+	else if (result == LOCKED){
 		Order order;
 		order.set_id(order_key);
 		order.set_warehouse_id(warehouse_key);
@@ -542,9 +544,10 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
              "%sno%d", district_key.c_str(), order_number);
 
 	// Finally, we write the order line to storage
-	if(storage->LockObject(new_order_key, val_copy) == false)
+    result = storage->LockObject(new_order_key, val_copy);
+	if(result == LOCK_FAILED)
 		return TX_ABORTED;
-	else{
+	else if (result == LOCKED){
 		NewOrder new_order;
 		new_order.set_id(new_order_key);
 		new_order.set_warehouse_id(warehouse_key);
@@ -651,9 +654,10 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	history.set_data(history_data);
 
 	// Write the history object to disk
-	if(storage->LockObject(history_key, val) == false)
+	bool result = storage->LockObject(history_key, val);
+	if(result == LOCK_FAILED)
 		return TX_ABORTED;
-	else
+	else if (result == LOCKED)
 		assert(history.SerializeToString(val));
 
 	return SUCCESS;

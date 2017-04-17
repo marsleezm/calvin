@@ -79,7 +79,7 @@ class StorageManager {
   // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,
   // previous operations will not be triggered again and such the exec_counter will be wrong.
 
-  inline bool LockObject(const Key& key, Value*& new_pointer) {
+  inline int LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 		if(abort_bit_ == num_restarted_ && actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
@@ -91,17 +91,17 @@ class StorageManager {
 			LOG(txn_->txn_id(), " trying to create a copy for key "<<key);//reinterpret_cast<int64>(read_set_[key].second));
 			//}
 			new_pointer = read_set_[key].second;
-			return true;
+			return LOCKED;
 		}
 		else{
 			++abort_bit_;
 			LOG(txn_->txn_id(), " lock failed, abort bit is "<<abort_bit_);
 			//std::cout<<txn_->txn_id()<<" lock failed, abort bit is "<<std::endl;
-			return false;
+			return LOCK_FAIL;
 		}
     }
     else
-  	  return true;  // The key will be locked by another partition.
+  	  return NO_NEED;  // The key will be locked by another partition.
   }
 
   void HandleReadResult(const MessageProto& message);

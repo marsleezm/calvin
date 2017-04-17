@@ -66,6 +66,10 @@ using tr1::unordered_map;
 #define NEW_NOT_COPY 5
 #define NEW_WRITE 9
 
+#define LOCKED 1
+#define LOCK_FAILED 2
+#define NO_NEED 3
+
 
 #define FULL_READ(storage, key, object, read_state, val, new_object) \
 read_state = NORMAL; \
