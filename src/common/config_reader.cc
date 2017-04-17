@@ -26,7 +26,6 @@ void ConfigReader::Initialize(std::string const& ConfigReader) {
   std::string line;
   std::string name;
   std::string value;
-  std::string inSection;
   int posEqual;
   while (std::getline(file,line)) {
 
@@ -35,11 +34,6 @@ void ConfigReader::Initialize(std::string const& ConfigReader) {
     if (line[0] == '#') continue;
     if (line[0] == ';') continue;
 
-    if (line[0] == '[') {
-      inSection=trim(line.substr(1,line.find(']')-1));
-      continue;
-    }
-
     posEqual=line.find('=');
     name  = trim(line.substr(0,posEqual));
     value = trim(line.substr(posEqual+1));
@@ -47,13 +41,13 @@ void ConfigReader::Initialize(std::string const& ConfigReader) {
     std::ostringstream strs;
     strs << value;
     std::string str = strs.str();
-    ConfigReader::content_[inSection+'/'+name]=str;
+    ConfigReader::content_[name]=str;
   }
 }
 
-string ConfigReader::Value(std::string const& section, std::string const& entry) {
+string ConfigReader::Value(std::string const& entry) {
 
-  map<string, string>::const_iterator ci = ConfigReader::content_.find(section + '/' + entry);
+  map<string, string>::const_iterator ci = ConfigReader::content_.find(entry);
 
   if (ci == ConfigReader::content_.end()) throw "does not exist";
 

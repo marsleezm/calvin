@@ -152,9 +152,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   StorageManager* retry_mgr= NULL;
   queue<StorageManager*> retry_txns;
 
-  uint max_pend = atoi(ConfigReader::Value("General", "max_pend").c_str());
-  int max_suspend = atoi(ConfigReader::Value("General", "max_suspend").c_str());
-  uint max_sc = atoi(ConfigReader::Value("General", "max_sc").c_str());
+  uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
+  int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
+  uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
 
   int out_counter = 0, out_counter1 = 0;
 

@@ -205,7 +205,7 @@ int main(int argc, char** argv) {
 	signal(SIGINT, &stop);
 	signal(SIGTERM, &stop);
 	ConfigReader::Initialize("myconfig.conf");
-	dependent_percent = stof(ConfigReader::Value("General", "dependent_percent").c_str());
+	dependent_percent = stof(ConfigReader::Value("dependent_percent").c_str());
 
 	//freopen("output.txt","w",stdout);
 
@@ -217,8 +217,8 @@ int main(int argc, char** argv) {
 
 	// Artificial loadgen clients.
 	Client* client = (argv[2][0] == 'm') ?
-			reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("General", "distribute_percent").c_str()))) :
-			reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("General", "distribute_percent").c_str())));
+			reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()))) :
+			reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
 
 	// #ifdef PAXOS
 	//  StartZookeeper(ZOOKEEPER_CONF);
@@ -226,18 +226,18 @@ int main(int argc, char** argv) {
 
 	LockedVersionedStorage* storage = new LockedVersionedStorage();
 	std::cout<<"General params: "<<std::endl;
-	std::cout<<"	Distribute txn percent: "<<ConfigReader::Value("General", "distribute_percent")<<std::endl;
-	std::cout<<"	Dependent txn percent: "<<ConfigReader::Value("General", "dependent_percent")<<std::endl;
-	std::cout<<"	Max batch size: "<<ConfigReader::Value("General", "max_batch_size")<<std::endl;
+	std::cout<<"	Distribute txn percent: "<<ConfigReader::Value("distribute_percent")<<std::endl;
+	std::cout<<"	Dependent txn percent: "<<ConfigReader::Value("dependent_percent")<<std::endl;
+	std::cout<<"	Max batch size: "<<ConfigReader::Value("max_batch_size")<<std::endl;
 	std::cout<<"	Num of threads: "<<NUM_THREADS<<std::endl;
 
 	if (argv[2][0] == 'm') {
 		std::cout<<"Micro benchmark. Parameters: "<<std::endl;
 
-		std::cout<<"	Key per txn: "<<ConfigReader::Value("Access", "rw_set_size")<<std::endl;
-		std::cout<<"	Per partition #keys: "<<ConfigReader::Value("Access", "total_key")
-		<<", index size: "<<ConfigReader::Value("Access", "index_size")
-		<<", index num: "<<ConfigReader::Value("Access", "index_num")
+		std::cout<<"	Key per txn: "<<ConfigReader::Value("rw_set_size")<<std::endl;
+		std::cout<<"	Per partition #keys: "<<ConfigReader::Value("total_key")
+		<<", index size: "<<ConfigReader::Value("index_size")
+		<<", index num: "<<ConfigReader::Value("index_num")
 		<<std::endl;
 
 		Microbenchmark(config.all_nodes.size(), config.this_node_id).InitializeStorage(storage, &config);
@@ -287,7 +287,7 @@ int main(int argc, char** argv) {
 
 	sequencer.SetScheduler(scheduler);
 
-	Spin(atoi(ConfigReader::Value("General", "duration").c_str()));
+	Spin(atoi(ConfigReader::Value("duration").c_str()));
 	DeterministicScheduler::terminate();
 	delete scheduler;
 	return 0;

@@ -44,13 +44,13 @@ class Microbenchmark : public Application {
   TxnProto* MicroTxnDependentMP(int64 txn_id, int part1, int part2, int part3);
 
   int nparts;
-  int hot_records = atoi(ConfigReader::Value("Access", "index_size").c_str());
-  int index_records = atoi(ConfigReader::Value("Access", "index_size").c_str());
+  int hot_records = atoi(ConfigReader::Value("index_size").c_str());
+  int index_records = atoi(ConfigReader::Value("index_size").c_str());
   int this_node_id;
   //static const int kRWSetSize = 10;  // MUST BE EVEN
-  int kRWSetSize = atoi(ConfigReader::Value("Access", "rw_set_size").c_str());
-  int indexAccessNum = atoi(ConfigReader::Value("Access", "index_num").c_str());
-  int kDBSize = atoi(ConfigReader::Value("Access", "total_key").c_str());
+  int kRWSetSize = atoi(ConfigReader::Value("rw_set_size").c_str());
+  int indexAccessNum = atoi(ConfigReader::Value("index_num").c_str());
+  int kDBSize = atoi(ConfigReader::Value("total_key").c_str());
 
   virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
 
