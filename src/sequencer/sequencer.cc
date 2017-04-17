@@ -74,8 +74,10 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
   // Start Sequencer main loops running in background thread.
   if (queue_mode == FROM_SEQ_DIST)
 	  txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
-  else
+  else{
+	  LOG(-1, " quue initialized!");
 	  txns_queue_ = new AtomicQueue<TxnProto*>();
+  }
 
   cpu_set_t cpuset;
   if (mode == NORMAL_QUEUE){
