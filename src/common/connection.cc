@@ -253,7 +253,8 @@ void ConnectionMultiplexer::Send(const MessageProto& message) {
 
   if (message.type() == MessageProto::READ_RESULT) {
     if (remote_result_.count(message.destination_channel()) > 0) {
-      remote_result_[message.destination_channel()]->Push(message);
+    	std::cout<<"Delivering message for txn "<<message.destination_channel()<<std::endl;
+    	remote_result_[message.destination_channel()]->Push(message);
     } else {
       undelivered_messages_[message.destination_channel()].push_back(message);
     }
