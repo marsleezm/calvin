@@ -677,7 +677,6 @@ struct ValuePair{
 			return true;
 		}
 		else{
-			std::cout<<"First is "<<first<<", value is "<<value<<std::endl;
 			//ASSERT(1==2);
 			return false;
 		}
