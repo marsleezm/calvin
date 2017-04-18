@@ -76,6 +76,7 @@ pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 }
 
 ConnectionMultiplexer::~ConnectionMultiplexer() {
+
   // Stop the multixplexer's main loop.
   deconstructor_invoked_ = true;
   pthread_join(thread_, NULL);
@@ -103,6 +104,8 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
        it != link_unlink_queue_.end(); ++it) {
     delete it->second;
   }
+
+  std::cout<<" Connection done"<<std::endl;
 }
 
 Connection* ConnectionMultiplexer::NewConnection(const string& channel) {
@@ -147,6 +150,8 @@ Connection* ConnectionMultiplexer::NewConnection(const string& channel, AtomicQu
 void ConnectionMultiplexer::Run() {
   MessageProto message;
   zmq::message_t msg;
+
+  pthread_setname_np(pthread_self(), "connection");
 
   while (!deconstructor_invoked_) {
     // Serve any pending NewConnection request.

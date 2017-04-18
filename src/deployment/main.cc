@@ -196,6 +196,8 @@ void stop(int sig) {
 
 int main(int argc, char** argv) {
 	// TODO(alex): Better arg checking.
+	pthread_setname_np(pthread_self(), "main");
+
 	if (argc < 3) {
 		fprintf(stderr, "Usage: %s <node-id> <m[icro]|t[pcc]>\n",
             argv[0]);
@@ -204,6 +206,7 @@ int main(int argc, char** argv) {
 
 	signal(SIGINT, &stop);
 	signal(SIGTERM, &stop);
+
 	ConfigReader::Initialize("myconfig.conf");
 	dependent_percent = stof(ConfigReader::Value("dependent_percent").c_str());
 
@@ -249,21 +252,6 @@ int main(int argc, char** argv) {
 	Connection* batch_connection = multiplexer.NewConnection("scheduler_");
   	// Initialize sequencer component and start sequencer thread running.
 
-
-	// Run scheduler in main thread.
-//	if (argv[2][1] == 'n') {
-//		queue_mode = NORMAL_QUEUE;
-//		cout << "Normal queue mode" << endl;
-//	} else if(argv[2][1] == 's'){
-//		queue_mode = FROM_SELF;
-//		cout << "Self-generation queue mode" << endl;
-//	} else if(argv[2][1] == 'd'){
-//		queue_mode = FROM_SEQ_SINGLE;
-//		cout << "Single-queue by sequencer mode" << endl;
-//	}  else if(argv[2][1] == 'i'){
-//		queue_mode = FROM_SEQ_DIST;
-//		cout << "Multiple-queue by sequencer mode" << endl;
-//	}
 	assert(argv[2][1] == 'n');
 	int queue_mode = NORMAL_QUEUE;
 
@@ -290,8 +278,7 @@ int main(int argc, char** argv) {
 	Spin(atoi(ConfigReader::Value("duration").c_str()));
 	DeterministicScheduler::terminate();
 	delete scheduler;
+	delete batch_connection;
 	return 0;
-
-
 }
 
