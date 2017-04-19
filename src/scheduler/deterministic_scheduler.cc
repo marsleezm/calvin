@@ -128,9 +128,11 @@ Spin(2);
 //		priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns)
 
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
-	LOG(-1, "Worker is started!!!");
+
   int thread =
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->first;
+  string thread_name = "worker"+std::to_string(thread);
+  pthread_setname_np(pthread_self(), thread_name.c_str());
   DeterministicScheduler* scheduler =
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
@@ -142,8 +144,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //  AtomicQueue<pair<int64_t, int>>* waiting_queue = scheduler->waiting_queues[thread];
 //  AtomicQueue<pair<int64_t, int>>* abort_queues[num_threads];
 //  AtomicQueue<AtomicQueue<MyTuple<int64_t, int, ValuePair>>>* waiting_queues[num_threads];
-  AtomicQueue<pair<int64_t, int>>* abort_queue = new AtomicQueue<pair<int64_t, int>>();
-  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* waiting_queue = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>();
+  AtomicQueue<pair<int64_t, int>> abort_queue;
+  AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;
 
   // Begin main loop.
   MessageProto message;
@@ -188,9 +190,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  my_to_sc_txns->pop();
 	  }
 
-	  if(!waiting_queue->Empty()){
+	  if(!waiting_queue.Empty()){
 		  MyTuple<int64_t, int, ValuePair> to_wait_txn;
-		  waiting_queue->Pop(&to_wait_txn);
+		  waiting_queue.Pop(&to_wait_txn);
 		  LOG(-1, " In to-wait, the first one is "<< to_wait_txn.first);
 		  if(to_wait_txn.first > Sequencer::max_commit_ts){
 			  LOG(-1, " To waiting txn is " << to_wait_txn.first);
@@ -212,9 +214,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 	  }
-	  else if (!abort_queue->Empty()){
+	  else if (!abort_queue.Empty()){
 		  pair<int64_t, int> to_abort_txn;
-		  abort_queue->Pop(&to_abort_txn);
+		  abort_queue.Pop(&to_abort_txn);
 		  LOG(-1, "In to-abort, the first one is "<< to_abort_txn.first);
 		  if(to_abort_txn.first > Sequencer::max_commit_ts){
 			  LOG(-1, "To abort txn is "<< to_abort_txn.first);
@@ -239,7 +241,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if (manager == NULL){
 			  manager = new StorageManager(scheduler->configuration_,
 							   scheduler->thread_connections_[thread],
-							   scheduler->storage_, abort_queue, waiting_queue);
+							   scheduler->storage_, &abort_queue, &waiting_queue);
 			  manager->HandleReadResult(message);
 			  active_txns[txn_id] = manager;
 		  }
@@ -342,7 +344,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  if (active_txns.count(txn->txn_id()) == 0)
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
-								   scheduler->storage_, abort_queue, waiting_queue, txn);
+								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
 			  else{
 				  manager = active_txns[txn->txn_id()];
 				  manager->SetupTxn(txn);
@@ -375,8 +377,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
 	  }
   }
-  delete abort_queue;
-  delete waiting_queue;
   return NULL;
 }
 
@@ -464,15 +464,16 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 }
 
 DeterministicScheduler::~DeterministicScheduler() {
+	for(int i = 0; i<num_threads; ++i)
+		pthread_join(threads_[i], NULL);
+
 //	cout << "Already destroyed!" << endl;
 //
-//	for (int i = 0; i < num_threads; i++) {
-//		delete to_sc_txns_[i];
-//		delete pending_txns_[i];
-//		delete message_queues[i];
-//		//delete waiting_queues[i];
-//		//delete abort_queues[i];
-//		delete to_sc_txns_[i];
-//	}
+	for (int i = 0; i < num_threads; i++) {
+		delete to_sc_txns_[i];
+		delete pending_txns_[i];
+		delete thread_connections_[i];
+	}
+	  std::cout<<" Scheduler done"<<std::endl;
 }
 

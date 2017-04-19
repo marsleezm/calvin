@@ -120,15 +120,17 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 }
 
 Sequencer::~Sequencer() {
-  deconstructor_invoked_ = true;
-  delete txns_queue_;
-  if(queue_mode == NORMAL_QUEUE){
-	  pthread_join(writer_thread_, NULL);
-	  pthread_join(reader_thread_, NULL);
-  }
-  else{
-	  pthread_join(reader_thread_, NULL);
-  }
+	deconstructor_invoked_ = true;
+	//if(queue_mode == NORMAL_QUEUE){
+	pthread_join(writer_thread_, NULL);
+	pthread_join(reader_thread_, NULL);
+	//}
+	//else{
+	//	  pthread_join(reader_thread_, NULL);
+	//  }
+	//delete txns_queue_;
+
+	std::cout<<" Sequencer done"<<std::endl;
 }
 
 //void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
@@ -166,6 +168,7 @@ double PrefetchAll(Storage* storage, TxnProto* txn) {
 
 void Sequencer::RunWriter() {
   Spin(1);
+  pthread_setname_np(pthread_self(), "writer");
 
 #ifdef PAXOS
   Paxos paxos(ZOOKEEPER_CONF, false);
@@ -290,6 +293,7 @@ void Sequencer::RunReader() {
 #ifdef PAXOS
   Paxos paxos(ZOOKEEPER_CONF, true);
 #endif
+  pthread_setname_np(pthread_self(), "reader");
 
   FetchMessage();
   double time = GetTime(), now_time;
