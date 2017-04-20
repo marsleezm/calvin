@@ -35,20 +35,20 @@ using namespace std;
 //pthread_mutex_t mutex_;
 //pthread_mutex_t mutex_for_item;
 
-float dependent_percent;
+double dependent_percent;
 
 // Microbenchmark load generation client.
 class MClient : public Client {
  public:
-  MClient(Configuration* config, int mp)
+  MClient(Configuration* config, double mp)
       : microbenchmark(config->all_nodes.size(), config->this_node_id), config_(config),
-        percent_mp_(mp) {
+        percent_mp_(mp*100) {
   }
   virtual ~MClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
 	//srand(seed);
 
-	if (config_->all_nodes.size() > 1 && abs(rand())%10000 /100.0 < percent_mp_) {
+	if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
 	  // Multipartition txn.
 	  int other1;
 	  int other2;
@@ -60,7 +60,7 @@ class MClient : public Client {
 		other2 = rand() % config_->all_nodes.size();
 	  } while (other2 == config_->this_node_id || other2 == other1);
 
-	  if (abs(rand())%10000/100.0 < dependent_percent)
+	  if (abs(rand())%10000 < 100*dependent_percent)
 		  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
 	  else
 		  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
@@ -68,7 +68,7 @@ class MClient : public Client {
 	  (*txn)->set_multipartition(true);
 	} else {
 	  // Single-partition txn.
-	  if (abs(rand())%10000/100.0 < dependent_percent)
+	  if (abs(rand())%10000 < 100*dependent_percent)
 		  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
 	  else
 		  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
@@ -82,7 +82,7 @@ class MClient : public Client {
 
   virtual void GetDetTxn(TxnProto** txn, int txn_id, int seed) {
 	  srand(seed);
-	  if (config_->all_nodes.size() > 1 && abs(rand())%10000/100.0 < percent_mp_) {
+	  if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
 		  // Multipartition txn.
 		  int other1;
 		  int other2;
@@ -94,7 +94,7 @@ class MClient : public Client {
 			other2 = rand() % config_->all_nodes.size();
 		  } while (other2 == config_->this_node_id || other2 == other1);
 
-		  if (rand() %100 < dependent_percent)
+		  if (rand() %10000 < 100*dependent_percent)
 			  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
 		  else
 			  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
@@ -102,7 +102,7 @@ class MClient : public Client {
 		  (*txn)->set_multipartition(true);
 	  } else {
 		  // Single-partition txn.
-		  if (abs(rand())%10000/100.0 < dependent_percent)
+		  if (abs(rand())%10000 < 100*dependent_percent)
 			  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
 		  else
 			  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
@@ -115,18 +115,18 @@ class MClient : public Client {
  private:
   Microbenchmark microbenchmark;
   Configuration* config_;
-  float percent_mp_;
+  double percent_mp_;
 };
 
 // TPCC load generation client.
 class TClient : public Client {
  public:
-  TClient(Configuration* config, int mp) : config_(config), percent_mp_(mp) {}
+  TClient(Configuration* config, double mp) : config_(config), percent_mp_(mp*100) {}
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
     TPCC tpcc;
     *txn = new TxnProto();
-    if (abs(rand())%10000/100.0 < percent_mp_)
+    if (abs(rand())%10000 < percent_mp_)
         (*txn)->set_multipartition(true);
 	else
 		(*txn)->set_multipartition(false);
@@ -154,7 +154,7 @@ class TClient : public Client {
     TPCC tpcc;
     srand(seed);
     *txn = new TxnProto();
-    if (abs(rand())%10000/100.0 < percent_mp_)
+    if (abs(rand())%10000 < percent_mp_)
         (*txn)->set_multipartition(true);
 	else
 		(*txn)->set_multipartition(false);
@@ -183,7 +183,7 @@ class TClient : public Client {
 
  private:
   Configuration* config_;
-  float percent_mp_;
+  double percent_mp_;
 };
 
 void stop(int sig) {
