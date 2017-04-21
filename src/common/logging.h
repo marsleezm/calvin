@@ -76,8 +76,8 @@ inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data
 	//pthread_mutex_unlock(&stdout_mutex);
 }
 
-//#define LOCKLOGGING
-#define ALLLOGGING
+#define LOCKLOGGING
+//#define ALLLOGGING
 #define DOASSERT
 
 #ifdef DOASSERT
