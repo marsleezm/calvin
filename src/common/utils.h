@@ -364,7 +364,6 @@ class AtomicQueue {
   // Returns the number of elements currently in the queue.
   inline size_t Size() {
     Lock l(&size_mutex_);
-    LOG(-1, "size is "<<size_);
     return (back_ + size_ - front_) % size_;
   }
 
@@ -388,7 +387,6 @@ class AtomicQueue {
       front_ = size_;
       back_ = size_ + count;
       size_ *= 2;
-      LOG(-1, " size is "<<size_);
     }
     // Push item to back of queue.
     queue_[back_] = item;
