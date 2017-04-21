@@ -158,8 +158,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
 
-  int out_counter = 0, out_counter1 = 0;
-
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
