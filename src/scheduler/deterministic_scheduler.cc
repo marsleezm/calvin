@@ -351,13 +351,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  if(retry_mgr != NULL)
 				  retry_txns.push(retry_mgr);
 		  }
-		  else{
-			  if(out_counter & 67108864){
-				  LOG(-1, " WTF, got no txn?");
-				  out_counter = 0;
-			  }
-			  ++out_counter;
-		  }
+//		  else{
+//			  if(out_counter & 67108864){
+//				  LOG(-1, " WTF, got no txn?");
+//				  out_counter = 0;
+//			  }
+//			  ++out_counter;
+//		  }
 	  }
 	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
 //	  else{
