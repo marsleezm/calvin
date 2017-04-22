@@ -153,5 +153,10 @@ class DeterministicScheduler : public Scheduler {
   int num_suspend[num_threads];
 
   AtomicQueue<MessageProto>* message_queues[num_threads];
+
+  double block_time[num_threads];
+  int sc_block[num_threads];
+  int pend_block[num_threads];
+  int suspend_block[num_threads];
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

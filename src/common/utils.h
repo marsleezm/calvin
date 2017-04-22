@@ -28,6 +28,7 @@
 using namespace std;
 using tr1::unordered_map;
 
+
 #define DEPENDENT_MASK 8
 
 #define NO_LOCK INT_MAX
