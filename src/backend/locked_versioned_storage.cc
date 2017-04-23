@@ -86,8 +86,8 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 				// Read the version and
 
 				// Clean up any stable version, only leave the oldest one
-				int max_ts = Sequencer::max_commit_ts;
-				if (list->txn_id <= max_ts){
+				int max_ts = Sequencer::num_lc_txns_;
+				if (list->txn_id < max_ts){
 					//LOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
 					//LOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
@@ -154,8 +154,8 @@ ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool ne
 	//LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
 	for (DataNode* list = entry->head; list; list = list->next) {
 		if (list->txn_id <= txn_id) {
-			ASSERT(list->txn_id <= Sequencer::max_commit_ts);
-			DirtyGC(list, Sequencer::max_commit_ts-GC_THRESHOLD);
+			ASSERT(list->txn_id < Sequencer::num_lc_txns_);
+			DirtyGC(list, Sequencer::num_lc_txns_-GC_THRESHOLD);
 			value_pair.first = NOT_COPY;
 			value_pair.second = list->value;
 			LOG(txn_id, " safe reading ["<<key<<"] from"<<list->txn_id<<", addr is "<<reinterpret_cast<int64>(value_pair.second));
@@ -240,7 +240,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 		vector<ReadFromEntry>::iterator it = read_from_list->begin();
 		while(it != read_from_list->end()) {
 			//LOG(txn_id, " in read from, reader tx id is "<<it->my_tx_id_);
-			if(it->my_tx_id_ <= Sequencer::max_commit_ts) {
+			if(it->my_tx_id_ < Sequencer::num_lc_txns_) {
 				it = read_from_list->erase(it);
 			}
 			// Abort anyone that has missed my version
@@ -266,8 +266,8 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 				// Read the version and
 
 				// Clean up any stable version, only leave the oldest one
-				int max_ts = Sequencer::max_commit_ts;
-				if (list->txn_id <= max_ts){
+				int max_ts = Sequencer::num_lc_txns_;
+				if (list->txn_id < max_ts){
 					//LOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
 					//LOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
@@ -361,7 +361,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 			vector<ReadFromEntry>::iterator it = read_from_list->begin();
 			while(it != read_from_list->end()) {
 				//LOG(txn_id, " in read from, reader tx id is "<<it->my_tx_id_);
-				if(it->my_tx_id_ <= Sequencer::max_commit_ts) {
+				if(it->my_tx_id_ < Sequencer::num_lc_txns_) {
 					it = read_from_list->erase(it);
 				}
 				// Abort anyone that has missed my version
@@ -677,7 +677,7 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 
 	while(it != entry->read_from_list->end()) {
 
-	    if(it->my_tx_id_ <= Sequencer::max_commit_ts) {
+	    if(it->my_tx_id_ < Sequencer::num_lc_txns_) {
 	        it = read_from_list->erase(it);
 	    }
 	    // Abort anyone that has read from me

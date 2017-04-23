@@ -66,8 +66,8 @@ class DeterministicScheduler : public Scheduler {
   static void* LockManagerThread(void* arg);
 
   inline void CommitSuspendedTxn(int64_t txn_id, unordered_map<int64_t, StorageManager*> active_txns){
-	  assert(Sequencer::max_commit_ts < txn_id);
-	  Sequencer::max_commit_ts = txn_id;
+	  //assert(Sequencer::max_commit_ts < txn_id);
+	  //Sequencer::max_commit_ts = txn_id;
 	  ++Sequencer::num_lc_txns_;
 	  --Sequencer::num_sc_txns_;
 	  delete active_txns[txn_id];
@@ -100,7 +100,8 @@ class DeterministicScheduler : public Scheduler {
 //  	  }
 //    }
 
-  StorageManager* ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*>& active_txns);
+  StorageManager* ExecuteTxn(StorageManager* manager, int thread,
+		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);

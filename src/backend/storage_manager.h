@@ -70,7 +70,7 @@ class StorageManager {
   Value* ReadValue(const Key& key, int& read_state, bool new_object);
   Value* ReadLock(const Key& key, int& read_state, bool new_object);
   inline Value* SafeRead(const Key& key, bool new_object){
-	  return actual_storage_->SafeRead(key, txn_->txn_id(), new_object).second;
+	  return actual_storage_->SafeRead(key, txn_->local_txn_id(), new_object).second;
   }
 
   bool ReadOnly(){ return txn_->txn_type() == TPCC::ORDER_STATUS || txn_->txn_type() == TPCC::STOCK_LEVEL; };
@@ -82,7 +82,7 @@ class StorageManager {
   inline int LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-		if(abort_bit_ == num_restarted_ && actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
+		if(abort_bit_ == num_restarted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
 			// It should always be a new object
 			ASSERT(read_set_.count(key) == 0);
 			read_set_[key] = ValuePair(NEW_MASK | WRITE, new Value);

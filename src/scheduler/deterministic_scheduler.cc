@@ -136,11 +136,11 @@ Spin(2);
 //}
 
 //inline TxnProto* DeterministicScheduler::GetTxn(bool& got_it, int thread){
-//inline bool DeterministicScheduler::HandleSCTxns(unordered_map<int64_t, StorageManager*> active_txns,
+//inline bool DeterministicScheduler::HandleSCTxns(unordered_map<int64_t, StorageManager*> active_g_tids,
 //		priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* my_to_sc_txns)
 //
 //inline bool DeterministicScheduler::HandlePendTxns(DeterministicScheduler* scheduler, int thread,
-//		unordered_map<int64_t, StorageManager*> active_txns, Rand* myrand,
+//		unordered_map<int64_t, StorageManager*> active_g_tids, Rand* myrand,
 //		priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns)
 
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
@@ -156,18 +156,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	  = scheduler->to_sc_txns_[thread];
   priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns
   	  = scheduler->pending_txns_[thread];
-//  AtomicQueue<pair<int64_t, int>>* abort_queue = scheduler->abort_queues[thread];
-//  AtomicQueue<pair<int64_t, int>>* waiting_queue = scheduler->waiting_queues[thread];
-//  AtomicQueue<pair<int64_t, int>>* abort_queues[num_threads];
-//  AtomicQueue<AtomicQueue<MyTuple<int64_t, int, ValuePair>>>* waiting_queues[num_threads];
   AtomicQueue<pair<int64_t, int>> abort_queue;
   AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;
 
   // Begin main loop.
   MessageProto message;
   pair<int64_t, int64_t> to_sc_txn;
-  unordered_map<int64_t, StorageManager*> active_txns;
-  StorageManager* retry_mgr= NULL;
+  unordered_map<int64_t, StorageManager*> active_g_tids;
+  unordered_map<int64_t, StorageManager*> active_l_tids;
+  StorageManager* retry_mgr= NULL, *mgr = NULL;
   queue<StorageManager*> retry_txns;
 
   uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
@@ -183,22 +180,24 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
 		  if ( to_sc_txn.second == Sequencer::num_lc_txns_){
-			  if (!active_txns[to_sc_txn.first]->CanSCToCommit()){
-				  LOCKLOG(-1, " popping out "<<to_sc_txn.first<<", values are "<<active_txns[to_sc_txn.first]->spec_committed_<<", "
-						  <<active_txns[to_sc_txn.first]->abort_bit_<<", "<<active_txns[to_sc_txn.first]->num_restarted_);
+			  if (!active_l_tids[to_sc_txn.second]->CanSCToCommit()){
+				  LOCKLOG(-1, " popping out "<<to_sc_txn.first<<", values are "<<active_l_tids[to_sc_txn.second]->spec_committed_<<", "
+						  <<active_l_tids[to_sc_txn.second]->abort_bit_<<", "<<active_l_tids[to_sc_txn.second]->num_restarted_);
 				  my_to_sc_txns->pop();
 			  }
 			  else{
-				  LOG(txn->txn_id(),  " committed! Max commit ts is "<<Sequencer::max_commit_ts<<", old lc is "<<Sequencer::num_lc_txns_);
-				  ASSERT(Sequencer::max_commit_ts < to_sc_txn.first);
-				  Sequencer::max_commit_ts = to_sc_txn.first;
+				  mgr = active_l_tids[to_sc_txn.second];
+				  LOG(to_sc_txn.first,  " committed! Max commit ts is "<<Sequencer::num_lc_txns_);
+				  //ASSERT(Sequencer::max_commit_ts < to_sc_txn.first);
+				  //Sequencer::max_commit_ts = to_sc_txn.first;
 				  ++Sequencer::num_lc_txns_;
 
-				  if(active_txns[to_sc_txn.first]->ReadOnly())
-					  scheduler->application_->ExecuteReadOnly(active_txns[to_sc_txn.first]);
+				  if(mgr->ReadOnly())
+					  scheduler->application_->ExecuteReadOnly(mgr);
 
-				  delete active_txns[to_sc_txn.first];
-				  active_txns.erase(to_sc_txn.first);
+				  active_g_tids.erase(to_sc_txn.first);
+				  active_l_tids.erase(to_sc_txn.second);
+				  delete mgr;
 				  my_to_sc_txns->pop();
 				  // Go to the next loop, try to commit as many as possible.
 				  continue;
@@ -213,11 +212,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  MyTuple<int64_t, int, ValuePair> to_wait_txn;
 		  waiting_queue.Pop(&to_wait_txn);
 		  LOG(-1, " In to-wait, the first one is "<< to_wait_txn.first);
-		  if(to_wait_txn.first > Sequencer::max_commit_ts){
+		  if(to_wait_txn.first >= Sequencer::num_lc_txns_){
 			  LOG(-1, " To waiting txn is " << to_wait_txn.first);
-			  StorageManager* manager = active_txns[to_wait_txn.first];
+			  StorageManager* manager = active_l_tids[to_wait_txn.first];
 			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
-				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
+				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids);
 				  --scheduler->num_suspend[thread];
 				  if(retry_mgr != NULL)
 					  retry_txns.push(retry_mgr);
@@ -228,8 +227,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  if(to_wait_txn.third.first == IS_COPY)
 					  delete to_wait_txn.third.second;
 				  LOG(-1, to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second
-						  <<", "<< active_txns[to_wait_txn.first]->num_restarted_
-						  <<", "<<active_txns[to_wait_txn.first]->abort_bit_);
+						  <<", "<< active_l_tids[to_wait_txn.first]->num_restarted_
+						  <<", "<<active_l_tids[to_wait_txn.first]->abort_bit_);
 			  }
 		  }
 	  }
@@ -238,14 +237,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
 		  LOG(-1, "In to-abort, the first one is "<< to_abort_txn.first);
-		  if(to_abort_txn.first > Sequencer::max_commit_ts){
+		  if(to_abort_txn.first >= Sequencer::num_lc_txns_){
 			  LOG(-1, "To abort txn is "<< to_abort_txn.first);
-			  StorageManager* manager = active_txns[to_abort_txn.first];
+			  StorageManager* manager = active_l_tids[to_abort_txn.first];
 			  if (manager && manager->ShouldRestart(to_abort_txn.second)){
 				  scheduler->num_suspend[thread] -= manager->is_suspended_;
 				  ++Sequencer::num_aborted_;
 				  manager->Abort();
-				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
+				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids);
 				  if(retry_mgr != NULL)
 					  retry_txns.push(retry_mgr);
 			  }
@@ -258,25 +257,25 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  ASSERT(message.type() == MessageProto::READ_RESULT);
 		  int txn_id = atoi(message.destination_channel().c_str());
-		  StorageManager* manager = active_txns[txn_id];
+		  StorageManager* manager = active_g_tids[txn_id];
 		  if (manager == NULL){
 			  manager = new StorageManager(scheduler->configuration_,
 							   scheduler->thread_connections_[thread],
 							   scheduler->storage_, &abort_queue, &waiting_queue);
 			  manager->HandleReadResult(message);
-			  active_txns[txn_id] = manager;
+			  active_g_tids[txn_id] = manager;
 		  }
 		  else {
 			  manager->HandleReadResult(message);
 			  TxnProto* txn = manager->txn_;
-			  LOG(txn->txn_id(), ": got remote msg from" << message.source_node());
+			  LOG(txn_id, ": got remote msg from" << message.source_node());
 			  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
 				  int result = scheduler->application_->Execute(manager);
 				  if (result == WAIT_AND_SENT){
-					  LOG(txn->txn_id(), " is waiting for remote read again!");
+					  LOG(txn_id, " is waiting for remote read again!");
 
 					  // There are outstanding remote reads.
-					  active_txns[txn->txn_id()] = manager;
+					  active_g_tids[txn_id] = manager;
 				  }
 				  else if (result == TX_ABORTED){
 						LOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
@@ -286,22 +285,23 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  }
 				  else{
 					  ASSERT(result == SUCCESS);
-					  LOG(txn->txn_id(),  " committed! Max commit ts is "<<Sequencer::max_commit_ts<<", old lc is "<<Sequencer::num_lc_txns_);
-					  ASSERT(Sequencer::max_commit_ts < txn->txn_id());
+					  LOG(txn->txn_id(),  " committed! Max commit ts is "<<Sequencer::num_lc_txns_);
+					  //ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 					  manager->ApplyChange(true);
-					  Sequencer::max_commit_ts = txn->txn_id();
+					  //Sequencer::max_commit_ts = txn->txn_id();
 					  ++Sequencer::num_lc_txns_;
 					  //--Sequencer::num_pend_txns_;
 
-					  while (!my_pend_txns->empty() && my_pend_txns->top().first == txn->txn_id())
+					  while (!my_pend_txns->empty() && my_pend_txns->top().first == txn_id)
 						  my_pend_txns->pop();
-					  active_txns.erase(txn->txn_id());
+					  active_g_tids.erase(txn_id);
+					  active_l_tids.erase(txn->local_txn_id());
 					  delete manager;
 				  }
 			  }
 			  else{
 				  // Blocked, can not read
-				  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn->txn_id(), txn->local_txn_id(), TO_READ));
+				  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn_id, txn->local_txn_id(), TO_READ));
 			  }
 		  }
 	  }
@@ -318,10 +318,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		  if(pend_txn.third == TO_SEND){
 			  LOG(pend_txn.first," send remote message!!!");
-			  active_txns[pend_txn.first]->SendLocalReads();
+			  active_g_tids[pend_txn.first]->SendLocalReads();
 		  }
 		  else{
-			  StorageManager* manager = active_txns[pend_txn.first];
+			  StorageManager* manager = active_g_tids[pend_txn.first];
 			  int result = scheduler->application_->Execute(manager);
 			  if (result == WAIT_AND_SENT){
 				  LOG(-1, pend_txn.first<<": wait and sent!!!");
@@ -333,13 +333,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  retry_txns.push(retry_mgr);
 			  }
 			  else{
-				  ASSERT(Sequencer::max_commit_ts < pend_txn.first);
+				  //ASSERT(Sequencer::max_commit_ts < pend_txn.first);
 				  manager->ApplyChange(true);
-				  Sequencer::max_commit_ts = pend_txn.first;
+				  //Sequencer::max_commit_ts = pend_txn.first;
 				  ++Sequencer::num_lc_txns_;
 				  //--Sequencer::num_pend_txns_;
 				  //scheduler->num_suspend[thread] -= manager->was_suspended_;
-				  active_txns.erase(pend_txn.first);
+				  active_g_tids.erase(pend_txn.first);
+				  active_l_tids.erase(pend_txn.second);
 				  delete manager;
 				  LOG(-1, pend_txn.first<< " committed!");
 			  }
@@ -348,7 +349,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else if(retry_txns.size()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  LOCKLOG(retry_txns.front()->get_txn()->txn_id(), " before retrying txn ");
-		  retry_mgr = scheduler->ExecuteTxn(retry_txns.front(), thread, active_txns);
+		  retry_mgr = scheduler->ExecuteTxn(retry_txns.front(), thread, active_g_tids, active_l_tids);
 		  if(retry_mgr == NULL)
 			  retry_txns.pop();
 	  }
@@ -365,15 +366,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if (got_it == true) {
 			  // Create manager.
 			  StorageManager* manager;
-			  if (active_txns.count(txn->txn_id()) == 0)
+			  if (active_g_tids.count(txn->txn_id()) == 0)
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
 			  else{
-				  manager = active_txns[txn->txn_id()];
+				  manager = active_g_tids[txn->txn_id()];
 				  manager->SetupTxn(txn);
 			  }
-			  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_txns);
+			  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids);
 			  if(retry_mgr != NULL)
 				  retry_txns.push(retry_mgr);
 		  }
@@ -409,21 +410,21 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 }
 
 StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
-		unordered_map<int64_t, StorageManager*>& active_txns){
+		unordered_map<int64_t, StorageManager*>& active_g_tids, unordered_map<int64_t, StorageManager*>& active_l_tids){
 	TxnProto* txn = manager->get_txn();
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way
 	if(manager->ReadOnly()){
 		if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
-			ASSERT(Sequencer::max_commit_ts < txn->txn_id());
-			Sequencer::max_commit_ts = txn->txn_id();
+			//ASSERT(Sequencer::max_commit_ts < txn->txn_id());
+			//Sequencer::max_commit_ts = txn->txn_id();
 			++Sequencer::num_lc_txns_;
 			application_->ExecuteReadOnly(manager);
 			delete manager;
 			return NULL;
 		}
 		else{
-			LOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<Sequencer::num_lc_txns_<<", last commit ts is "<<Sequencer::max_commit_ts);
-			active_txns[txn->txn_id()] = manager;
+			LOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<Sequencer::num_lc_txns_);
+			active_l_tids[txn->txn_id()] = manager;
 			LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 			to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 			return NULL;
@@ -434,21 +435,21 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		int result = application_->Execute(manager);
 		if (result == SUSPENDED){
 			LOCKLOG(txn->txn_id(),  " suspended");
-			active_txns[txn->txn_id()] = manager;
+			active_l_tids[txn->local_txn_id()] = manager;
 			++num_suspend[thread];
 			return NULL;
 		}
 		else if (result == WAIT_AND_SENT){
 			// There are outstanding remote reads.
 			LOCKLOG(txn->txn_id(),  " wait and sent for remote read");
-			active_txns[txn->txn_id()] = manager;
+			active_g_tids[txn->txn_id()] = manager;
 			//++Sequencer::num_pend_txns_;
 			return NULL;
 		}
 		else if (result == WAIT_NOT_SENT) {
 			LOCKLOG(txn->txn_id(),  " wait but not sent for remote read");
 			pending_txns_[thread]->push(MyTuple<int64_t, int64_t, bool>(txn->txn_id(), txn->local_txn_id(), TO_SEND));
-			active_txns[txn->txn_id()] = manager;
+			active_g_tids[txn->txn_id()] = manager;
 			//++Sequencer::num_pend_txns_;
 			return NULL;
 		}
@@ -462,11 +463,12 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
 				if(manager->CanCommit()){
 					LOCKLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<Sequencer::num_lc_txns_+1);
-					ASSERT(Sequencer::max_commit_ts < txn->txn_id());
+					//ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 					manager->ApplyChange(true);
-					Sequencer::max_commit_ts = txn->txn_id();
+					//Sequencer::max_commit_ts = txn->txn_id();
 					++Sequencer::num_lc_txns_;
-					active_txns.erase(txn->txn_id());
+					active_g_tids.erase(txn->txn_id());
+					active_l_tids.erase(txn->local_txn_id());
 					//num_suspend[thread] -= manager->was_suspended_;
 					delete manager;
 					return NULL;
@@ -481,8 +483,9 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			else{
 				//++Sequencer::num_sc_txns_;
 				manager->ApplyChange(false);
-				LOCKLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<Sequencer::num_lc_txns_<<", last commit ts is "<<Sequencer::max_commit_ts);
-				active_txns[txn->txn_id()] = manager;
+				LOCKLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<Sequencer::num_lc_txns_);
+				//active_g_tids[txn->txn_id()] = manager;
+				active_l_tids[txn->local_txn_id()] = manager;
 				LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 				to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 				return NULL;

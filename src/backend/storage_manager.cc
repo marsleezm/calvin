@@ -117,7 +117,7 @@ void StorageManager::Abort(){
 		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 		{
 			if(it->second.first & WRITE){
-				actual_storage_->Unlock(it->first, txn_->txn_id(), it->second.first & NEW_MASK);
+				actual_storage_->Unlock(it->first, txn_->local_txn_id(), it->second.first & NEW_MASK);
 				delete it->second.second;
 			}
 			else if(it->second.first & IS_COPY)
@@ -129,7 +129,7 @@ void StorageManager::Abort(){
 		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 		{
 			if(it->second.first & WRITE)
-				actual_storage_->RemoveValue(it->first, txn_->txn_id(), it->second.first & NEW_MASK);
+				actual_storage_->RemoveValue(it->first, txn_->local_txn_id(), it->second.first & NEW_MASK);
 		}
 	}
 
@@ -153,7 +153,7 @@ void StorageManager::ApplyChange(bool is_committing){
 	for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 	{
 		if(it->second.first & WRITE){
-			if (!actual_storage_->PutObject(it->first, it->second.second, txn_->txn_id(), is_committing, it->second.first & NEW_MASK)){
+			if (!actual_storage_->PutObject(it->first, it->second.second, txn_->local_txn_id(), is_committing, it->second.first & NEW_MASK)){
 				failed_putting = true;
 				break;
 			}
@@ -168,14 +168,14 @@ void StorageManager::ApplyChange(bool is_committing){
 		while(it != read_set_.end()){
 			if(counter < applied_counter){
 				if (it->second.first & WRITE){
-					actual_storage_->RemoveValue(it->first, txn_->txn_id(), it->second.first & NEW_MASK);
+					actual_storage_->RemoveValue(it->first, txn_->local_txn_id(), it->second.first & NEW_MASK);
 				}
 			}
 			else{
 				if(it->second.first & IS_COPY)
 					delete it->second.second;
 				else if (it->second.first & WRITE){
-					actual_storage_->Unlock(it->first, txn_->txn_id(), it->second.first & NEW_MASK);
+					actual_storage_->Unlock(it->first, txn_->local_txn_id(), it->second.first & NEW_MASK);
 					delete it->second.second;
 				}
 			}
@@ -327,7 +327,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 			//LOG(txn_->txn_id(), "Trying to read local key "<<key);
 			if (read_set_[key].second == NULL){
 				read_set_[key].first = read_set_[key].first | new_obj;
-				ValuePair result = actual_storage_->ReadObject(key, txn_->txn_id(), &abort_bit_,
+				ValuePair result = actual_storage_->ReadObject(key, txn_->local_txn_id(), &abort_bit_,
 						num_restarted_, abort_queue_, pend_queue_, new_obj);
 				if(abort_bit_ > num_restarted_){
 					LOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
@@ -440,7 +440,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 			}
 			else{
 				// The value has never been read
-				ValuePair result = actual_storage_->ReadLock(key, txn_->txn_id(), &abort_bit_,
+				ValuePair result = actual_storage_->ReadLock(key, txn_->local_txn_id(), &abort_bit_,
 									num_restarted_, abort_queue_, pend_queue_, new_object);
 				if(result.first == SUSPENDED){
 					//LOCKLOG(txn_->txn_id(), " suspended when read&lock "<<key<<", exec counter is "<<exec_counter_);
