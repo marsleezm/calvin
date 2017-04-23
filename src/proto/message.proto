@@ -27,6 +27,12 @@ message MessageProto {
     UNLINK_CHANNEL = 5;  // [Connection implementation specific.]
     TXN_PTR = 6;
     MESSAGE_PTR = 7;
+    LOCAL_PAXOS = 8;
+    GLOBAL_PAXOS_REQ = 9;
+    GLOBAL_PAXOS_REPLY = 10;
+    SKEEN_REQ = 11;
+   	SKEEN_PROPOSE = 12;
+   	SKEEN_REPLY = 13;
   };
   required MessageType type = 9;
 
@@ -40,9 +46,12 @@ message MessageProto {
   // messages between threads.
   repeated int64 data_ptr = 12;
 
+  optional int64 msg_id = 13;
   // For TXN_BATCH messages, 'batch_number' identifies the epoch of the txn
   // batch being sent.
   optional int64 batch_number = 21;
+  
+  optional int64 skeen_ts = 22;
 
   // For READ_RESULT messages, 'keys(i)' and 'values(i)' store the key and
   // result of a read, respectively.

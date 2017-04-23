@@ -61,7 +61,7 @@ class Sequencer {
  public:
   // The constructor creates background threads and starts the Sequencer's main
   // loops running.
-  Sequencer(Configuration* conf, Connection* connection, Connection* batch_connection,
+  Sequencer(Configuration* conf, Connection* connection, Connection* paxos_connection, Connection* batch_connection,
 		  Client* client, LockedVersionedStorage* storage, int queue_mode);
 
   // Halts the main loops.
@@ -98,11 +98,16 @@ class Sequencer {
   //
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
+  void RunPaxos();
   void RunReader();
   void RunLoader();
 
+  void ProposeLocal();
+  void ProposeGlobal();
+
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
+  static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerReader(void *arg);
   static void* RunSequencerLoader(void *arg);
@@ -126,6 +131,9 @@ class Sequencer {
   // Connection for sending and receiving protocol messages.
   Connection* connection_;
 
+  // Connection for receiving txn batches to paxos.
+  Connection* paxos_connection_;
+
   // Connection for receiving txn batches from sequencer.
   Connection* batch_connection_;
 
@@ -137,6 +145,7 @@ class Sequencer {
 
   // Separate pthread contexts in which to run the sequencer's main loops.
   pthread_t writer_thread_;
+  pthread_t paxos_thread_;
   pthread_t reader_thread_;
 
   // False until the deconstructor is called. As soon as it is set to true, the
@@ -170,5 +179,13 @@ class Sequencer {
 
   // Statistics
   int num_fetched_this_round;
+
+  int batch_number_;
+
+  bool ready_to_consume_;
+
+  MessageProto* my_multi_part_msg_;
+  MessageProto* my_single_part_msg_;
+  vector<int> involved_parts;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

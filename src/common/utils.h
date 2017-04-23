@@ -253,6 +253,37 @@ public:
 //	}
 };
 
+template<typename T1, typename T2, typename T3, typename T4>
+class MyFour{
+public:
+	T1 first;
+	T2 second;
+	T3 third;
+	T4 fourth;
+
+	MyFour(T1 t1, T2 t2, T3 t3, T4 t4){
+		first = t1;
+		second = t2;
+		third = t3;
+		fourth = t4;
+	}
+
+	MyTuple(){}
+
+	//MyTuple(const MyTuple& a) :
+	//	first(a.first), first(a.second), first(a.third)
+	//{
+//
+//	}
+};
+
+struct MultiPartTxn{
+	int timestamp;
+	int batch;
+	vector<int> involved_nodes;
+	string data;
+};
+
 
 
 class Mutex {
