@@ -21,6 +21,7 @@
 
 //#define MAX_BATCH_SIZE 56
 
+#define NUM_PENDING_BATCH 8
 #define SAMPLES 100000
 #define SAMPLE_RATE 999
 //#define VERBOSE_SEQUENCER
@@ -102,9 +103,6 @@ class Sequencer {
   void RunReader();
   void RunLoader();
 
-  void ProposeLocal();
-  void ProposeGlobal();
-
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerPaxos(void *arg);
@@ -182,10 +180,10 @@ class Sequencer {
 
   int batch_number_;
 
-  bool ready_to_consume_;
-
   MessageProto* my_multi_part_msg_;
   MessageProto* my_single_part_msg_;
-  vector<int> involved_parts;
+  vector<int> involved_nodes;
+  int if_not_ready[NUM_PENDING_BATCH];
+ 
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

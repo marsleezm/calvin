@@ -13,6 +13,7 @@
 #include <queue>
 #include <set>
 #include <utility>
+#include <cmath>
 
 #include "backend/storage.h"
 #include "common/configuration.h"
@@ -41,8 +42,6 @@ double worker_begin[SAMPLES];
 double worker_end[SAMPLES];
 double scheduler_unlock[SAMPLES];
 #endif
-
-#define NUM_PENDING_BATCH 8
 
 int64_t Sequencer::num_lc_txns_=0;
 //int64_t Sequencer::max_commit_ts=-1;
@@ -246,39 +245,42 @@ void Sequencer::RunPaxos() {
   Spin(1);
   pthread_setname_np(pthread_self(), "paxos");
 
-  int64 timestamp = 0;
-
   // Can not propose to global if my batch has any un-ready multi-part txns
-  int if_not_ready[NUM_PENDING_BATCH];
 
-  int my_batch;
+  int proposed_batch = -1;
   vector<string> pending_txns;
   unordered_map<int, vector<MessageProto*>> multi_part_txns;
-  vector<MessageProto*> pending_paxos_props;
+  queue<MessageProto*> pending_paxos_props;
 
-  unordered_map<int, MessageProto*> pending_skeen_msg;
+  unordered_map<int64, MyTuple<int, vector<int>, MessageProto*>> pending_skeen_msg;
+
 
   while (!deconstructor_invoked_) {
 	  // I need to run a multicast protocol to propose this txn to other partitions
 	  MessageProto* msg;
 
 	  // Propose global
-	  if(ready_to_consume_){
-		  ready_to_consume_ = false;
+	  if(my_single_part_msg_){
 		  if (if_not_ready[batch_number_ % NUM_PENDING_BATCH] == 0){
 			  if (multi_part_txns.count(batch_number_) != 0){
 				  vector<MessageProto*> msgs = multi_part_txns[batch_number_];
-				  for(int i = 0; i < msgs.size(); ++i)
+				  for(int i = 0; i < msgs.size(); ++i){
 					  for(int j = 0; j < msgs[i]->data_size(); ++j)
-						  my_single_part_msg_->add_data(msgs[i]->data(i));
+						  my_single_part_msg_->adsingled_data(msgs[i]->data(i));
+					  delete msgs[i];
+				  }
 			  }
 			  paxos_connection_->Send(*my_single_part_msg_);
 			  delete my_single_part_msg_;
-			  delete multi_part_txns[batch_number_];
 			  multi_part_txns.erase(batch_number_);
+              pending_skeen_msg[my_multi_part_msg_->msg_id()] =
+            		  MyTuple(multi_part_size, involved_nodes, my_multi_part_msg_);
 		  }
 		  else
 			  pending_paxos_props.push_back(my_single_part_msg_);
+           
+          my_single_part_msg_ = NULL;
+          my_multi_part_msg_ = NULL;
 	  }
 
 	  if(paxos_connection_->GetMessage(msg)){
@@ -294,35 +296,59 @@ void Sequencer::RunPaxos() {
 		  else if (msg_type == MessageProto::SKEEN_REQ){
 			  if_not_ready[(batch_number_+1)%NUM_PENDING_BATCH] += 1;
 			  // Add data to msg;
-			  unready_txns[msg->data(0)] = msg->data(1);
-
-			  // TODO: may have concurrency issue
-			  if_not_ready[(batch_number_+1)%if_not_ready] += 1;
-			  pending_skeen_msg[msg->skeen_ts()] = msg;
+			  pending_skeen_msg[msg->msg_id()] = msg;
 
 			  MessageProto reply;
 			  reply.set_type(MessageProto::SKEEN_REPLY);
 			  reply.set_batch_number(batch_number_+1);
 			  reply.set_msg_id(msg->msg_id());
-			  reply.set_skeen_ts(timestamp);
-			  ++timestamp;
 
 			  // TODO: Replicate locally if needed before replying
 			  paxos_connection_->Send(reply);
 		  }
 		  else if (msg_type == MessageProto::SKEEN_PROPOSE){
-			  int skeen_ts = StringToInt(msg->data(0)),
-				  proposed_ts = StringToInt(msg->data(1));
-			  int proposed_batch = msg->batch_number();
+			  int64 msg_id = msg->msg_id(),
+			  int new_batch = max(msg->batch_number(), pending_skeen_msg[msg_id].third->batch_number());
 
-			  pending_skeen_msg[skeen_ts].first = max(pending_skeen_msg[skeen_ts].first, proposed_ts);
-			  pending_skeen_msg[skeen_ts].second = max(pending_skeen_msg[skeen_ts].second, proposed_batch);
-			  if (pending_skeen_msg[skeen_ts].third == 1)
+			  pending_skeen_msg[msg_id].third->set_batch_number(new_batch);
+			  if (pending_skeen_msg[msg_id].first == 1)
 			  {
+				  //Reply to all
+				  MessageProto msg;
+				  msg.set_type(MessageProto::SKEEN_REPLY);
+				  msg.set_destination_channel("paxos");
+				  msg.set_msg_id(msg_id);
+				  msg.set_batch_number(new_batch);
+				  vector<int> involved_nodes = pending_skeen_msg[msg_id].second;
+				  for(int i = 0; i<involved_nodes.size(); ++i){
+					  msg.set_destination_node(involved_nodes[i]);
+					  paxos_connection->Send(msg);
+				  }
+
 				  //Put it to the batch
+                  multi_part_txns[new_batch].push_back(pending_skeen_msg[skeen_ts].second);
+                  pending_skeen_msg.erase(skeen_ts);
+                  if_not_ready[new_batch%NUM_PENDING_BATCH] -= 1;
+                  if(new_batch < batch_number_ && new_batch == proposed_batch+1){
+                	  MessageProto* pended_msg = pending_paxos_props.front();
+                	  ASSERT(pended_msg->batch_number() == new_batch);
+                	  pending_paxos_props.pop();
+        			  if (multi_part_txns.count(new_batch) != 0){
+        				  vector<MessageProto*> msgs = multi_part_txns[new_batch];
+        				  for(int i = 0; i < msgs.size(); ++i){
+        					  for(int j = 0; j < msgs[i]->data_size(); ++j)
+        						  pended_msg->adsingled_data(msgs[i]->data(i));
+        					  delete msgs[i];
+        				  }
+        			  }
+        			  paxos_connection_->Send(*my_single_part_msg_);
+        			  delete pended_msg;
+        			  multi_part_txns.erase(batch_number_);
+        			  proposed_batch+=1;
+                  }
 			  }
 			  else
-				  pending_skeen_msg[skeen_ts].third -= 1;
+				  pending_skeen_msg[skeen_ts].first -= 1;
 			  // Update batch number
 			  // Update timestamp
 			  // Update remaining number of batch.
@@ -330,24 +356,28 @@ void Sequencer::RunPaxos() {
 			  //pending_skeen_msg[skeen_ts]->set_batch_number
 		  }
 		  else if (msg_type == MessageProto::SKEEN_REPLY){
-			  int skeen_ts = StringToInt(msg->data(0)),
-				  proposed_ts = StringToInt(msg->data(1));
-			  int proposed_batch = msg->batch_number(),
-					  final_ts = StringToInt(msg->data(0));
+			  int new_batch = msg->batch_number();
 
-			  pending_skeen_msg[skeen_ts].first = max(pending_skeen_msg[skeen_ts].first, proposed_ts);
-			  pending_skeen_msg[skeen_ts].second = max(pending_skeen_msg[skeen_ts].second, proposed_batch);
-			  if (pending_skeen_msg[skeen_ts].third == 1)
-			  {
-				  //Put it to the batch
+			  //Put it to the batch
+			  multi_part_txns[new_batch].push_back(pending_skeen_msg[skeen_ts].second);
+			  pending_skeen_msg.erase(skeen_ts);
+			  if_not_ready[new_batch%NUM_PENDING_BATCH] -= 1;
+			  if(new_batch < batch_number_ && new_batch == proposed_batch+1){
+			  MessageProto* pended_msg = pending_paxos_props.front();
+			  ASSERT(pended_msg->batch_number() == new_batch);
+			  pending_paxos_props.pop();
+			  if (multi_part_txns.count(new_batch) != 0){
+				  vector<MessageProto*> msgs = multi_part_txns[new_batch];
+				  for(int i = 0; i < msgs.size(); ++i){
+					  for(int j = 0; j < msgs[i]->data_size(); ++j)
+						  pended_msg->adsingled_data(msgs[i]->data(i));
+					  delete msgs[i];
+				  }
 			  }
-			  else
-				  pending_skeen_msg[skeen_ts].third -= 1;
-			  // Update batch number
-			  // Update timestamp
-			  // Update remaining number of batch.
-			  // If the current batch is pended due to msg, then do not do anything
-			  //pending_skeen_msg[skeen_ts]->set_batch_number
+			  paxos_connection_->Send(*my_single_part_msg_);
+			  delete pended_msg;
+			  multi_part_txns.erase(batch_number_);
+			  proposed_batch+=1;
 		  }
 	  }
 	  Spin(0.0005);
@@ -359,14 +389,6 @@ void Sequencer::RunPaxos() {
   }
 
   Spin(1);
-}
-
-void Sequencer::ProposeLocal(){
-
-}
-
-void Sequencer::ProposeGlobal(){
-
 }
 
 // Send txns to all involved partitions
@@ -395,8 +417,6 @@ void Sequencer::RunReader() {
     batches[it->first].set_source_node(node_id);
     batches[it->first].set_type(MessageProto::SKEEN_REQ);
   }
-
-
 
 #ifdef LATENCY_TEST
   int watched_txn = -1;
@@ -460,17 +480,19 @@ void Sequencer::RunReader() {
 			  }
 		  }
       }
-
       txn_count++;
     }
 
-    for(set<int>::iterator it = involved_parts.begin(); it != involved_parts.end(); ++it){
-    	batches[*it].set_skeen_ts(batch_number);
-    	connection_->Send(batches[*it]);
-    }
+    if_not_ready[batch_number%NUM_PENDING_BATCH] = involved_parts.size();
     my_multi_part_msg_ = multi_part_msg;
     my_single_part_msg_ = single_part_msg;
-    ready_to_consume_ = true;
+    involved_nodes = involved_parts;
+
+    int64 msg_id = batch | node_id <<40;
+    for(set<int>::iterator it = involved_parts.begin(); it != involved_parts.end(); ++it){
+    	batches[*it].set_msg_id(msg_id);
+    	connection_->Send(batches[*it]);
+    }
 
     // Send this epoch's requests to all schedulers.
 //    for (map<int, MessageProto>::iterator it = batches.begin();
