@@ -20,6 +20,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "proto/message.pb.h"
 #include "common/types.h"
 #include "common/logging.h"
 
@@ -268,7 +269,7 @@ public:
 		fourth = t4;
 	}
 
-	MyTuple(){}
+	MyFour(){}
 
 	//MyTuple(const MyTuple& a) :
 	//	first(a.first), first(a.second), first(a.third)
@@ -276,14 +277,6 @@ public:
 //
 //	}
 };
-
-struct MultiPartTxn{
-	int timestamp;
-	int batch;
-	vector<int> involved_nodes;
-	string data;
-};
-
 
 
 class Mutex {
@@ -831,6 +824,15 @@ public:
     bool operator() (ReadFromEntry left, ReadFromEntry right)
     {
     	return (left.my_tx_id_ > right.my_tx_id_);
+    }
+};
+
+class CompareMsg
+{
+public:
+    bool operator() (MessageProto* left, MessageProto* right)
+    {
+    	return (left->msg_id() > right->msg_id());
     }
 };
 

@@ -21,7 +21,8 @@
 
 //#define MAX_BATCH_SIZE 56
 
-#define NUM_PENDING_BATCH 8
+#define NUM_PENDING_BATCH 16
+
 #define SAMPLES 100000
 #define SAMPLE_RATE 999
 //#define VERBOSE_SEQUENCER
@@ -111,6 +112,8 @@ class Sequencer {
   static void* RunSequencerLoader(void *arg);
 
   void* FetchMessage();
+  void propose_global(int64& proposed_batch, int* num_pending, queue<MessageProto*>& pending_paxos_props,
+			unordered_map<int, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>>& multi_part_txns);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   //void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
@@ -178,12 +181,8 @@ class Sequencer {
   // Statistics
   int num_fetched_this_round;
 
-  int batch_number_;
-
-  MessageProto* my_multi_part_msg_;
-  MessageProto* my_single_part_msg_;
-  vector<int> involved_nodes;
-  int if_not_ready[NUM_PENDING_BATCH];
+  AtomicQueue<MessageProto*> my_single_part_msg_;
+  MyFour<int, int64, vector<int>, MessageProto*> pending_sent_skeen[NUM_PENDING_BATCH];
  
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

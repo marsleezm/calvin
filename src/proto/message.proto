@@ -51,7 +51,7 @@ message MessageProto {
   // batch being sent.
   optional int64 batch_number = 21;
   
-  optional int64 skeen_ts = 22;
+  optional int64 propose_batch = 22;
 
   // For READ_RESULT messages, 'keys(i)' and 'values(i)' store the key and
   // result of a read, respectively.
