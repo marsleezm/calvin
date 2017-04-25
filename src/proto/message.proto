@@ -27,6 +27,7 @@ message MessageProto {
     UNLINK_CHANNEL = 5;  // [Connection implementation specific.]
     TXN_PTR = 6;
     MESSAGE_PTR = 7;
+    READ_CONFIRM = 8;
   };
   required MessageType type = 9;
 
@@ -39,6 +40,10 @@ message MessageProto {
   // Pointer to actual data for message being carried. Can only be used for
   // messages between threads.
   repeated int64 data_ptr = 12;
+  
+  repeated int64 committed_txns = 13;
+  repeated int32 final_abort_nums = 14;
+  optional int32 num_aborted = 15;
 
   // For TXN_BATCH messages, 'batch_number' identifies the epoch of the txn
   // batch being sent.

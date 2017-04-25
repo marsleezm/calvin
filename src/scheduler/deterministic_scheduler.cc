@@ -166,6 +166,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   unordered_map<int64_t, StorageManager*> active_l_tids;
   StorageManager* retry_mgr= NULL, *mgr = NULL;
   queue<StorageManager*> retry_txns;
+  int this_node = scheduler->configuration_->this_node_id;
 
   uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
   int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
@@ -255,55 +256,70 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // Received remote read
 	  else if (scheduler->message_queues[thread]->Pop(&message)) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  ASSERT(message.type() == MessageProto::READ_RESULT);
-		  int txn_id = atoi(message.destination_channel().c_str());
-		  StorageManager* manager = active_g_tids[txn_id];
-		  if (manager == NULL){
-			  manager = new StorageManager(scheduler->configuration_,
-							   scheduler->thread_connections_[thread],
-							   scheduler->storage_, &abort_queue, &waiting_queue);
-			  manager->HandleReadResult(message);
-			  active_g_tids[txn_id] = manager;
-		  }
-		  else {
-			  manager->HandleReadResult(message);
-			  TxnProto* txn = manager->txn_;
-			  LOG(txn_id, ": got remote msg from" << message.source_node());
-			  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
-				  int result = scheduler->application_->Execute(manager);
-				  if (result == WAIT_AND_SENT){
-					  LOG(txn_id, " is waiting for remote read again!");
+	      if(message.type() == MessageProto::READ_RESULT)
+	      {
+	    	  for(int i =0; i<message.committed_txns_size(); ++i){
+	    		  MessageProto new_msg;
+	    		  //std::cout<<" Got read result, sending out read confirmation to "<<message.committed_txns(i)<<std::endl;
+	    		  new_msg.set_destination_node(this_node);
+	    		  new_msg.set_destination_channel(IntToString(message.committed_txns(i)));
+	    		  new_msg.set_num_aborted(message.final_abort_nums(i));
+	    		  new_msg.set_type(MessageProto::READ_CONFIRM);
+	    		  scheduler->thread_connections_[thread]->Send(new_msg);
+	    	  }
+	    	  int txn_id = atoi(message.destination_channel().c_str());
+			  StorageManager* manager = active_g_tids[txn_id];
+			  if (manager == NULL){
+				  manager = new StorageManager(scheduler->configuration_,
+								   scheduler->thread_connections_[thread],
+								   scheduler->storage_, &abort_queue, &waiting_queue);
+				  manager->HandleReadResult(message);
+				  active_g_tids[txn_id] = manager;
+			  }
+			  else {
+				  manager->HandleReadResult(message);
+				  TxnProto* txn = manager->txn_;
+				  LOG(txn_id, ": got remote msg from" << message.source_node());
+				  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
+					  int result = scheduler->application_->Execute(manager);
+					  if (result == WAIT_AND_SENT){
+						  LOG(txn_id, " is waiting for remote read again!");
 
-					  // There are outstanding remote reads.
-					  active_g_tids[txn_id] = manager;
-				  }
-				  else if (result == TX_ABORTED){
-						LOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
-						manager->Abort();
-						++Sequencer::num_aborted_;
-						retry_txns.push(manager);
+						  // There are outstanding remote reads.
+						  active_g_tids[txn_id] = manager;
+					  }
+					  else if (result == TX_ABORTED){
+							LOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
+							manager->Abort();
+							++Sequencer::num_aborted_;
+							retry_txns.push(manager);
+					  }
+					  else{
+						  ASSERT(result == SUCCESS);
+						  LOG(txn->txn_id(), " committed! Max commit ts is "<<Sequencer::num_lc_txns_);
+						  //ASSERT(Sequencer::max_commit_ts < txn->txn_id());
+						  manager->ApplyChange(true);
+						  //Sequencer::max_commit_ts = txn->txn_id();
+						  ++Sequencer::num_lc_txns_;
+						  //--Sequencer::num_pend_txns_;
+
+						  while (!my_pend_txns->empty() && my_pend_txns->top().first <= txn_id)
+							  my_pend_txns->pop();
+						  active_g_tids.erase(txn_id);
+						  active_l_tids.erase(txn->local_txn_id());
+						  delete manager;
+					  }
 				  }
 				  else{
-					  ASSERT(result == SUCCESS);
-					  LOG(txn->txn_id(),  " committed! Max commit ts is "<<Sequencer::num_lc_txns_);
-					  //ASSERT(Sequencer::max_commit_ts < txn->txn_id());
-					  manager->ApplyChange(true);
-					  //Sequencer::max_commit_ts = txn->txn_id();
-					  ++Sequencer::num_lc_txns_;
-					  //--Sequencer::num_pend_txns_;
-
-					  while (!my_pend_txns->empty() && my_pend_txns->top().first <= txn_id)
-						  my_pend_txns->pop();
-					  active_g_tids.erase(txn_id);
-					  active_l_tids.erase(txn->local_txn_id());
-					  delete manager;
+					  // Blocked, can not read
+					  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn_id, txn->local_txn_id(), TO_READ));
 				  }
 			  }
-			  else{
-				  // Blocked, can not read
-				  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn_id, txn->local_txn_id(), TO_READ));
-			  }
-		  }
+	      }
+	      else if(message.type() == MessageProto::READ_CONFIRM){
+	    	  //std::cout<<"I got read confirm for msg "<<message.destination_channel()<<std::endl;
+	      }
+
 	  }
 	  // Try to re-execute pending transactions
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){

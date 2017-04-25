@@ -256,7 +256,7 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 
 void ConnectionMultiplexer::Send(const MessageProto& message) {
 
-  if (message.type() == MessageProto::READ_RESULT) {
+  if (message.type() == MessageProto::READ_RESULT || message.type() == MessageProto::READ_CONFIRM) {
     if (remote_result_.count(message.destination_channel()) > 0) {
     	remote_result_[message.destination_channel()]->Push(message);
     } else {

@@ -502,6 +502,11 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 
 void StorageManager::SendLocalReads(){
 	++sent_msg_;
+
+	message_->add_committed_txns(txn_->txn_id());
+	message_->add_final_abort_nums(0);
+	message_->set_num_aborted(0);
+
 	for (int i = 0; i < txn_->writers().size(); i++) {
 	  if (txn_->writers(i) != configuration_->this_node_id) {
 		  //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
