@@ -187,7 +187,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  else{
 				  mgr = active_l_tids[to_sc_txn.second];
-				  LOG(to_sc_txn.first,  " committed! Max commit ts is "<<Sequencer::num_lc_txns_);
+				  LOG(to_sc_txn.first,  " committed! Local committed txn is "<<Sequencer::num_lc_txns_);
 				  //ASSERT(Sequencer::max_commit_ts < to_sc_txn.first);
 				  //Sequencer::max_commit_ts = to_sc_txn.first;
 				  ++Sequencer::num_lc_txns_;
@@ -257,6 +257,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  ASSERT(message.type() == MessageProto::READ_RESULT);
 		  int txn_id = atoi(message.destination_channel().c_str());
+		  LOG(txn_id, ": got remote msg from" << message.source_node());
+		  //std::cout<<txn_id<<" wtf, got remote msg from "<<message.source_node()<<std::endl;
 		  StorageManager* manager = active_g_tids[txn_id];
 		  if (manager == NULL){
 			  manager = new StorageManager(scheduler->configuration_,
@@ -268,7 +270,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  else {
 			  manager->HandleReadResult(message);
 			  TxnProto* txn = manager->txn_;
-			  LOG(txn_id, ": got remote msg from" << message.source_node());
 			  if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
 				  int result = scheduler->application_->Execute(manager);
 				  if (result == WAIT_AND_SENT){
@@ -281,19 +282,26 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						LOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 						manager->Abort();
 						++Sequencer::num_aborted_;
-						retry_txns.push(retry_mgr);
+						retry_txns.push(manager);
 				  }
 				  else{
 					  ASSERT(result == SUCCESS);
-					  LOG(txn->txn_id(),  " committed! Max commit ts is "<<Sequencer::num_lc_txns_);
+					  LOG(txn->txn_id(),  " committed! Committed txn is "<<Sequencer::num_lc_txns_);
 					  //ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 					  manager->ApplyChange(true);
 					  //Sequencer::max_commit_ts = txn->txn_id();
 					  ++Sequencer::num_lc_txns_;
 					  //--Sequencer::num_pend_txns_;
 
-					  while (!my_pend_txns->empty() && my_pend_txns->top().first == txn_id)
-						  my_pend_txns->pop();
+					  while (!my_pend_txns->empty()){
+						  if(my_pend_txns->top().second <= txn->local_txn_id())
+							  my_pend_txns->pop();
+						  else{
+							  LOG(my_pend_txns->top().second, " is the first one, can not remove!");
+							  break;
+						  }
+					  }
+
 					  active_g_tids.erase(txn_id);
 					  active_l_tids.erase(txn->local_txn_id());
 					  delete manager;
@@ -301,6 +309,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  else{
 				  // Blocked, can not read
+				  LOG(txn_id, " can not read, pushed to pend_txn");
 				  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn_id, txn->local_txn_id(), TO_READ));
 			  }
 		  }
@@ -312,8 +321,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.third);
 
-		  while (!my_pend_txns->empty() &&  my_pend_txns->top().first == pend_txn.first){
-			  my_pend_txns->pop();
+		  while (!my_pend_txns->empty()){
+			  if(my_pend_txns->top().second <= pend_txn.second)
+				  my_pend_txns->pop();
+			  else
+			  {
+				  LOG(my_pend_txns->top().second, " is the first one, can not remove!");
+				  break;
+			  }
 		  }
 
 		  if(pend_txn.third == TO_SEND){
@@ -330,7 +345,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  LOG(-1, pend_txn.first<<" got aborted, trying to unlock then restart! Mgr is "<<manager);
 				  manager->Abort();
 				  ++Sequencer::num_aborted_;
-				  retry_txns.push(retry_mgr);
+				  retry_txns.push(manager);
 			  }
 			  else{
 				  //ASSERT(Sequencer::max_commit_ts < pend_txn.first);

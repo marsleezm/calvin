@@ -97,19 +97,19 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* pa
 		CPU_SET(1, &cpuset);
 		//CPU_SET(7, &cpuset);
 		pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
-		std::cout << "Sequencer writer starts at core 1"<<std::endl;
+		//std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
 		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 			  reinterpret_cast<void*>(this));
 
-		std::cout << "Paxos thread starts at core 1"<<std::endl;
+		//std::cout << "Paxos thread starts at core 1"<<std::endl;
 
 		pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
 			  reinterpret_cast<void*>(this));
 
 		CPU_ZERO(&cpuset);
 		CPU_SET(2, &cpuset);
-		std::cout << "Sequencer reader starts at core 2"<<std::endl;
+		//std::cout << "Sequencer reader starts at core 2"<<std::endl;
 		pthread_attr_t attr_reader;
 		pthread_attr_init(&attr_reader);
 		pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
@@ -120,7 +120,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* pa
   else{
 		CPU_ZERO(&cpuset);
 		CPU_SET(1, &cpuset);
-		std::cout << "Sequencer reader starts at core 1"<<std::endl;
+		//std::cout << "Sequencer reader starts at core 1"<<std::endl;
 		pthread_attr_t simple_loader;
 		pthread_attr_init(&simple_loader);
 		pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
@@ -141,7 +141,7 @@ Sequencer::~Sequencer() {
 	//  }
 	//delete txns_queue_;
 
-	std::cout<<" Sequencer done"<<std::endl;
+	//std::cout<<" Sequencer done"<<std::endl;
 }
 
 //void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
@@ -178,7 +178,7 @@ void Sequencer::RunWriter() {
       synchronization_counter++;
     }
   }
-  std::cout << "Starting sequencer.\n" << std::flush;
+  //std::cout << "Starting sequencer.\n" << std::flush;
 
   // Set up batch messages for each system node.
   MessageProto batch;
@@ -223,7 +223,7 @@ void Sequencer::RunWriter() {
       }
     }
 
-	//std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * max_batch_size <<
+	////std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * max_batch_size <<
 	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
@@ -258,15 +258,17 @@ void Sequencer::RunPaxos() {
 	  MessageProto* single_part_msg;
 	  if(my_single_part_msg_.Pop(&single_part_msg)){
 		  int64 to_propose_batch = single_part_msg->batch_number();
-		  //std::cout<<"My single part msg's batch is"<<to_propose_batch<<std::endl;
+		  SEQLOG(-1, " got single part msg for batch"<<to_propose_batch<<", proposed batch is "<<proposed_batch);
 		  if (num_pending[to_propose_batch % NUM_PENDING_BATCH] == 0 && to_propose_batch == proposed_batch+1){
+			  SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", proposed batch is "<<proposed_batch);
 			  if (multi_part_txns.count(to_propose_batch) != 0){
 				  priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg> msgs = multi_part_txns[to_propose_batch];
 				  for(uint i = 0; i < msgs.size(); ++i){
 					  MessageProto* msg = msgs.top();
+					  SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", adding message "<<msg->msg_id());
 					  msgs.pop();
 					  for(int j = 0; j < msg->data_size(); ++j)
-						  single_part_msg->add_data(msg->data(i));
+						  single_part_msg->add_data(msg->data(j));
 					  delete msg;
 				  }
 			  }
@@ -275,8 +277,10 @@ void Sequencer::RunPaxos() {
 			  multi_part_txns.erase(to_propose_batch);
               ++proposed_batch;
 		  }
-		  else
+		  else{
+			  SEQLOG(-1, " not ready to proceed"<<to_propose_batch<<", num pending is "<<num_pending[to_propose_batch % NUM_PENDING_BATCH]);
 			  pending_paxos_props.push(single_part_msg);
+		  }
            
 		  single_part_msg = NULL;
 	  }
@@ -285,24 +289,31 @@ void Sequencer::RunPaxos() {
 	  if(paxos_connection_->GetMessage(msg)){
 		  int msg_type = msg->type();
 		  if(msg_type == MessageProto::GLOBAL_PAXOS_REQ){
+			  SEQLOG(-1, "replying global paxos: "<<msg->batch_number());
 			  msg->set_destination_node(msg->source_node());
 			  msg->set_destination_channel("scheduler_");
 			  msg->set_type(MessageProto::TXN_BATCH);
-			  msg->set_batch_number(msg->batch_number());
 			  paxos_connection_->Send(*msg);
 			  delete msg;
 		  }
 		  else if (msg_type == MessageProto::SKEEN_REQ){
 			  int64 to_propose_batch = max(max_batch, proposed_batch+1);
-			  max_batch = to_propose_batch;
+			  // Increase random_batch with 50% probability, to avoid the case that messages keep being aggregated in this batch
+			  if(to_propose_batch == max_batch)
+				  max_batch += random()%2;
+			  else
+				  max_batch = to_propose_batch;
+
 			  num_pending[to_propose_batch%NUM_PENDING_BATCH] += 1;
 			  // Add data to msg;
+			  msg->set_propose_batch(to_propose_batch);
 			  pending_received_skeen[msg->msg_id()] = msg;
+			  SEQLOG(-1, " replying skeen request: "<<msg->msg_id()<<", proposing "<<to_propose_batch);
 
 			  MessageProto reply;
 			  reply.set_destination_channel("paxos");
 			  reply.set_destination_node(msg->source_node());
-			  reply.set_type(MessageProto::SKEEN_REPLY);
+			  reply.set_type(MessageProto::SKEEN_PROPOSE);
 			  reply.set_batch_number(msg->batch_number());
 			  reply.set_propose_batch(to_propose_batch);
 			  reply.set_msg_id(msg->msg_id());
@@ -313,13 +324,21 @@ void Sequencer::RunPaxos() {
 		  else if (msg_type == MessageProto::SKEEN_PROPOSE){
 			  int64 msg_id = msg->msg_id();
 			  int index = msg->batch_number() % NUM_PENDING_BATCH;
-			  pending_sent_skeen[index].first -= 1;
+			  SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", he proposed "<<msg->propose_batch()<<", remaining is "<<pending_sent_skeen[index].first);
 			  pending_sent_skeen[index].second = max(msg->propose_batch(), pending_sent_skeen[index].second);
 			  //pending_skeen_msg[msg_id].third->set_batch_number(new_batch);
-			  if (pending_sent_skeen[msg_id].first == 1)
+			  if (pending_sent_skeen[index].first == 1)
 			  {
-				  //Reply to all
+				  //Reply to allstd::cout<<"Got batch"
 				  int64 final_batch = max(max_batch, max(proposed_batch+1, pending_sent_skeen[index].second));
+				  // Increase random_batch with 50% probability, to avoid the case that messages keep being aggregated in this batch
+				  if(final_batch == max_batch)
+					  max_batch += random()%2;
+				  else
+					  max_batch = final_batch;
+
+				  SEQLOG(-1, "Finalzing skeen request: "<<msg->msg_id()<<", proposing "<<final_batch);
+
 				  MessageProto reply_msg;
 				  reply_msg.set_type(MessageProto::SKEEN_REPLY);
 				  reply_msg.set_destination_channel("paxos");
@@ -333,11 +352,14 @@ void Sequencer::RunPaxos() {
 
 				  //Put it to the batch
                   multi_part_txns[final_batch].push(pending_sent_skeen[index].fourth);
-    			  if( num_pending[final_batch%NUM_PENDING_BATCH] == 0)
+                  SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", pushed "<<pending_sent_skeen[index].fourth->msg_id()<<" to"<<final_batch<<" and size is "<<multi_part_txns[final_batch].size());
+                  SEQLOG(-1, " For "<<msg->msg_id()<<", num pending is "<<num_pending[final_batch%NUM_PENDING_BATCH]<<", proposed_batch is"<<proposed_batch);
+
+    			  if( num_pending[final_batch%NUM_PENDING_BATCH] == 0 && proposed_batch+1 == final_batch)
     				  propose_global(proposed_batch, num_pending, pending_paxos_props, multi_part_txns);
 			  }
 			  else
-				  pending_sent_skeen[msg_id].first -= 1;
+				  pending_sent_skeen[index].first -= 1;
 
 			  delete msg;
 			  // Update batch number
@@ -347,13 +369,16 @@ void Sequencer::RunPaxos() {
 			  //pending_skeen_msg[skeen_ts]->set_batch_number
 		  }
 		  else if (msg_type == MessageProto::SKEEN_REPLY){
-			  int64 new_batch = msg->batch_number();
+			  int64 new_batch = msg->batch_number(),
+					  blocked_batch = pending_received_skeen[msg->msg_id()]->propose_batch();
 
 			  //Put it to the batch
 			  multi_part_txns[new_batch].push(pending_received_skeen[msg->msg_id()]);
-			  num_pending[new_batch%NUM_PENDING_BATCH] -= 1;
+			  SEQLOG(-1, "Got skeen final: "<<msg->msg_id()<<", batch number is "<<new_batch<<", pushed "<<reinterpret_cast<int64>(pending_received_skeen[msg->msg_id()])<<", size is"<<multi_part_txns[new_batch].size());
+			  num_pending[blocked_batch%NUM_PENDING_BATCH] -= 1;
 
-			  if( num_pending[new_batch%NUM_PENDING_BATCH] == 0)
+			  SEQLOG(-1, "Got skeen final: "<<msg->msg_id()<<", pending is "<<num_pending[blocked_batch%NUM_PENDING_BATCH]);
+			  if(num_pending[blocked_batch%NUM_PENDING_BATCH] == 0 && blocked_batch == proposed_batch+1)
 				  propose_global(proposed_batch, num_pending, pending_paxos_props, multi_part_txns);
 			  delete msg;
 		  }
@@ -373,19 +398,22 @@ void Sequencer::propose_global(int64& proposed_batch, int* num_pending, queue<Me
 		if (num_pending[next_batch % NUM_PENDING_BATCH] == 0 && pending_paxos_props.size()
 				&& pending_paxos_props.front()->batch_number() == next_batch){
 			MessageProto* propose_msg = pending_paxos_props.front();
+			SEQLOG(-1, " Proposing to global "<<next_batch<<", proposed batch is "<<proposed_batch);
 			if (multi_part_txns.count(next_batch) != 0){
 				priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg> msgs = multi_part_txns[next_batch];
 				for(uint i = 0; i < msgs.size(); ++i){
 					MessageProto* msg = msgs.top();
 					msgs.pop();
+					SEQLOG(-1, " Proposing to global "<<next_batch<<", adding message "<<msg->msg_id());
 					for(int j = 0; j < msg->data_size(); ++j)
-						propose_msg->add_data(msg->data(i));
+						propose_msg->add_data(msg->data(j));
 					delete msg;
 				}
 			}
 			paxos_connection_->Send(*propose_msg);
 			delete propose_msg;
 			multi_part_txns.erase(next_batch);
+			pending_paxos_props.pop();
 			++proposed_batch;
 		}
 		else
@@ -471,12 +499,15 @@ void Sequencer::RunReader() {
     		to_send.insert(*it);
 
     	// Insert txn into appropriate batches.
-    	if(to_send.size() == 1 || *to_send.begin() == node_id)
+    	if(to_send.size() == 1 && *to_send.begin() == node_id){
+    		//SEQLOG(txn.txn_id(), " added to my single "<<batch_number);
     		single_part_msg->add_data(batch_message.data(i));
+    	}
     	else{
     		for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
+    			//LOG(txn.txn_id(), "is added to "<<*it);
     			if(*it == node_id)
-    				single_part_msg->add_data(batch_message.data(i));
+    				multi_part_msg->add_data(batch_message.data(i));
     			else{
     				batches[*it].add_data(batch_message.data(i));
     				involved_parts.insert(*it);
@@ -486,9 +517,13 @@ void Sequencer::RunReader() {
     	txn_count++;
     }
 
+    int64 msg_id = batch_number | ((uint64)node_id) <<40;
+    SEQLOG(-1, "Finished loading for "<<batch_number);
     if(involved_parts.size()){
     	std::vector<int> output(involved_parts.size());
     	std::copy(involved_parts.begin(), involved_parts.end(), output.begin());
+    	SEQLOG(-1, "multi-part txn's size is "<<involved_parts.size());
+    	multi_part_msg->set_msg_id(msg_id);
     	pending_sent_skeen[batch_number%NUM_PENDING_BATCH] = MyFour<int, int64, vector<int>, MessageProto*>
     		(involved_parts.size(), 0, output, multi_part_msg);
     }
@@ -496,12 +531,12 @@ void Sequencer::RunReader() {
     	delete multi_part_msg;
     my_single_part_msg_.Push(single_part_msg);
 
-    int64 msg_id = batch_number | ((int64)node_id) <<40;
     for(set<int>::iterator it = involved_parts.begin(); it != involved_parts.end(); ++it){
     	batches[*it].set_batch_number(batch_number);
     	batches[*it].set_msg_id(msg_id);
     	connection_->Send(batches[*it]);
     	batches[*it].clear_data();
+    	SEQLOG(-1, " Sending skeen request "<<msg_id<<" to "<<*it);
     }
 
     //batch_number += configuration_->all_nodes.size();
@@ -535,18 +570,18 @@ void Sequencer::RunReader() {
       			//<< test<< " for drop speed , "
       			//<< executing_txns << " executing, "
       			<< num_pend_txns_ << " pending, time is "<<second++<<"\n" << std::flush;
-//	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
-//		  for(int i = 0; i<NUM_THREADS; ++i){
-//			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-//				  <<", num committed txn is "<<Sequencer::num_lc_txns_
-//				  <<", waiting queue is"<<std::endl;
-//			  for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
-//				  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
-//				  std::cout<<t.first<<",";
-//			  }
-//			  std::cout<<"\n";
-//		  }
-//	  }
+	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
+		  for(int i = 0; i<NUM_THREADS; ++i){
+			  int sc_first = -1, pend_first = -1;
+			  if (scheduler_->to_sc_txns_[i]->size())
+				  sc_first = scheduler_->to_sc_txns_[i]->top().first;
+			  if (scheduler_->pending_txns_[i]->size())
+				  pend_first = scheduler_->pending_txns_[i]->top().first;
+			  std::cout<< " doing nothing, top is "<<sc_first
+				  <<", num committed txn is "<<Sequencer::num_lc_txns_
+				  <<", the first one is "<<pend_first<<std::endl;
+		  }
+	  }
 
 
       // Reset txn count.
@@ -591,9 +626,9 @@ void Sequencer::RunLoader(){
 				  <<", waiting queue is"<<std::endl;
 			  //for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
 			//	  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
-			//	  std::cout<<t.first<<",";
+			//	  //std::cout<<t.first<<",";
 			 // }
-			  std::cout<<"\n";
+			  //std::cout<<"\n";
 		  }
 	  }
 
@@ -615,20 +650,22 @@ void* Sequencer::FetchMessage() {
   //TxnProto* done_txn;
   if (txns_queue_->Size() < 1000){
 	  if (queue_mode == NORMAL_QUEUE){
+		  SEQLOG(-1, " trying to get batch "<<fetched_batch_num_);
 		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
-		  	  // Have we run out of txns in our batch? Let's get some new ones.
-		  	  if (batch_message != NULL) {
-		  		  for (int i = 0; i < batch_message->data_size(); i++)
-		  		  {
-		  			  TxnProto* txn = new TxnProto();
-		  			  txn->ParseFromString(batch_message->data(i));
-		  			  txn->set_local_txn_id(fetched_txn_num_++);
-		  			  txns_queue_->Push(txn);
-		  			  ++num_fetched_this_round;
-		  		  }
-		  		  delete batch_message;
-		  		  ++fetched_batch_num_;
-		  	  }
+		  // Have we run out of txns in our batch? Let's get some new ones.
+		  if (batch_message != NULL) {
+			  for (int i = 0; i < batch_message->data_size(); i++)
+			  {
+				  TxnProto* txn = new TxnProto();
+				  txn->ParseFromString(batch_message->data(i));
+				  LOG(-1, " batch "<<batch_message->batch_number()<<" has txn of id "<<txn->txn_id()<<" with local "<<fetched_txn_num_);
+				  txn->set_local_txn_id(fetched_txn_num_++);
+				  txns_queue_->Push(txn);
+				  ++num_fetched_this_round;
+			  }
+			  delete batch_message;
+			  ++fetched_batch_num_;
+		  }
 	  }
 	  else if (queue_mode == FROM_SEQ_SINGLE){
 		  for (int i = 0; i < 1000; i++)
@@ -652,12 +689,14 @@ void* Sequencer::FetchMessage() {
 		  }
 	  }
   }
+  else
+	  SEQLOG(-1, "Txn size is OK, so still waiting");
   return NULL;
 
 //    // Report throughput.
 //    if (GetTime() > time + 1) {
 //      double total_time = GetTime() - time;
-//      std::cout << "Completed " << (static_cast<double>(txns) / total_time)
+//      //std::cout << "Completed " << (static_cast<double>(txns) / total_time)
 //                << " txns/sec, "
 //                //<< test<< " for drop speed , "
 //                << executing_txns << " executing, "
@@ -673,21 +712,23 @@ void* Sequencer::FetchMessage() {
 MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
   if (batches_.count(batch_id) > 0) {
     // Requested batch has already been received.
-    MessageProto* batch = batches_[batch_id];
-    batches_.erase(batch_id);
-    return batch;
+	  SEQLOG(-1, "Already received batch "<<batch_id);
+	  MessageProto* batch = batches_[batch_id];
+	  batches_.erase(batch_id);
+	  return batch;
   } else {
-    MessageProto* message = new MessageProto();
-    while (connection->GetMessage(message)) {
-      ASSERT(message->type() == MessageProto::TXN_BATCH);
-      if (message->batch_number() == batch_id) {
-        return message;
-      } else {
-        batches_[message->batch_number()] = message;
-        message = new MessageProto();
-      }
-    }
-    delete message;
-    return NULL;
+	  MessageProto* message = new MessageProto();
+	  while (connection->GetMessage(message)) {
+		  SEQLOG(-1, "Got message of batch "<<message->batch_number()<<", and I want "<< batch_id);
+		  ASSERT(message->type() == MessageProto::TXN_BATCH);
+		  if (message->batch_number() == batch_id) {
+			  return message;
+		  } else {
+			  batches_[message->batch_number()] = message;
+			  message = new MessageProto();
+		  }
+	  }
+	  delete message;
+	  return NULL;
   }
 }

@@ -21,7 +21,7 @@
 
 //#define MAX_BATCH_SIZE 56
 
-#define NUM_PENDING_BATCH 16
+#define NUM_PENDING_BATCH 128
 
 #define SAMPLES 100000
 #define SAMPLE_RATE 999
