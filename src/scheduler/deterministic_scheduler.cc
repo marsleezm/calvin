@@ -281,7 +281,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						LOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 						manager->Abort();
 						++Sequencer::num_aborted_;
-						retry_txns.push(retry_mgr);
+						retry_txns.push(manager);
 				  }
 				  else{
 					  ASSERT(result == SUCCESS);
@@ -292,7 +292,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  ++Sequencer::num_lc_txns_;
 					  //--Sequencer::num_pend_txns_;
 
-					  while (!my_pend_txns->empty() && my_pend_txns->top().first == txn_id)
+					  while (!my_pend_txns->empty() && my_pend_txns->top().first <= txn_id)
 						  my_pend_txns->pop();
 					  active_g_tids.erase(txn_id);
 					  active_l_tids.erase(txn->local_txn_id());
@@ -312,7 +312,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.third);
 
-		  while (!my_pend_txns->empty() &&  my_pend_txns->top().first == pend_txn.first){
+		  while (!my_pend_txns->empty() &&  my_pend_txns->top().first <= pend_txn.first){
 			  my_pend_txns->pop();
 		  }
 
@@ -330,7 +330,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  LOG(-1, pend_txn.first<<" got aborted, trying to unlock then restart! Mgr is "<<manager);
 				  manager->Abort();
 				  ++Sequencer::num_aborted_;
-				  retry_txns.push(retry_mgr);
+				  retry_txns.push(manager);
 			  }
 			  else{
 				  //ASSERT(Sequencer::max_commit_ts < pend_txn.first);
