@@ -100,7 +100,7 @@ inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data
 #define PLOG(x)
 #define AGGRLOG(txid, x)
 #else
-#ifdef LOCKLOGGING
+#ifdef AGGRLOGGING
 #define LOG(txid, x)
 #define AGGRLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
 #define PLOG(x)
