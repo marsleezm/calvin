@@ -288,9 +288,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  else {
 				  // Handle read result is correct, e.g. I can continue execution
 				  if(manager->HandleReadResult(message) == true){
-					  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm);
-					  if(retry_mgr != NULL)
-						  retry_txns.push(retry_mgr);
+					  if(manager->is_suspended_ == false){
+						  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm);
+						  if(retry_mgr != NULL)
+							  retry_txns.push(retry_mgr);
+					  }
 				  }
 				  else{
 					  AGGRLOG(txn_id, " got aborted due to invalid remote read, manager is "<<manager);
@@ -307,6 +309,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	      }
 	  }
 	  else if (pending_confirm.size() && pending_confirm.top().second <= Sequencer::num_lc_txns_) {
+		  AGGRLOG(pending_confirm.top().second, " is the first one in confirm");
 		  active_g_tids[pending_confirm.top().first]->SendConfirm(pending_confirm.top().third);
 		  pending_confirm.pop();
 	  }
@@ -360,9 +363,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else if(retry_txns.size()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  LOG(retry_txns.front()->get_txn()->txn_id(), " before retrying txn ");
-		  retry_mgr = scheduler->ExecuteTxn(retry_txns.front(), thread, active_g_tids, active_l_tids, pending_confirm);
-		  if(retry_mgr == NULL)
+		  if(retry_txns.front()->is_blocked_ || retry_txns.front()->is_suspended_){
 			  retry_txns.pop();
+		  }
+		  else{
+			  retry_mgr = scheduler->ExecuteTxn(retry_txns.front(), thread, active_g_tids, active_l_tids, pending_confirm);
+			  if(retry_mgr == NULL)
+				  retry_txns.pop();
+		  }
 	  }
 	  // Try to start a new transaction
 	  else if (my_to_sc_txns->size() <= max_sc && scheduler->num_suspend[thread]<=max_suspend) {
@@ -432,6 +440,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		unordered_map<int64_t, StorageManager*>& active_g_tids, unordered_map<int64_t, StorageManager*>& active_l_tids,
 		priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm){
 	TxnProto* txn = manager->get_txn();
+	// No need to resume if the txn is still suspended
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way
 	if(manager->ReadOnly()){
 		if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
@@ -524,6 +533,11 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			}
 			else{
 				manager->ApplyChange(false);
+				if (manager->message_has_value_){
+					manager->SendLocalReads(false);
+				}
+				else
+					LOG(txn->txn_id(), " WTF, message has not value??");
 				AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<Sequencer::num_lc_txns_);
 				active_l_tids[txn->local_txn_id()] = manager;
 				LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());

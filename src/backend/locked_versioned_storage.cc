@@ -285,6 +285,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 					else
 						entry->read_from_list->push_back(ReadFromEntry(txn_id, list->txn_id, abort_bit, num_aborted, abort_queue));
 
+					ASSERT(list->txn_id != txn_id);
 					value_pair.first = WRITE;
 					value_pair.second = new Value(*list->value);
 					LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO GC addr is "<<reinterpret_cast<int64>(value_pair.second));
@@ -392,7 +393,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
                                           int64 txn_id, bool is_committing, bool new_object) {
 	//return true;
 	//ASSERT(objects_.count(key) != 0);
-	//LOG(txn_id, " putting data for "<<key);
+	LOG(txn_id, " putting data for "<<key);
 	KeyEntry* entry;
 	if(new_object){
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;

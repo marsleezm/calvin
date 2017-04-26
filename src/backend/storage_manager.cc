@@ -17,7 +17,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
 	  pend_queue_(pend_queue), message_has_value_(false), is_suspended_(false), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
-	get_blocked_ = 0;
+	is_blocked_ = false;
 	sent_msg_ = 0;
 	tpcc_args = new TPCCArgs();
 	txn_ = NULL;
@@ -29,7 +29,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), message_has_value_(false),
 	  is_suspended_(false), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
-	get_blocked_ = 0;
+	is_blocked_ = false;
 	sent_msg_ = 0;
 	tpcc_args = new TPCCArgs();
 	tpcc_args ->ParseFromString(txn->arg());
@@ -49,12 +49,12 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
 void StorageManager::SendConfirm(int last_restarted){
 	if(last_restarted == abort_bit_){
-
 		MessageProto msg;
 		msg.set_type(MessageProto::READ_CONFIRM);
 		msg.set_destination_channel(IntToString(txn_->txn_id()));
 		msg.set_num_aborted(last_restarted);
 		msg.set_source_node(configuration_->this_node_id);
+		AGGRLOG(txn_->txn_id(), " sent confirm");
 		for (int i = 0; i < txn_->writers().size(); i++) {
 			if (txn_->writers(i) != configuration_->this_node_id) {
 				msg.set_destination_node(txn_->writers(i));
@@ -63,7 +63,7 @@ void StorageManager::SendConfirm(int last_restarted){
 		}
 	}
 	else
-		AGGRLOG(txn_->txn_id(), " not sending confirm");
+		AGGRLOG(txn_->txn_id(), " not sending confirm, because last bit is "<<last_restarted<<", abort bit is "<<abort_bit_);
 }
 
 void StorageManager::SetupTxn(TxnProto* txn){
@@ -168,6 +168,7 @@ void StorageManager::ApplyChange(bool is_committing){
 // TODO: add logic to delete keys that do not exist
 bool StorageManager::HandleReadResult(const MessageProto& message) {
   ASSERT(message.type() == MessageProto::READ_RESULT);
+  is_blocked_ = false;
   if (message.confirmed()){
 	  // TODO: if the transaction has old data, should abort the transaction
 	  for (int i = 0; i < message.keys_size(); i++) {
@@ -191,6 +192,7 @@ bool StorageManager::HandleReadResult(const MessageProto& message) {
   else{
 	  // If I am receiving read-results from a node for the first time then I am OK;
 	  // otherwise abort.
+	  LOG(txn_->txn_id(), " got local message of restarted "<<num_restarted_<<" from "<<message.source_node());
 	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
 		  if(latest_aborted_num[i].first == message.source_node()){
 			  if(message.num_aborted() > latest_aborted_num[i].second) {
@@ -300,7 +302,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 				AGGRLOG(txn_->txn_id(), "Does not have remote key: "<<key);
 				read_state = SPECIAL;
 				// The tranasction will perform the read again
-				++get_blocked_;
+				is_blocked_ = true;
 				if (message_has_value_){
 					LOG(txn_->txn_id(), " blocked and sent.");
 					return reinterpret_cast<Value*>(SUSPEND_SHOULD_SEND);
@@ -375,7 +377,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				LOG(txn_->txn_id(), "Does not have remote key: "<<key);
 				read_state = SPECIAL;
 				// The tranasction will perform the read again
-				++get_blocked_;
+				is_blocked_ = true;
 				if (message_has_value_){
 					LOG(txn_->txn_id(), " blocked and sent.");
 					return reinterpret_cast<Value*>(SUSPEND_SHOULD_SEND);

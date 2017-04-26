@@ -65,8 +65,9 @@ class StorageManager {
 	  if(if_confirmed){
 		  message_->set_confirmed(true);
 		  ASSERT(abort_bit_ == num_restarted_);
-		  message_->set_num_aborted(num_restarted_);
 	  }
+	  LOG(txn_->txn_id(), " sending local message of restarted "<<num_restarted_);
+	  message_->set_num_aborted(num_restarted_);
 //	  for(uint i = 0; i<to_confirm.size(); ++i){
 //		  message_->add_committed_txns(to_confirm[i].first);
 //		  message_->add_final_abort_nums(to_confirm[i].second);
@@ -295,7 +296,7 @@ class StorageManager {
   Key suspended_key;
 
   /****** For statistics ********/
-  int get_blocked_;
+  bool is_blocked_;
   int sent_msg_;
 };
 
