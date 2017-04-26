@@ -227,11 +227,11 @@ class StorageManager {
 		  if(latest_aborted_num[i].first == node_id){
 			  if(latest_aborted_num[i].second == num_aborted) {
 				  --num_unconfirmed_read;
-				  LOG(txn_->txn_id(), "done confirming read from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
+				  AGGRLOG(txn_->txn_id(), "done confirming read from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
 			  }
 			  else{
 				  pending_read_confirm.push_back(make_pair(node_id, num_aborted));
-				  LOG(txn_->txn_id(), "failed confirming read from node "<<node_id<<", local is "<<latest_aborted_num[i].second
+				  AGGRLOG(txn_->txn_id(), "failed confirming read from node "<<node_id<<", local is "<<latest_aborted_num[i].second
 						  <<", got is "<<num_aborted);
 			  }
 			  break;

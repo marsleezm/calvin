@@ -57,15 +57,13 @@ void StorageManager::SendConfirm(int last_restarted){
 		msg.set_source_node(configuration_->this_node_id);
 		for (int i = 0; i < txn_->writers().size(); i++) {
 			if (txn_->writers(i) != configuration_->this_node_id) {
-				LOG(txn_->txn_id(), " sending confirm to "<<txn_->writers(i)<<", before last_restarted "<<
-						last_restarted<<" is the same as "<<abort_bit_);
 				msg.set_destination_node(txn_->writers(i));
 				connection_->Send1(msg);
 			}
 		}
 	}
 	else
-		LOG(txn_->txn_id(), " not sending confirm");
+		AGGRLOG(txn_->txn_id(), " not sending confirm");
 }
 
 void StorageManager::SetupTxn(TxnProto* txn){
@@ -123,7 +121,7 @@ void StorageManager::Abort(){
 // If successfully spec-commit, all data are put into the list and all copied data are deleted
 // If spec-commit fail, all put data are removed, all locked data unlocked and all copied data cleaned
 void StorageManager::ApplyChange(bool is_committing){
-	LOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing);
+	AGGRLOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing);
 	int applied_counter = 0;
 	bool failed_putting = false;
 	// All copied data before applied count are deleted
@@ -177,7 +175,7 @@ bool StorageManager::HandleReadResult(const MessageProto& message) {
 		//LOG(txn_->txn_id(), "Handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
 	  }
 	  --num_unconfirmed_read;
-	  LOG(txn_->txn_id(), " is confirmed, new num_unconfirmed is "<<num_unconfirmed_read);
+	  AGGRLOG(txn_->txn_id(), " is confirmed, new num_unconfirmed is "<<num_unconfirmed_read);
 	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
 		  if(latest_aborted_num[i].first == message.source_node()){
 			  // Mean this is the first time to receive read from this node
@@ -187,7 +185,7 @@ bool StorageManager::HandleReadResult(const MessageProto& message) {
 				  return false;
 		  }
 	  }
-	  LOG(txn_->txn_id(), " WTF, I didn't find anyone in the list? Impossible.");
+	  AGGRLOG(txn_->txn_id(), " WTF, I didn't find anyone in the list? Impossible.");
 	  return false;
   }
   else{
@@ -214,13 +212,13 @@ bool StorageManager::HandleReadResult(const MessageProto& message) {
 					  return false;
 			  }
 			  else{
-				  LOG(txn_->txn_id(), " receiving older message: aborted is "<<latest_aborted_num[i].second<<", received is "<<message.num_aborted());
+				  AGGRLOG(txn_->txn_id(), " receiving older message: aborted is "<<latest_aborted_num[i].second<<", received is "<<message.num_aborted());
 				  return true;
 			  }
 
 		  }
 	  }
-	  LOG(txn_->txn_id(), " NOT POSSIBLE! I did not find my entry...");
+	  AGGRLOG(txn_->txn_id(), " NOT POSSIBLE! I did not find my entry...");
 	  return false;
   }
 }
@@ -299,7 +297,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 				return &remote_objects_[key];
 			}
 			else{ //Should be blocked
-				LOG(txn_->txn_id(), "Does not have remote key: "<<key);
+				AGGRLOG(txn_->txn_id(), "Does not have remote key: "<<key);
 				read_state = SPECIAL;
 				// The tranasction will perform the read again
 				++get_blocked_;

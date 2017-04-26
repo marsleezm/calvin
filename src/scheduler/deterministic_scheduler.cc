@@ -181,16 +181,16 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
 		  if ( to_sc_txn.second == Sequencer::num_lc_txns_){
-			  LOG(to_sc_txn.first, " check if can spec-commit transaction");
+			  AGGRLOG(to_sc_txn.first, " check if can spec-commit transaction");
 			  int can_commit = active_l_tids[to_sc_txn.second]->CanSCToCommit();
 			  if (can_commit == ABORT){
-				  LOCKLOG(-1, " popping out "<<to_sc_txn.first<<", values are "<<active_l_tids[to_sc_txn.second]->spec_committed_<<", "
+				  LOG(-1, " popping out "<<to_sc_txn.first<<", values are "<<active_l_tids[to_sc_txn.second]->spec_committed_<<", "
 						  <<active_l_tids[to_sc_txn.second]->abort_bit_<<", "<<active_l_tids[to_sc_txn.second]->num_restarted_);
 				  my_to_sc_txns->pop();
 			  }
 			  else if(can_commit == SUCCESS){
 				  mgr = active_l_tids[to_sc_txn.second];
-				  LOG(to_sc_txn.first,  " committed! Max commit ts is "<<Sequencer::num_lc_txns_);
+				  AGGRLOG(to_sc_txn.first,  " committed! Num committed txn is "<<Sequencer::num_lc_txns_+1);
 				  ++Sequencer::num_lc_txns_;
 
 				  if(mgr->ReadOnly())
@@ -219,9 +219,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyTuple<int64_t, int, ValuePair> to_wait_txn;
 		  waiting_queue.Pop(&to_wait_txn);
-		  LOG(-1, " In to-suspend, the first one is "<< to_wait_txn.first);
+		  AGGRLOG(-1, " In to-suspend, the first one is "<< to_wait_txn.first);
 		  if(to_wait_txn.first >= Sequencer::num_lc_txns_){
-			  LOG(-1, " To suspending txn is " << to_wait_txn.first);
+			  AGGRLOG(-1, " To suspending txn is " << to_wait_txn.first);
 			  StorageManager* manager = active_l_tids[to_wait_txn.first];
 			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
 				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm);
@@ -234,7 +234,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  // again
 				  if(to_wait_txn.third.first == IS_COPY)
 					  delete to_wait_txn.third.second;
-				  LOG(-1, to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second
+				  AGGRLOG(-1, to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second
 						  <<", "<< active_l_tids[to_wait_txn.first]->num_restarted_
 						  <<", "<<active_l_tids[to_wait_txn.first]->abort_bit_);
 			  }
@@ -244,9 +244,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
-		  LOG(-1, "In to-abort, the first one is "<< to_abort_txn.first);
+		  AGGRLOG(-1, "In to-abort, the first one is "<< to_abort_txn.first);
 		  if(to_abort_txn.first >= Sequencer::num_lc_txns_){
-			  LOG(-1, "To abort txn is "<< to_abort_txn.first);
+			  AGGRLOG(-1, "To abort txn is "<< to_abort_txn.first);
 			  StorageManager* manager = active_l_tids[to_abort_txn.first];
 			  if (manager && manager->ShouldRestart(to_abort_txn.second)){
 				  scheduler->num_suspend[thread] -= manager->is_suspended_;
@@ -262,12 +262,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // Received remote read
 	  else if (scheduler->message_queues[thread]->Pop(&message)) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  LOG(StringToInt(message.destination_channel()), " I got message from "<<message.source_node()<<", message type is "<<message.type());
+		  AGGRLOG(StringToInt(message.destination_channel()), " I got message from "<<message.source_node()<<", message type is "<<message.type());
 	      if(message.type() == MessageProto::READ_RESULT)
 	      {
 	    	  for(int i =0; i<message.committed_txns_size(); ++i){
 	    		  MessageProto new_msg;
-	    		  LOG(StringToInt(message.destination_channel()), " Got read result, sending out read confirmation to "
+	    		  AGGRLOG(StringToInt(message.destination_channel()), " Got read result, sending out read confirmation to "
 	    				  <<message.committed_txns(i));
 	    		  new_msg.set_destination_node(this_node);
 	    		  new_msg.set_destination_channel(IntToString(message.committed_txns(i)));
@@ -293,7 +293,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						  retry_txns.push(retry_mgr);
 				  }
 				  else{
-					  LOG(txn_id, " got aborted due to invalid remote read, manager is "<<manager);
+					  AGGRLOG(txn_id, " got aborted due to invalid remote read, manager is "<<manager);
 					  manager->Abort();
 					  ++Sequencer::num_aborted_;
 					  retry_txns.push(manager);
@@ -301,7 +301,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 	      }
 	      else if(message.type() == MessageProto::READ_CONFIRM){
-	    	  LOG(StringToInt(message.destination_channel()), "I got read confirm");
+	    	  AGGRLOG(StringToInt(message.destination_channel()), "I got read confirm");
 	    	  StorageManager* manager =  active_g_tids[atoi(message.destination_channel().c_str())];
 	    	  manager->AddReadConfirm(message.source_node(), message.num_aborted());
 	      }
@@ -359,7 +359,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //	  }
 	  else if(retry_txns.size()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  LOCKLOG(retry_txns.front()->get_txn()->txn_id(), " before retrying txn ");
+		  LOG(retry_txns.front()->get_txn()->txn_id(), " before retrying txn ");
 		  retry_mgr = scheduler->ExecuteTxn(retry_txns.front(), thread, active_g_tids, active_l_tids, pending_confirm);
 		  if(retry_mgr == NULL)
 			  retry_txns.pop();
@@ -443,37 +443,36 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			return NULL;
 		}
 		else{
-			LOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<Sequencer::num_lc_txns_);
+			AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<Sequencer::num_lc_txns_);
 			active_l_tids[txn->txn_id()] = manager;
-			LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
+			//AGGRLOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 			to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 			return NULL;
 		}
 	}
 	else{
-		LOCKLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id());
+		AGGRLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id());
 		int result = application_->Execute(manager);
 		if (result == SUSPEND){
-			LOCKLOG(txn->txn_id(),  " suspended");
+			AGGRLOG(txn->txn_id(),  " suspended");
 			active_l_tids[txn->local_txn_id()] = manager;
 			++num_suspend[thread];
 			return NULL;
 		}
 		else if (result == SUSPEND_SHOULD_SEND){
 			// There are outstanding remote reads.
-			LOCKLOG(txn->txn_id(),  " suspend and sent for remote read");
+			AGGRLOG(txn->txn_id(),  " suspend and sent for remote read");
 			active_g_tids[txn->txn_id()] = manager;
 			if(txn->local_txn_id() != Sequencer::num_lc_txns_){
-				LOG(txn->txn_id(), "pushing myself to pending confirm");
 				if(pending_confirm.size())
 					LOG(txn->txn_id(), "before pushing first is "<<pending_confirm.top().second);
 				pending_confirm.push(MyTuple<int64, int64, int>(txn->txn_id(), txn->local_txn_id(),
 					manager->num_restarted_));
-				LOG(txn->txn_id(), "after pushing first is "<<pending_confirm.top().second);
+				AGGRLOG(txn->txn_id(), "after pushing first is "<<pending_confirm.top().second);
 				manager->SendLocalReads(false);
 			}
 			else{
-				LOG(txn->txn_id(), " directly confirm myself");
+				AGGRLOG(txn->txn_id(), " directly confirm myself");
 				manager->SendLocalReads(true);
 			}
 
@@ -482,12 +481,12 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		}
 		else if (result == SUSPEND_NOT_SEND){
 			// There are outstanding remote reads.
-			LOCKLOG(txn->txn_id(),  " suspend and has nothing to send for remote read");
+			AGGRLOG(txn->txn_id(),  " suspend and has nothing to send for remote read");
 			active_g_tids[txn->txn_id()] = manager;
 			return NULL;
 		}
 		else if(result == ABORT) {
-			LOCKLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
+			AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 			manager->Abort();
 			++Sequencer::num_aborted_;
 			return manager;
@@ -496,7 +495,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
 				int can_commit = manager->CanCommit();
 				if(can_commit == SUCCESS){
-					LOCKLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<Sequencer::num_lc_txns_+1);
+					AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<Sequencer::num_lc_txns_+1);
 					manager->ApplyChange(true);
 
 					// TODO!: can SC here
@@ -517,7 +516,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 					return NULL;
 				}
 				else{
-					LOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
+					AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 					manager->Abort();
 					++Sequencer::num_aborted_;
 					return manager;
@@ -525,7 +524,7 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 			}
 			else{
 				manager->ApplyChange(false);
-				LOCKLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<Sequencer::num_lc_txns_);
+				AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<Sequencer::num_lc_txns_);
 				active_l_tids[txn->local_txn_id()] = manager;
 				LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 				to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
