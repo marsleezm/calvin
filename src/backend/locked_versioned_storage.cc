@@ -76,7 +76,7 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 		pthread_mutex_unlock(&(entry->mutex_));
 		// Should return BLOCKED! How to denote that?
 		LOG(txn_id, " reading suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"], num aborted is "<<num_aborted);
-		return ValuePair(SUSPENDED, NULL);
+		return ValuePair(SUSPEND, NULL);
 	}
 	else{
 		ValuePair value_pair;
@@ -181,7 +181,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 			pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
 			LOG(txn_id, " can not find any entry!");
 			// This should not happen!!!
-			return ValuePair(SUSPENDED, NULL);
+			return ValuePair(SUSPEND, NULL);
 		}
 		else{
 			entry = new_objects_[new_tab_num][key];
@@ -213,7 +213,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 		LOG(txn_id, " readlock suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"]");
 		pthread_mutex_unlock(&(entry->mutex_));
 		// Should return BLOCKED! How to denote that?
-		return ValuePair(SUSPENDED, NULL);
+		return ValuePair(SUSPEND, NULL);
 	}
 	// No one has the lock or someone else ordered after my has the lock, so I should get the lock and possibly abort him!
 	else{

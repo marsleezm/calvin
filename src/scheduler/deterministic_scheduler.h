@@ -74,34 +74,9 @@ class DeterministicScheduler : public Scheduler {
 	  active_txns.erase(txn_id);
   }
 
-//  inline TxnProto* GetTxn(bool& got_it, int thread){
-//  	  TxnProto* txn;
-//  	  if(queue_mode == FROM_SELF){
-//  		  client_->GetTxn(&txn, Sequencer::num_lc_txns_, GetUTime());
-//  		  txn->set_local_txn_id(Sequencer::num_lc_txns_);
-//  		  return txn;
-//  	  }
-//  	  else if (queue_mode == NORMAL_QUEUE){
-//  		  got_it = txns_queue_->Pop(&txn);
-//  		  return txn;
-//  	  }
-//  	  else if (queue_mode == FROM_SEQ_SINGLE){
-//  		  got_it = txns_queue_->Pop(&txn);
-//  		  return txn;
-//  	  }
-//  	  else if (queue_mode == FROM_SEQ_DIST){
-//  		  got_it = txns_queue_[thread].Pop(&txn);
-//  		  return txn;
-//  	  }
-//  	  else{
-//  		  std::cout<< "!!!!!!!!!!!!WRONG!!!!!!!!!!!!!!" << endl;
-//  		  got_it = false;
-//  		  return txn;
-//  	  }
-//    }
-
   StorageManager* ExecuteTxn(StorageManager* manager, int thread,
-		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns);
+		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
+		  priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);

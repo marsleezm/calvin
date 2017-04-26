@@ -349,11 +349,11 @@ int TPCC::Execute(StorageManager* storage) const {
 
     // Invalid transaction
     default:
-      return FAILURE;
+      return ABORT;
       break;
   }
 
-  return FAILURE;
+  return ABORT;
 }
 
 
@@ -374,11 +374,11 @@ int TPCC::ExecuteReadOnly(StorageManager* storage) const {
 
     // Invalid transaction
     default:
-      return FAILURE;
+      return ABORT;
       break;
   }
 
-  return FAILURE;
+  return ABORT;
 }
 
 // The new order function is executed when the application receives a new order
@@ -486,7 +486,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 				// Finally, we write the order line to storage
 				int result = storage->LockObject(order_line_key, val_copy);
 				if(result  == LOCK_FAILED)
-					return TX_ABORTED;
+					return ABORT;
 				else if(result == LOCKED){
 					assert(order_line.SerializeToString(val_copy));
 				}
@@ -523,7 +523,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	// We write the order to storage
     int result = storage->LockObject(order_key, val_copy);
 	if(result == LOCK_FAILED)
-		return TX_ABORTED;
+		return ABORT;
 	else if (result == LOCKED){
 		Order order;
 		order.set_id(order_key);
@@ -546,7 +546,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	// Finally, we write the order line to storage
     result = storage->LockObject(new_order_key, val_copy);
 	if(result == LOCK_FAILED)
-		return TX_ABORTED;
+		return ABORT;
 	else if (result == LOCKED){
 		NewOrder new_order;
 		new_order.set_id(new_order_key);
@@ -656,7 +656,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	// Write the history object to disk
 	int result = storage->LockObject(history_key, val);
 	if(result == LOCK_FAILED)
-		return TX_ABORTED;
+		return ABORT;
 	else if (result == LOCKED)
 		assert(history.SerializeToString(val));
 

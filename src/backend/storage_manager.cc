@@ -7,7 +7,6 @@
 
 #include "backend/storage.h"
 #include "sequencer/sequencer.h"
-#include "common/connection.h"
 #include "common/utils.h"
 #include "applications/application.h"
 #include <iostream>
@@ -16,8 +15,8 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		LockedVersionedStorage* actual_storage,  AtomicQueue<pair<int64_t, int>>* abort_queue,
 								 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
-	  message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
-	  pend_queue_(pend_queue), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
+	  exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
+	  pend_queue_(pend_queue), message_has_value_(false), is_suspended_(false), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	tpcc_args = new TPCCArgs();
@@ -28,8 +27,8 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
 			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
-	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue),
-	  pend_queue_(pend_queue), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
+	  txn_(txn), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), message_has_value_(false),
+	  is_suspended_(false), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
 	get_blocked_ = 0;
 	sent_msg_ = 0;
 	tpcc_args = new TPCCArgs();
@@ -43,60 +42,30 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	}
 	else
 		message_ = NULL;
+	num_unconfirmed_read = txn_->readers_size() - 1;
+	for (int i = 0; i<txn_->readers_size(); ++i)
+		latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
+}
 
-  // If reads are performed at this node, execute local reads and broadcast
-  // results to all (other) writers.
+void StorageManager::SendConfirm(int last_restarted){
+	if(last_restarted == abort_bit_){
 
-  //!TODO Potential bug: shouldn't break when true??
-//  bool reader = false;
-//  for (int i = 0; i < txn->readers_size(); i++) {
-//    if (txn->readers(i) == configuration_->this_node_id)
-//      reader = true;
-//  }
-//
-//  if (reader) {
-//    message.set_destination_channel(IntToString(txn->txn_id()));
-//    message.set_type(MessageProto::READ_RESULT);
-//
-//    // Execute local reads.
-//    for (int i = 0; i < txn->read_set_size(); i++) {
-//      const Key& key = txn->read_set(i);
-//      if (configuration_->LookupPartition(key) ==
-//          configuration_->this_node_id) {
-//        Value* val = actual_storage_->ReadObject(key);
-//        objects_[key] = val;
-//        message.add_keys(key);
-//        message.add_values(val == NULL ? "" : *val);
-//      }
-//    }
-//    for (int i = 0; i < txn->read_write_set_size(); i++) {
-//      const Key& key = txn->read_write_set(i);
-//      if (configuration_->LookupPartition(key) ==
-//          configuration_->this_node_id) {
-//        Value* val = actual_storage_->ReadObject(key);
-//        objects_[key] = val;
-//        message.add_keys(key);
-//        message.add_values(val == NULL ? "" : *val);
-//      }
-//    }
-//
-//    // Broadcast local reads to (other) writers.
-//    for (int i = 0; i < txn->writers_size(); i++) {
-//      if (txn->writers(i) != configuration_->this_node_id) {
-//        message.set_destination_node(txn->writers(i));
-//        connection_->Send1(message);
-//      }
-//    }
-//  }
-//
-//  // Note whether this node is a writer. If not, no need to do anything further.
-//  writer = false;
-//  for (int i = 0; i < txn->writers_size(); i++) {
-//    if (txn->writers(i) == configuration_->this_node_id)
-//      writer = true;
-//  }
-
-  // Scheduler is responsible for calling HandleReadResponse. We're done here.
+		MessageProto msg;
+		msg.set_type(MessageProto::READ_CONFIRM);
+		msg.set_destination_channel(IntToString(txn_->txn_id()));
+		msg.set_num_aborted(last_restarted);
+		msg.set_source_node(configuration_->this_node_id);
+		for (int i = 0; i < txn_->writers().size(); i++) {
+			if (txn_->writers(i) != configuration_->this_node_id) {
+				LOG(txn_->txn_id(), " sending confirm to "<<txn_->writers(i)<<", before last_restarted "<<
+						last_restarted<<" is the same as "<<abort_bit_);
+				msg.set_destination_node(txn_->writers(i));
+				connection_->Send1(msg);
+			}
+		}
+	}
+	else
+		LOG(txn_->txn_id(), " not sending confirm");
 }
 
 void StorageManager::SetupTxn(TxnProto* txn){
@@ -110,6 +79,10 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	message_->set_type(MessageProto::READ_RESULT);
 	connection_->LinkChannel(IntToString(txn_->txn_id()));
 	tpcc_args ->ParseFromString(txn->arg());
+
+	num_unconfirmed_read = txn_->readers_size() - 1;
+	for (int i = 0; i<txn_->readers_size(); ++i)
+		latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
 }
 
 void StorageManager::Abort(){
@@ -133,7 +106,11 @@ void StorageManager::Abort(){
 		}
 	}
 
-	//write_set.clear();
+	// TODO!: maybe we can instead keep the key and the value, so that we only sent new data if data has changed
+	if (message_){
+		message_->clear_keys();
+		message_->clear_values();
+	}
 	suspended_key = "";
 	read_set_.clear();
 	tpcc_args->Clear();
@@ -189,12 +166,62 @@ void StorageManager::ApplyChange(bool is_committing){
 		spec_committed_ = true;
 }
 
-void StorageManager::HandleReadResult(const MessageProto& message) {
+// TODO: add abort logic
+// TODO: add logic to delete keys that do not exist
+bool StorageManager::HandleReadResult(const MessageProto& message) {
   ASSERT(message.type() == MessageProto::READ_RESULT);
-  for (int i = 0; i < message.keys_size(); i++) {
-    Value* val = new Value(message.values(i));
-    remote_objects_[message.keys(i)] = val;
-    //LOG(txn_->txn_id(), "Handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
+  if (message.confirmed()){
+	  // TODO: if the transaction has old data, should abort the transaction
+	  for (int i = 0; i < message.keys_size(); i++) {
+		  remote_objects_[message.keys(i)] = message.values(i);
+		//LOG(txn_->txn_id(), "Handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
+	  }
+	  --num_unconfirmed_read;
+	  LOG(txn_->txn_id(), " is confirmed, new num_unconfirmed is "<<num_unconfirmed_read);
+	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
+		  if(latest_aborted_num[i].first == message.source_node()){
+			  // Mean this is the first time to receive read from this node
+			  if(latest_aborted_num[i].second == -1)
+				  return true;
+			  else
+				  return false;
+		  }
+	  }
+	  LOG(txn_->txn_id(), " WTF, I didn't find anyone in the list? Impossible.");
+	  return false;
+  }
+  else{
+	  // If I am receiving read-results from a node for the first time then I am OK;
+	  // otherwise abort.
+	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
+		  if(latest_aborted_num[i].first == message.source_node()){
+			  if(message.num_aborted() > latest_aborted_num[i].second) {
+				  int old_aborted = latest_aborted_num[i].second;
+				  latest_aborted_num[i].second = message.num_aborted();
+				  for(uint j = 0; j <pending_read_confirm.size(); ++j) {
+					  if (pending_read_confirm[i].first == message.source_node()){
+						  if (pending_read_confirm[i].second == message.num_aborted())
+							  --num_unconfirmed_read;
+						  break;
+					  }
+				  }
+				  for (int i = 0; i < message.keys_size(); i++)
+					  remote_objects_[message.keys(i)] = message.values(i);
+					//LOG(txn_->txn_id(), "Handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
+				  if (old_aborted == -1)
+					  return true;
+				  else
+					  return false;
+			  }
+			  else{
+				  LOG(txn_->txn_id(), " receiving older message: aborted is "<<latest_aborted_num[i].second<<", received is "<<message.num_aborted());
+				  return true;
+			  }
+
+		  }
+	  }
+	  LOG(txn_->txn_id(), " NOT POSSIBLE! I did not find my entry...");
+	  return false;
   }
 }
 
@@ -203,114 +230,13 @@ StorageManager::~StorageManager() {
 	LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
 		LOG(txn_->txn_id(), "Has message");
-		if (message_has_value_){
-
-			for (int i = 0; i < txn_->writers().size(); i++) {
-			  if (txn_->writers(i) != configuration_->this_node_id) {
-				  message_->set_destination_node(txn_->writers(i));
-				  LOG(txn_->txn_id(), "Sending message to remote "<<txn_->writers(i));
-				  connection_->Send1(*message_);
-			  }
-			}
-			++sent_msg_;
-		}
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
-	}
-
-	read_set_.clear();
-
-	for (unordered_map<Key, Value*>::iterator it = remote_objects_.begin();
-       it != remote_objects_.end(); ++it)
-	{
-		delete it->second;
 	}
 
 	delete tpcc_args;
 	delete txn_;
 	delete message_;
 }
-
-
-//Value* StorageManager::SkipOrRead(const Key& key, int& read_state) {
-//	if (exec_counter_ == max_counter_){
-//		// The key is replicated locally, should broadcast to all readers
-//		// !TODO: only send the value when all previous txns finish
-//		if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-//			//LOG(txn_->txn_id(), "Trying to read local key "<<key);
-//			if (read_set_[key].second == NULL){
-//				ValuePair result = actual_storage_->ReadObject(key, txn_->txn_id(), &abort_bit_,
-//						num_restarted_, &read_set_[key], abort_queue_, pend_queue_);
-//				if(abort_bit_ > num_restarted_){
-//					LOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
-//					max_counter_ = 0;
-//					num_restarted_ = abort_bit_;
-//					read_state = SPECIAL;
-//					return reinterpret_cast<Value*>(TX_ABORTED);
-//				}
-//				else {
-//					if(result.first == SUSPENDED){
-//						read_state = SPECIAL;
-//						suspended_key = key;
-//						return reinterpret_cast<Value*>(SUSPENDED);
-//					}
-//					else{
-//						++exec_counter_;
-//						++max_counter_;
-//
-//						//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
-//						read_set_[key] = result;
-//						if (message_){
-//							LOG(txn_->txn_id(), "Adding to msg: "<<key);
-//							message_->add_keys(key);
-//							message_->add_values(result.second == NULL ? "" : *result.second);
-//							message_has_value_ = true;
-//						}
-//						return read_set_[key].second;
-//					}
-//				}
-//			}
-//			else{
-//				++exec_counter_;
-//				++max_counter_;
-//				return read_set_[key].second;
-//			}
-//		}
-//		else // The key is not replicated locally, the writer should wait
-//		{
-//			if (remote_objects_.count(key) > 0){
-//				++exec_counter_;
-//				++max_counter_;
-//				return remote_objects_[key];
-//			}
-//			else{ //Should be blocked
-//				LOG(txn_->txn_id(), "Does not have remote key: "<<key);
-//				read_state = SPECIAL;
-//				// The tranasction will perform the read again
-//				++get_blocked_;
-//				if (message_has_value_){
-//					if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
-//						LOG(txn_->txn_id(), ": blocked and sent.");
-//						SendLocalReads();
-//						return reinterpret_cast<Value*>(WAIT_AND_SENT);
-//					}
-//					else{
-//						LOG(txn_->txn_id(), ": blocked but no sent. ");
-//						return reinterpret_cast<Value*>(WAIT_NOT_SENT);
-//					}
-//				}
-//				else{
-//					LOG(txn_->txn_id(), ": blocked but has nothign to send. ");
-//					return reinterpret_cast<Value*>(WAIT_AND_SENT);
-//				}
-//			}
-//		}
-//	}
-//	else{
-//		++exec_counter_;
-//		read_state = SKIP;
-//		return NULL;
-//	}
-//}
 
 
 Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) {
@@ -320,7 +246,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 		max_counter_ = 0;
 		num_restarted_ = abort_bit_;
 		read_state = SPECIAL;
-		return reinterpret_cast<Value*>(TX_ABORTED);
+		return reinterpret_cast<Value*>(ABORT);
 	}
 	else{
 		if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
@@ -334,14 +260,14 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 					max_counter_ = 0;
 					num_restarted_ = abort_bit_;
 					read_state = SPECIAL;
-					return reinterpret_cast<Value*>(TX_ABORTED);
+					return reinterpret_cast<Value*>(ABORT);
 				}
 				else {
-					if(result.first == SUSPENDED){
+					if(result.first == SUSPEND){
 						read_state = SPECIAL;
 						suspended_key = key;
 						is_suspended_ = true;
-						return reinterpret_cast<Value*>(SUSPENDED);
+						return reinterpret_cast<Value*>(SUSPEND);
 					}
 					else{
 						LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
@@ -370,7 +296,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 			if (remote_objects_.count(key) > 0){
 				++exec_counter_;
 				++max_counter_;
-				return remote_objects_[key];
+				return &remote_objects_[key];
 			}
 			else{ //Should be blocked
 				LOG(txn_->txn_id(), "Does not have remote key: "<<key);
@@ -378,45 +304,17 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 				// The tranasction will perform the read again
 				++get_blocked_;
 				if (message_has_value_){
-					if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
-						LOG(txn_->txn_id(), ": blocked and sent.");
-						SendLocalReads();
-						return reinterpret_cast<Value*>(WAIT_AND_SENT);
-					}
-					else{
-						LOG(txn_->txn_id(), ": blocked but no sent. ");
-						return reinterpret_cast<Value*>(WAIT_NOT_SENT);
-					}
+					LOG(txn_->txn_id(), " blocked and sent.");
+					return reinterpret_cast<Value*>(SUSPEND_SHOULD_SEND);
 				}
 				else{
-					LOG(txn_->txn_id(), ": blocked but has nothign to send. ");
-					return reinterpret_cast<Value*>(WAIT_AND_SENT);
+					LOG(txn_->txn_id(), " blocked but has nothing to send. ");
+					return reinterpret_cast<Value*>(SUSPEND_NOT_SEND);
 				}
 			}
 		}
 	}
 }
-
-
-//if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-//		if(abort_bit_ == num_restarted_ && actual_storage_->LockObject(key, txn_->txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
-//			if(read_set_[key].first == NOT_COPY){
-//				read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
-//				LOG(txn_->txn_id(), " trying to create a copy for value "<<reinterpret_cast<int64>(read_set_[key].second));
-//			}
-//			read_set_[key].first = WRITE;
-//			new_pointer = read_set_[key].second;
-//			return true;
-//		}
-//		else{
-//			++abort_bit_;
-//			LOG(txn_->txn_id(), " lock failed, abort bit is "<<abort_bit_);
-//			//std::cout<<txn_->txn_id()<<" lock failed, abort bit is "<<std::endl;
-//			return false;
-//		}
-//    }
-//    else
-//  	  return true;  // The key will be locked by another partition.
 
 Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object) {
 	read_state = NORMAL;
@@ -425,7 +323,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		max_counter_ = 0;
 		num_restarted_ = abort_bit_;
 		read_state = SPECIAL;
-		return reinterpret_cast<Value*>(TX_ABORTED);
+		return reinterpret_cast<Value*>(ABORT);
 	}
 	else{
 		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
@@ -442,13 +340,13 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				// The value has never been read
 				ValuePair result = actual_storage_->ReadLock(key, txn_->local_txn_id(), &abort_bit_,
 									num_restarted_, abort_queue_, pend_queue_, new_object);
-				if(result.first == SUSPENDED){
-					//LOCKLOG(txn_->txn_id(), " suspended when read&lock "<<key<<", exec counter is "<<exec_counter_);
+				if(result.first == SUSPEND){
+					//LOCKLOG(txn_->txn_id(), " suspend when read&lock "<<key<<", exec counter is "<<exec_counter_);
 					read_state = SPECIAL;
 					suspended_key = key;
 					read_set_[key].first = WRITE | new_object;
 					is_suspended_ = true;
-					return reinterpret_cast<Value*>(SUSPENDED);
+					return reinterpret_cast<Value*>(SUSPEND);
 				}
 				else{
 					//LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
@@ -473,7 +371,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				++exec_counter_;
 				++max_counter_;
 				//LOG(txn_->txn_id(), " got remote key "<<key<<", txn's exec counter is "<<exec_counter_);
-				return remote_objects_[key];
+				return &remote_objects_[key];
 			}
 			else{ //Should be blocked
 				LOG(txn_->txn_id(), "Does not have remote key: "<<key);
@@ -481,43 +379,16 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				// The tranasction will perform the read again
 				++get_blocked_;
 				if (message_has_value_){
-					if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
-						LOG(txn_->txn_id(), ": blocked and sent.");
-						SendLocalReads();
-						return reinterpret_cast<Value*>(WAIT_AND_SENT);
-					}
-					else{
-						LOG(txn_->txn_id(), ": blocked but no sent. ");
-						return reinterpret_cast<Value*>(WAIT_NOT_SENT);
-					}
+					LOG(txn_->txn_id(), " blocked and sent.");
+					return reinterpret_cast<Value*>(SUSPEND_SHOULD_SEND);
 				}
 				else{
-					LOG(txn_->txn_id(), ": blocked but has nothign to send. ");
-					return reinterpret_cast<Value*>(WAIT_AND_SENT);
+					LOG(txn_->txn_id(), " blocked but has nothing to send.");
+					return reinterpret_cast<Value*>(SUSPEND_NOT_SEND);
 				}
 			}
 		}
 	}
-}
-
-void StorageManager::SendLocalReads(){
-	++sent_msg_;
-
-	message_->add_committed_txns(txn_->txn_id());
-	message_->add_final_abort_nums(0);
-	message_->set_num_aborted(0);
-
-	for (int i = 0; i < txn_->writers().size(); i++) {
-	  if (txn_->writers(i) != configuration_->this_node_id) {
-		  //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
-		  message_->set_destination_node(txn_->writers(i));
-		  connection_->Send1(*message_);
-	  }
-	}
-	message_->Clear();
-	message_->set_destination_channel(IntToString(txn_->txn_id()));
-	message_->set_type(MessageProto::READ_RESULT);
-	message_has_value_ = false;
 }
 
 

@@ -50,12 +50,15 @@ using tr1::unordered_map;
 #define SKIP 1
 #define SPECIAL 2
 
+
+
 // Tranasction execution return
-#define FINISHED 3
-#define WAIT_AND_SENT 4
-#define WAIT_NOT_SENT 5
-#define TX_ABORTED 6
-#define SUSPENDED 7
+#define SUCCESS 1
+#define ABORT 2
+#define SUSPEND 3
+#define SUSPEND_SHOULD_SEND 4
+#define SUSPEND_NOT_SEND 5
+#define NOT_CONFIRMED 6
 
 #define IS_COPY 2
 #define NOT_COPY 4
@@ -245,15 +248,25 @@ public:
 	}
 
 	MyTuple(){}
-
-	//MyTuple(const MyTuple& a) :
-	//	first(a.first), first(a.second), first(a.third)
-	//{
-//
-//	}
 };
 
+template<typename T1, typename T2, typename T3, typename T4>
+class MyFour{
+public:
+	T1 first;
+	T2 second;
+	T3 third;
+	T4 fourth;
 
+	MyFour(T1 t1, T2 t2, T3 t3, T4 t4){
+		first = t1;
+		second = t2;
+		third = t3;
+		fourth = t4;
+	}
+
+	MyFour(){}
+};
 
 class Mutex {
  public:
@@ -827,6 +840,15 @@ public:
     bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
     {
     	return (left.first > right.first);
+    }
+};
+
+class ComparePendingConfirm
+{
+public:
+    bool operator() (MyTuple<int64_t, int64, int> left, MyTuple<int64_t, int64, int> right)
+    {
+    	return (left.second > right.second);
     }
 };
 

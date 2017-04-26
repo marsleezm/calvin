@@ -34,6 +34,7 @@
 #include "proto/message.pb.h"
 #include "proto/tpcc_args.pb.h"
 #include "applications/tpcc.h"
+#include "common/connection.h"
 
 using std::vector;
 using std::tr1::unordered_map;
@@ -60,8 +61,31 @@ class StorageManager {
 
   ~StorageManager();
 
-  void SendLocalReads();
+  inline void SendLocalReads(bool if_confirmed){
+	  if(if_confirmed){
+		  message_->set_confirmed(true);
+		  ASSERT(abort_bit_ == num_restarted_);
+		  message_->set_num_aborted(num_restarted_);
+	  }
+//	  for(uint i = 0; i<to_confirm.size(); ++i){
+//		  message_->add_committed_txns(to_confirm[i].first);
+//		  message_->add_final_abort_nums(to_confirm[i].second);
+//		  LOG(txn_->txn_id(), " sending confirm of "<<to_confirm[i].first);
+//	  }
+	  for (int i = 0; i < txn_->writers().size(); i++) {
+		  if (txn_->writers(i) != configuration_->this_node_id) {
+			  //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
+			  message_->set_destination_node(txn_->writers(i));
+			  connection_->Send1(*message_);
+		  }
+	  }
 
+	  message_->clear_keys();
+	  message_->clear_values();
+	  message_has_value_ = false;
+  }
+
+  void SendConfirm(int last_restarted);
   void SetupTxn(TxnProto* txn);
 
   //Value* ReadObject(const Key& key);
@@ -104,7 +128,7 @@ class StorageManager {
   	  return NO_NEED;  // The key will be locked by another partition.
   }
 
-  void HandleReadResult(const MessageProto& message);
+  bool HandleReadResult(const MessageProto& message);
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
@@ -122,8 +146,28 @@ class StorageManager {
   }
 
   // Can commit, if the transaction is read-only or has spec-committed.
-  inline bool CanSCToCommit() { return  ReadOnly() || (spec_committed_ && num_restarted_ == abort_bit_) ;}
-  inline bool CanCommit() { return num_restarted_ == abort_bit_;}
+  inline int CanSCToCommit() {
+	  if (ReadOnly())
+		  return SUCCESS;
+	  else{
+		  if(num_restarted_ != abort_bit_)
+			  return ABORT;
+		  else if(spec_committed_ && num_unconfirmed_read == 0)
+			  return SUCCESS;
+		  else
+			  return NOT_CONFIRMED;
+	  }
+  }
+  inline int CanCommit() {
+	  if (num_restarted_ != abort_bit_)
+		  return ABORT;
+	  else if(num_unconfirmed_read == 0)
+		  return SUCCESS;
+	  else{
+		  LOG(txn_->txn_id(), " not confirmed, uc read is "<<num_unconfirmed_read);
+		  return NOT_CONFIRMED;
+	  }
+  }
 
   inline void Init(){
 	  exec_counter_ = 0;
@@ -178,11 +222,28 @@ class StorageManager {
   void Abort();
   void ApplyChange(bool is_committing);
 
+  inline void AddReadConfirm(int node_id, int num_aborted){
+	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
+		  if(latest_aborted_num[i].first == node_id){
+			  if(latest_aborted_num[i].second == num_aborted) {
+				  --num_unconfirmed_read;
+				  LOG(txn_->txn_id(), "done confirming read from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
+			  }
+			  else{
+				  pending_read_confirm.push_back(make_pair(node_id, num_aborted));
+				  LOG(txn_->txn_id(), "failed confirming read from node "<<node_id<<", local is "<<latest_aborted_num[i].second
+						  <<", got is "<<num_aborted);
+			  }
+			  break;
+		  }
+	  }
+  }
+
  private:
 
   // Set by the constructor, indicating whether 'txn' involves any writes at
   // this node.
-  bool writer;
+  //bool writer;
 
 // private:
   friend class DeterministicScheduler;
@@ -201,19 +262,12 @@ class StorageManager {
 
   // Local copy of all data objects read/written by 'txn_', populated at
   // TxnManager construction time.
-  //
-  // TODO(alex): Should these be pointers to reduce object copying overhead?
-  // The first one of the pair indicates whether I should create a copy of this object
-  // when I try to modify the object.
-  //unordered_map<Key, ValuePair> write_set_;
   unordered_map<Key, ValuePair> read_set_;
-  unordered_map<Key, Value*> remote_objects_;
+  unordered_map<Key, Value> remote_objects_;
 
   // The message containing read results that should be sent to remote nodes
   MessageProto* message_;
 
-  // Indicate whether the message contains any value that should be sent
-  bool message_has_value_;
 
   // Counting how many transaction steps the current tranasction is executing
   int exec_counter_;
@@ -226,7 +280,13 @@ class StorageManager {
 
   TPCCArgs* tpcc_args;
 
+  int num_unconfirmed_read;
+  vector<pair<int, int>> latest_aborted_num;
+  vector<pair<int, int>> pending_read_confirm;
+
  public:
+  // Indicate whether the message contains any value that should be sent
+  bool message_has_value_;
   bool is_suspended_;
   bool spec_committed_;
   atomic<int> abort_bit_;
