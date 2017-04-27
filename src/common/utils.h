@@ -270,12 +270,6 @@ public:
 	}
 
 	MyFour(){}
-
-	//MyTuple(const MyTuple& a) :
-	//	first(a.first), first(a.second), first(a.third)
-	//{
-//
-//	}
 };
 
 
@@ -860,6 +854,15 @@ public:
     bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
     {
     	return (left.first > right.first);
+    }
+};
+
+class CompareFour
+{
+public:
+    bool operator() (MyFour<int64_t, int64_t, int, bool> left, MyFour<int64_t, int64_t, int, bool> right)
+    {
+    	return (left.second > right.second);
     }
 };
 

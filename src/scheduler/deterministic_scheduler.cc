@@ -90,7 +90,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	for (int i = 0; i < num_threads; i++) {
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
-		pending_txns_[i] = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>();
+		pending_txns_[i] = new priority_queue<MyFour<int64_t, int64_t, int, bool>,  vector<MyFour<int64_t, int64_t, int, bool> >,
+				CompareFour>();
 		num_suspend[i] = 0;
 
 		block_time[i] = 0;
@@ -154,7 +155,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
   priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* my_to_sc_txns
   	  = scheduler->to_sc_txns_[thread];
-  priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* my_pend_txns
+  priority_queue<MyFour<int64_t, int64_t, int, bool>,  vector<MyFour<int64_t, int64_t, int, bool> >, CompareFour>* my_pend_txns
   	  = scheduler->pending_txns_[thread];
   AtomicQueue<pair<int64_t, int>> abort_queue;
   AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;
@@ -165,7 +166,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   unordered_map<int64_t, StorageManager*> active_g_tids;
   unordered_map<int64_t, StorageManager*> active_l_tids;
   StorageManager* retry_mgr= NULL, *mgr = NULL;
-  queue<StorageManager*> retry_txns;
+  queue<pair<int64_t, StorageManager*>> retry_txns;
 
   uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
   int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
@@ -219,7 +220,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids);
 				  --scheduler->num_suspend[thread];
 				  if(retry_mgr != NULL)
-					  retry_txns.push(retry_mgr);
+					  retry_txns.push(make_pair(to_wait_txn.first, retry_mgr));
 			  }
 			  else{
 				  // The txn is aborted, delete copied value! TODO: Maybe we could leave the value in case we need it
@@ -232,13 +233,71 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 	  }
-	  else if (!abort_queue.Empty()){
+	  // Try to re-execute pending transactions
+	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
+		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+		  MyFour<int64_t, int64_t, int, bool> pend_txn = my_pend_txns->top();
+
+
+		  int num_aborted = active_g_tids[pend_txn.first]->abort_bit_;
+		  while (!my_pend_txns->empty() && pend_txn.second <= Sequencer::num_lc_txns_ ){
+			  my_pend_txns->pop();
+			  if(pend_txn.third == num_aborted)
+				  break;
+			  else
+				  pend_txn = my_pend_txns->top();
+		  }
+		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.fourth<<", num restart is "<< pend_txn.third
+				  <<", abort is "<<pend_txn.fourth);
+
+		  // This pend request may have expired!
+		  if(pend_txn.second == Sequencer::num_lc_txns_  && pend_txn.third == active_g_tids[pend_txn.first]->abort_bit_)
+		  {
+			  if(pend_txn.fourth == TO_SEND){
+				  LOG(pend_txn.first," send remote message!!!");
+				  active_g_tids[pend_txn.first]->SendLocalReads();
+			  }
+			  else{
+				  StorageManager* manager = active_g_tids[pend_txn.first];
+				  int result = scheduler->application_->Execute(manager);
+				  if (result == WAIT_AND_SENT){
+					  LOG(-1, pend_txn.first<<": wait and sent!!!");
+				  }
+				  else if (result == TX_ABORTED){
+					  LOG(-1, pend_txn.first<<" got aborted, trying to unlock then restart! Mgr is "<<manager);
+					  manager->Abort();
+					  ++Sequencer::num_aborted_;
+					  retry_txns.push(make_pair(pend_txn.second, manager));
+				  }
+				  else{
+					  //ASSERT(Sequencer::max_commit_ts < pend_txn.first);
+					  manager->ApplyChange(true);
+					  //Sequencer::max_commit_ts = pend_txn.first;
+					  ++Sequencer::num_lc_txns_;
+					  //--Sequencer::num_pend_txns_;
+					  //scheduler->num_suspend[thread] -= manager->was_suspended_;
+					  active_g_tids.erase(pend_txn.first);
+					  active_l_tids.erase(pend_txn.second);
+					  delete manager;
+					  LOG(-1, pend_txn.first<< " committed!");
+				  }
+			  }
+		  }
+	  }
+	 //else{
+	//	 if(my_pend_txns->size())
+	//		 LOG(-1, " my pend size is "<<my_pend_txns->size()<<", my pend is first is "<<my_pend_txns->top().second);
+		 //else
+		//	 LOG(-1, " my pend size is empty");
+	 //}
+
+	 else if (!abort_queue.Empty()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
-		  LOG(-1, "In to-abort, the first one is "<< to_abort_txn.first);
+		  LOG(to_abort_txn.first, " is tested to be restarted, num lc is "<<Sequencer::num_lc_txns_);
 		  if(to_abort_txn.first >= Sequencer::num_lc_txns_){
-			  LOG(-1, "To abort txn is "<< to_abort_txn.first);
+			  LOG(to_abort_txn.first, " is not out-dated");
 			  StorageManager* manager = active_l_tids[to_abort_txn.first];
 			  if (manager && manager->ShouldRestart(to_abort_txn.second)){
 				  scheduler->num_suspend[thread] -= manager->is_suspended_;
@@ -246,20 +305,21 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager->Abort();
 				  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids);
 				  if(retry_mgr != NULL)
-					  retry_txns.push(retry_mgr);
+					  retry_txns.push(make_pair(to_abort_txn.first, retry_mgr));
 			  }
 		  }
 		  //Abort this transaction
 	  }
 
 	  // Received remote read
-	  else if (scheduler->message_queues[thread]->Pop(&message)) {
+	 else if (scheduler->message_queues[thread]->Pop(&message)) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  ASSERT(message.type() == MessageProto::READ_RESULT);
 		  int txn_id = atoi(message.destination_channel().c_str());
 		  LOG(txn_id, ": got remote msg from" << message.source_node());
 		  //std::cout<<txn_id<<" wtf, got remote msg from "<<message.source_node()<<std::endl;
 		  StorageManager* manager = active_g_tids[txn_id];
+		  LOG(txn_id, " got remote msg from" << message.source_node());
 		  if (manager == NULL){
 			  manager = new StorageManager(scheduler->configuration_,
 							   scheduler->thread_connections_[thread],
@@ -276,13 +336,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  LOG(txn_id, " is waiting for remote read again!");
 
 					  // There are outstanding remote reads.
+					  active_l_tids[txn_id] = manager;
 					  active_g_tids[txn_id] = manager;
 				  }
 				  else if (result == TX_ABORTED){
 						LOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 						manager->Abort();
 						++Sequencer::num_aborted_;
-						retry_txns.push(manager);
+						retry_txns.push(make_pair(txn->local_txn_id(), manager));
 				  }
 				  else{
 					  ASSERT(result == SUCCESS);
@@ -290,6 +351,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  //ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 					  manager->ApplyChange(true);
 					  //Sequencer::max_commit_ts = txn->txn_id();
+					  while (!my_pend_txns->empty() && my_pend_txns->top().second <= Sequencer::num_lc_txns_)
+						  my_pend_txns->pop();
 					  ++Sequencer::num_lc_txns_;
 					  //--Sequencer::num_pend_txns_;
 
@@ -309,64 +372,20 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  else{
 				  // Blocked, can not read
-				  LOG(txn_id, " can not read, pushed to pend_txn");
-				  my_pend_txns->push(MyTuple<int64_t, int64_t, bool>(txn_id, txn->local_txn_id(), TO_READ));
+				  my_pend_txns->push(MyFour<int64_t, int64_t, int, bool>(txn_id, txn->local_txn_id(), manager->num_restarted_, TO_READ));
 			  }
 		  }
 	  }
-	  // Try to re-execute pending transactions
-	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
+	 else if(retry_txns.size()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  MyTuple<int64_t, int64_t, bool> pend_txn = my_pend_txns->top();
-
-		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.third);
-
-		  while (!my_pend_txns->empty()){
-			  if(my_pend_txns->top().second <= pend_txn.second)
-				  my_pend_txns->pop();
-			  else
-			  {
-				  LOG(my_pend_txns->top().second, " is the first one, can not remove!");
-				  break;
-			  }
-		  }
-
-		  if(pend_txn.third == TO_SEND){
-			  LOG(pend_txn.first," send remote message!!!");
-			  active_g_tids[pend_txn.first]->SendLocalReads();
-		  }
-		  else{
-			  StorageManager* manager = active_g_tids[pend_txn.first];
-			  int result = scheduler->application_->Execute(manager);
-			  if (result == WAIT_AND_SENT){
-				  LOG(-1, pend_txn.first<<": wait and sent!!!");
-			  }
-			  else if (result == TX_ABORTED){
-				  LOG(-1, pend_txn.first<<" got aborted, trying to unlock then restart! Mgr is "<<manager);
-				  manager->Abort();
-				  ++Sequencer::num_aborted_;
-				  retry_txns.push(manager);
-			  }
-			  else{
-				  //ASSERT(Sequencer::max_commit_ts < pend_txn.first);
-				  manager->ApplyChange(true);
-				  //Sequencer::max_commit_ts = pend_txn.first;
-				  ++Sequencer::num_lc_txns_;
-				  //--Sequencer::num_pend_txns_;
-				  //scheduler->num_suspend[thread] -= manager->was_suspended_;
-				  active_g_tids.erase(pend_txn.first);
-				  active_l_tids.erase(pend_txn.second);
-				  delete manager;
-				  LOG(-1, pend_txn.first<< " committed!");
-			  }
-		  }
-	  }
-	  else if(retry_txns.size()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  LOCKLOG(retry_txns.front()->get_txn()->txn_id(), " before retrying txn ");
-		  retry_mgr = scheduler->ExecuteTxn(retry_txns.front(), thread, active_g_tids, active_l_tids);
-		  if(retry_mgr == NULL)
+		  LOCKLOG(retry_txns.front().first, " before retrying txn ");
+		  if(retry_txns.front().first < Sequencer::num_lc_txns_ || retry_txns.front().second->is_suspended_)
 			  retry_txns.pop();
+		  else{
+			  retry_mgr = scheduler->ExecuteTxn(retry_txns.front().second, thread, active_g_tids, active_l_tids);
+			  if(retry_mgr == NULL)
+				  retry_txns.pop();
+		  }
 	  }
 	  // Try to start a new transaction
 	  else if (my_to_sc_txns->size() <= max_sc && my_pend_txns->size() <= max_pend && scheduler->num_suspend[thread]<=max_suspend) {
@@ -391,7 +410,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  retry_mgr = scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids);
 			  if(retry_mgr != NULL)
-				  retry_txns.push(retry_mgr);
+				  retry_txns.push(make_pair(txn->local_txn_id(), retry_mgr));
 		  }
 //		  else{
 //			  if(out_counter & 67108864){
@@ -457,13 +476,15 @@ StorageManager* DeterministicScheduler::ExecuteTxn(StorageManager* manager, int 
 		else if (result == WAIT_AND_SENT){
 			// There are outstanding remote reads.
 			LOCKLOG(txn->txn_id(),  " wait and sent for remote read");
+			active_l_tids[txn->local_txn_id()] = manager;
 			active_g_tids[txn->txn_id()] = manager;
 			//++Sequencer::num_pend_txns_;
 			return NULL;
 		}
 		else if (result == WAIT_NOT_SENT) {
 			LOCKLOG(txn->txn_id(),  " wait but not sent for remote read");
-			pending_txns_[thread]->push(MyTuple<int64_t, int64_t, bool>(txn->txn_id(), txn->local_txn_id(), TO_SEND));
+			pending_txns_[thread]->push(MyFour<int64_t, int64_t, int, bool>(txn->txn_id(), txn->local_txn_id(), manager->num_restarted_, TO_SEND));
+			active_l_tids[txn->local_txn_id()] = manager;
 			active_g_tids[txn->txn_id()] = manager;
 			//++Sequencer::num_pend_txns_;
 			return NULL;
