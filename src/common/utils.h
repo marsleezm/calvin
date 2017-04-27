@@ -253,6 +253,25 @@ public:
 //	}
 };
 
+template<typename T1, typename T2, typename T3, typename T4>
+class MyFour{
+public:
+	T1 first;
+	T2 second;
+	T3 third;
+	T4 fourth;
+
+	MyFour(T1 t1, T2 t2, T3 t3, T4 t4){
+		first = t1;
+		second = t2;
+		third = t3;
+		fourth = t4;
+	}
+
+	MyFour(){}
+};
+
+
 
 
 class Mutex {
@@ -827,6 +846,15 @@ public:
     bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
     {
     	return (left.first > right.first);
+    }
+};
+
+class CompareFour
+{
+public:
+    bool operator() (MyFour<int64_t, int64_t, int, bool> left, MyFour<int64_t, int64_t, int, bool> right)
+    {
+    	return (left.second > right.second);
     }
 };
 

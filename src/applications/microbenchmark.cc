@@ -298,8 +298,10 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 				else
 					return reinterpret_cast<int64>(index_val);
 			}
-			else
+			else{
 				indexed_key = tpcc_args->indexed_keys(i);
+				LOG(txn->txn_id(), " skipped, indexed_key is "<<indexed_key);
+			}
 
 			if(storage->ShouldRead()){
 				next_val = storage->ReadLock(indexed_key, read_state, false);
@@ -310,6 +312,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 					return reinterpret_cast<int64>(next_val);
 			}
 		}
+		LOG(txn->txn_id(), " trying to read non-indexed");
 		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++) {
 			if(storage->ShouldRead()){
 				Value* index_val = storage->ReadLock(txn->read_write_set(i+indexAccessNum), read_state, false);

@@ -192,9 +192,9 @@ void StorageManager::ApplyChange(bool is_committing){
 void StorageManager::HandleReadResult(const MessageProto& message) {
   ASSERT(message.type() == MessageProto::READ_RESULT);
   for (int i = 0; i < message.keys_size(); i++) {
-    Value* val = new Value(message.values(i));
-    remote_objects_[message.keys(i)] = val;
-    //LOG(txn_->txn_id(), "Handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
+	  Value* val = new Value(message.values(i));
+	  remote_objects_[message.keys(i)] = val;
+	  LOG(StringToInt(message.destination_channel()), "Handle remote to add " << message.keys(i)<<" with value "<<message.values(i));
   }
 }
 
@@ -324,7 +324,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 	}
 	else{
 		if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-			//LOG(txn_->txn_id(), "Trying to read local key "<<key);
+			LOG(txn_->txn_id(), "Trying to read local key "<<key);
 			if (read_set_[key].second == NULL){
 				read_set_[key].first = read_set_[key].first | new_obj;
 				ValuePair result = actual_storage_->ReadObject(key, txn_->local_txn_id(), &abort_bit_,
@@ -379,17 +379,17 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 				++get_blocked_;
 				if (message_has_value_){
 					if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
-						LOG(txn_->txn_id(), ": blocked and sent.");
+						LOG(txn_->txn_id(), " blocked and sent.");
 						SendLocalReads();
 						return reinterpret_cast<Value*>(WAIT_AND_SENT);
 					}
 					else{
-						LOG(txn_->txn_id(), ": blocked but no sent. ");
+						LOG(txn_->txn_id(), " blocked but no sent. ");
 						return reinterpret_cast<Value*>(WAIT_NOT_SENT);
 					}
 				}
 				else{
-					LOG(txn_->txn_id(), ": blocked but has nothign to send. ");
+					LOG(txn_->txn_id(), " blocked but has nothing to send. ");
 					return reinterpret_cast<Value*>(WAIT_AND_SENT);
 				}
 			}
@@ -428,10 +428,11 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		return reinterpret_cast<Value*>(TX_ABORTED);
 	}
 	else{
+		LOG(txn_->txn_id(), " trying to read lock "<<key);
 		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 			// The value has been read already
 			if(read_set_.count(key)){
-				//LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
+				LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
 				//LOG(txn_->txn_id(), "Trying to read local key "<<key<<", addr is "<<reinterpret_cast<int64>(&read_set_[key]));
 				ASSERT(read_set_[key].second != NULL);
 				++exec_counter_;
@@ -443,7 +444,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				ValuePair result = actual_storage_->ReadLock(key, txn_->local_txn_id(), &abort_bit_,
 									num_restarted_, abort_queue_, pend_queue_, new_object);
 				if(result.first == SUSPENDED){
-					//LOCKLOG(txn_->txn_id(), " suspended when read&lock "<<key<<", exec counter is "<<exec_counter_);
+					LOCKLOG(txn_->txn_id(), " suspended when read&lock "<<key<<", exec counter is "<<exec_counter_);
 					read_state = SPECIAL;
 					suspended_key = key;
 					read_set_[key].first = WRITE | new_object;
@@ -451,14 +452,14 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					return reinterpret_cast<Value*>(SUSPENDED);
 				}
 				else{
-					//LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
+					LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
 					++exec_counter_;
 					++max_counter_;
 					//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
 					result.first = result.first | new_object;
 					read_set_[key] = result;
 					if (message_){
-						LOG(txn_->txn_id(), "Adding to msg: "<<key);
+						LOG(txn_->txn_id(), "Adding to msg: "<<key<<" with value"<<*result.second);
 						message_->add_keys(key);
 						message_->add_values(result.second == NULL ? "" : *result.second);
 						message_has_value_ = true;
@@ -482,17 +483,17 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				++get_blocked_;
 				if (message_has_value_){
 					if (Sequencer::num_lc_txns_ == txn_->local_txn_id()){
-						LOG(txn_->txn_id(), ": blocked and sent.");
+						LOG(txn_->txn_id(), " blocked and sent.");
 						SendLocalReads();
 						return reinterpret_cast<Value*>(WAIT_AND_SENT);
 					}
 					else{
-						LOG(txn_->txn_id(), ": blocked but no sent. ");
+						LOG(txn_->txn_id(), " blocked but no sent. ");
 						return reinterpret_cast<Value*>(WAIT_NOT_SENT);
 					}
 				}
 				else{
-					LOG(txn_->txn_id(), ": blocked but has nothign to send. ");
+					LOG(txn_->txn_id(), " blocked but has nothing to send. ");
 					return reinterpret_cast<Value*>(WAIT_AND_SENT);
 				}
 			}
@@ -509,7 +510,8 @@ void StorageManager::SendLocalReads(){
 		  connection_->Send1(*message_);
 	  }
 	}
-	message_->Clear();
+	message_->clear_keys();
+	message_->clear_values();
 	message_->set_destination_channel(IntToString(txn_->txn_id()));
 	message_->set_type(MessageProto::READ_RESULT);
 	message_has_value_ = false;
