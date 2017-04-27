@@ -307,11 +307,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  if(retry_mgr != NULL)
 					  retry_txns.push(make_pair(to_abort_txn.first, retry_mgr));
 			  }
-			  else{
-				  if(manager)
-					  LOG(-1, " not restarting, indicated is "<< to_abort_txn.second<<", abort bit is "<<manager->abort_bit_<<", restarted is "
-							  <<manager->num_restarted_);
-			  }
 		  }
 		  //Abort this transaction
 	  }
@@ -339,6 +334,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  LOG(txn_id, " is waiting for remote read again!");
 
 					  // There are outstanding remote reads.
+					  active_l_tids[txn_id] = manager;
 					  active_g_tids[txn_id] = manager;
 				  }
 				  else if (result == TX_ABORTED){
