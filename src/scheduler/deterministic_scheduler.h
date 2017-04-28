@@ -100,7 +100,7 @@ class DeterministicScheduler : public Scheduler {
 //  	  }
 //    }
 
-  StorageManager* ExecuteTxn(StorageManager* manager, int thread,
+  bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
