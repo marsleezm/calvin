@@ -63,6 +63,7 @@ class StorageManager {
 
   inline void SendLocalReads(bool if_confirmed){
 	  if(if_confirmed){
+		  has_confirmed = true;
 		  message_->set_confirmed(true);
 		  ASSERT(abort_bit_ == num_restarted_);
 	  }
@@ -129,7 +130,7 @@ class StorageManager {
   	  return NO_NEED;  // The key will be locked by another partition.
   }
 
-  bool HandleReadResult(const MessageProto& message);
+  int HandleReadResult(const MessageProto& message);
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
@@ -173,6 +174,8 @@ class StorageManager {
   inline void Init(){
 	  exec_counter_ = 0;
 	  is_suspended_ = false;
+	  after_local_node = false;
+	  node_count = -1;
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
@@ -199,6 +202,7 @@ class StorageManager {
   inline bool ShouldRead()
   {
 	  if (exec_counter_ < max_counter_){
+		  LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
 		  ++exec_counter_;
 		  return false;
 	  }
@@ -281,6 +285,12 @@ class StorageManager {
 
   TPCCArgs* tpcc_args;
 
+  // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
+  // in my transaction
+  bool after_local_node;
+  int* affecting_readers;
+  int node_count;
+
   int num_unconfirmed_read;
   vector<pair<int, int>> latest_aborted_num;
   vector<pair<int, int>> pending_read_confirm;
@@ -296,8 +306,7 @@ class StorageManager {
   Key suspended_key;
 
   /****** For statistics ********/
-  bool is_blocked_;
-  int sent_msg_;
+  bool has_confirmed = false;
 };
 
 #endif  // _DB_BACKEND_STORAGE_MANAGER_H_

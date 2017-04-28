@@ -393,7 +393,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
                                           int64 txn_id, bool is_committing, bool new_object) {
 	//return true;
 	//ASSERT(objects_.count(key) != 0);
-	LOG(txn_id, " putting data for "<<key);
+	LOG(txn_id, " putting data for "<<key<<", value is "<<value<<", addr is "<<reinterpret_cast<int64>(value));
 	KeyEntry* entry;
 	if(new_object){
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;

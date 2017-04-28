@@ -428,6 +428,26 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	int order_line_amount_total = 0;
 	double system_time = tpcc_args->system_time();
 
+    // Create an order key to add to write set
+	// Next we create an Order object
+    char order_key[128];
+    snprintf(order_key, sizeof(order_key), "%so%d",
+             district_key.c_str(), order_number);
+
+	// Retrieve the customer we are looking for
+    Key customer_key = txn->read_set(1);
+    if(storage->ShouldRead()){
+		val = storage->ReadLock(customer_key, read_state, false);
+		if (read_state == SPECIAL)
+			return reinterpret_cast<int64>(val);
+		else if(read_state == NORMAL){
+	    	Customer customer;
+			assert(customer.ParseFromString(*val));
+			customer.set_last_order(order_key);
+			assert(customer.SerializeToString(val));
+		}
+    }
+
 	for (int i = 0; i < order_line_count; i++) {
 		// For each order line we parse out the three args
 		string stock_key = txn->read_write_set(i + 1);
@@ -464,7 +484,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 				assert(stock.SerializeToString(val));
 
 
-
 				OrderLine order_line;
 				char order_line_key[128];
 				snprintf(order_line_key, sizeof(order_line_key), "%so%dol%d", district_key.c_str(), order_number, i);
@@ -499,26 +518,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		// Next, we create a new order line object with std attributes
 
 	}
-
-    // Create an order key to add to write set
-	// Next we create an Order object
-    char order_key[128];
-    snprintf(order_key, sizeof(order_key), "%so%d",
-             district_key.c_str(), order_number);
-
-	// Retrieve the customer we are looking for
-    Key customer_key = txn->read_set(1);
-    if(storage->ShouldRead()){
-		val = storage->ReadLock(customer_key, read_state, false);
-		if (read_state == SPECIAL)
-			return reinterpret_cast<int64>(val);
-		else if(read_state == NORMAL){
-	    	Customer customer;
-			assert(customer.ParseFromString(*val));
-			customer.set_last_order(order_key);
-			assert(customer.SerializeToString(val));
-		}
-    }
 
 	// We write the order to storage
     int result = storage->LockObject(order_key, val_copy);

@@ -74,7 +74,7 @@ class DeterministicScheduler : public Scheduler {
 	  active_txns.erase(txn_id);
   }
 
-  StorageManager* ExecuteTxn(StorageManager* manager, int thread,
+  bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
 		  priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);

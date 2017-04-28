@@ -34,7 +34,7 @@ using tr1::unordered_map;
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 100
 
-#define NUM_THREADS 5
+#define NUM_THREADS 2
 
 #define ASSERTS_ON true
 
@@ -59,6 +59,7 @@ using tr1::unordered_map;
 #define SUSPEND_SHOULD_SEND 4
 #define SUSPEND_NOT_SEND 5
 #define NOT_CONFIRMED 6
+#define DO_NOTHING 7
 
 #define IS_COPY 2
 #define NOT_COPY 4
