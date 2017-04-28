@@ -198,11 +198,15 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 			  }
 			  else{
 				  for(int i = 0; i< node_count; ++i){
+					  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", source node is "<<source_node<<std::endl;
 					  if (source_node == affecting_readers[i]){
 						  ++abort_bit_;
+						  num_restarted_ = abort_bit_;
+						  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", I am aborted due to read!"<<std::endl;
 						  return ABORT;
 					  }
 				  }
+				  //std::cout<<source_node<<" does not belong to my affectig nodes, not aborting myself"<<std::endl;
 				  return DO_NOTHING;
 			  }
 		  }
@@ -210,6 +214,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  if(txn_)
 		  AGGRLOG(txn_->txn_id(), " WTF, I didn't find anyone in the list? Impossible.");
 	  ++abort_bit_;
+	  num_restarted_ = abort_bit_;
 	  return ABORT;
   }
   else{
@@ -242,11 +247,15 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 				  else{
 					  latest_aborted_num[i].second = message.num_aborted();
 					  for(int i = 0; i< node_count; ++i){
+						  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", source node is "<<source_node<<std::endl;
 						  if (source_node == affecting_readers[i]){
 							  ++abort_bit_;
+							  num_restarted_ = abort_bit_;
+							  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", I am aborted due to read!"<<std::endl;
 							  return ABORT;
 						  }
 					  }
+					  //std::cout<<source_node<<" does not belong to my affectig nodes, not aborting myself"<<std::endl;
 					  return DO_NOTHING;
 				  }
 			  }
@@ -260,6 +269,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  if(txn_)
 		  AGGRLOG(txn_->txn_id(), " NOT POSSIBLE! I did not find my entry...");
 	  ++abort_bit_;
+	  num_restarted_ = abort_bit_;
 	  return ABORT;
   }
 }
