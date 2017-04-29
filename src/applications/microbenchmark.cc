@@ -269,7 +269,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 	storage->Init();
 
 	if(txn->txn_type() & DEPENDENT_MASK){
-		LOCKLOG(txn->txn_id(), " transactions is dependent!");
+		//LOCKLOG(txn->txn_id(), " transactions is dependent!");
 		if (storage->ShouldExec())
 		{
 			Rand rand;

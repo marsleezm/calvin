@@ -198,7 +198,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  scheduler->application_->ExecuteReadOnly(mgr);
 
 				  active_g_tids.erase(to_sc_txn.first);
-				  LOG(to_sc_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(mgr));
+				  //LOG(to_sc_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(mgr));
 				  active_l_tids.erase(to_sc_txn.second);
 				  delete mgr;
 				  my_to_sc_txns->pop();
@@ -510,7 +510,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					//Sequencer::max_commit_ts = txn->txn_id();
 					++Sequencer::num_lc_txns_;
 					active_g_tids.erase(txn->txn_id());
-					LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
+					//LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					active_l_tids.erase(txn->local_txn_id());
 					//num_suspend[thread] -= manager->was_suspended_;
 					delete manager;
@@ -529,7 +529,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				LOCKLOG(txn->txn_id(), " spec-committing, tid is "<<txn->local_txn_id()<<", addr is "<<reinterpret_cast<int64>(manager)<<" num committed txn is "<<Sequencer::num_lc_txns_);
 				//active_g_tids[txn->txn_id()] = manager;
 				active_l_tids[txn->local_txn_id()] = manager;
-				LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
+				//LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 				to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 				return true;
 			}
