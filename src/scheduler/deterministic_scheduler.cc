@@ -248,12 +248,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyFour<int64_t, int64_t, int, bool> pend_txn = my_pend_txns->top();
-		  LOG(pend_txn.first, " is the first one ine pending");
 
-		  int num_aborted = active_g_tids[pend_txn.first]->abort_bit_;
 		  while (!my_pend_txns->empty() && pend_txn.second <= Sequencer::num_lc_txns_ ){
 			  my_pend_txns->pop();
-			  if(pend_txn.third == num_aborted)
+			  LOG(pend_txn.first, " is popped out from pending");
+			  if(pend_txn.third == active_g_tids[pend_txn.first]->abort_bit_)
 				  break;
 			  else
 				  pend_txn = my_pend_txns->top();
@@ -488,8 +487,8 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			return true;
 		}
 		else if (result == WAIT_NOT_SENT) {
-			LOCKLOG(txn->txn_id(),  " wait but not sent for remote read");
 			pending_txns_[thread]->push(MyFour<int64_t, int64_t, int, bool>(txn->txn_id(), txn->local_txn_id(), manager->num_restarted_, TO_SEND));
+			LOCKLOG(txn->txn_id(),  " wait but not sent for remote read");
 			active_l_tids[txn->local_txn_id()] = manager;
 			active_g_tids[txn->txn_id()] = manager;
 			//++Sequencer::num_pend_txns_;
