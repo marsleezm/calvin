@@ -249,9 +249,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyFour<int64_t, int64_t, int, bool> pend_txn = my_pend_txns->top();
 
-		  while (!my_pend_txns->empty() && pend_txn.second <= Sequencer::num_lc_txns_ ){
+		  while (!my_pend_txns->empty() && pend_txn.second == Sequencer::num_lc_txns_ ){
 			  my_pend_txns->pop();
-			  LOG(pend_txn.first, " is popped out from pending");
+			  LOG(pend_txn.first, " is popped out from pending "<<pend_txn.second);
 			  if(pend_txn.third == active_g_tids[pend_txn.first]->abort_bit_)
 				  break;
 			  else
@@ -360,8 +360,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  //ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 					  manager->ApplyChange(true);
 					  //Sequencer::max_commit_ts = txn->txn_id();
-					  while (!my_pend_txns->empty() && my_pend_txns->top().second <= Sequencer::num_lc_txns_)
+					  while (!my_pend_txns->empty() && my_pend_txns->top().second <= Sequencer::num_lc_txns_){
+						  LOG(my_pend_txns->top().first, " is popped out of the queue "<<my_pend_txns->top().second);
 						  my_pend_txns->pop();
+					  }
 					  ++Sequencer::num_lc_txns_;
 					  //--Sequencer::num_pend_txns_;
 
