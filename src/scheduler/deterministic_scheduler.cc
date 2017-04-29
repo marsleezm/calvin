@@ -334,7 +334,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  LOG(txn_id, " is waiting for remote read again!");
 
 					  // There are outstanding remote reads.
-					  active_l_tids[txn_id] = manager;
+					  active_l_tids[txn->local_txn_id()] = manager;
 					  active_g_tids[txn_id] = manager;
 				  }
 				  else if (result == TX_ABORTED){
