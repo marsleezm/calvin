@@ -206,7 +206,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 	}
 
 	pthread_mutex_lock(&entry->mutex_);
-	LOG(txn_id, " trying to get lock for ["<<key<<"].");
+	//LOG(txn_id, " trying to get lock for ["<<key<<"].");
 	// Someone before me has locked this version, I should wait
 	if(entry->lock.tx_id_ < txn_id) {
 		entry->pend_list->push_back(PendingReadEntry(txn_id, abort_bit, num_aborted, pend_queue, abort_queue, true));
@@ -260,7 +260,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 
 		// Read the latest version and leave read dependency
 		ValuePair value_pair;
-		LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
+		//LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
 		for (DataNode* list = entry->head; list; list = list->next) {
 			if (list->txn_id <= txn_id) {
 				// Read the version and
