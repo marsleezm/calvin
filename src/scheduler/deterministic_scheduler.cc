@@ -474,7 +474,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		LOCKLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id());
 		int result = application_->Execute(manager);
 		if (result == SUSPENDED){
-			LOCKLOG(txn->txn_id(),  " suspended, addr of manager is "<<reinterpret_cast<int64>(manager));
+			//LOCKLOG(txn->txn_id(),  " suspended, addr of manager is "<<reinterpret_cast<int64>(manager));
 			active_l_tids[txn->local_txn_id()] = manager;
 			++num_suspend[thread];
 			return true;
