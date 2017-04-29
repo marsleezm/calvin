@@ -13,7 +13,7 @@
 
 struct None { };
 
-static pthread_mutex_t stdout_mutex;
+//static pthread_mutex_t stdout_mutex;
 
 template <typename First,typename Second>
 struct Pair {
