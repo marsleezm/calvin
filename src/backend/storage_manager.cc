@@ -201,7 +201,7 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	LOCKLOG(txn_->txn_id(), " committing and cleaning");
+	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
 		LOG(txn_->txn_id(), "Has message");
 		if (message_has_value_){

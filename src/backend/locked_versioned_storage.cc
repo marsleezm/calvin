@@ -219,20 +219,19 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 	else{
 		if (entry->lock.tx_id_ != NO_LOCK) {
 			//Try to abort this transaction
-			LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
+			//LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
 			bool result = std::atomic_compare_exchange_strong(entry->lock.abort_bit_,
 					&entry->lock.num_aborted_, entry->lock.num_aborted_+1);
 
 			//If the transaction has actually been restarted already.
 			if (result){
-				LOG(txn_id, " add "<<entry->lock.tx_id_<<" to abort queue, key is "<<key);
+				//LOG(txn_id, " add "<<entry->lock.tx_id_<<" to abort queue, key is "<<key);
 				entry->lock.abort_queue_->Push(make_pair(entry->lock.tx_id_, entry->lock.num_aborted_+1));
 			}
-			LOG(txn_id, " stole lock from aboted tx "<<entry->lock.tx_id_<<" my abort num is "<<num_aborted<<" for "<<key);
-			//std::cout<<txn_id<<" stole lock from aboted tx "<<entry->lock.tx_id_<<" for key "<<key<<std::endl;
+			//LOG(txn_id, " stole lock from aboted tx "<<entry->lock.tx_id_<<" my abort num is "<<num_aborted<<" for "<<key);
 		}
-		else
-			LOG(txn_id, " no one has the lock, so I got for "<<key);
+		//else
+		//	LOG(txn_id, " no one has the lock, so I got for "<<key);
 		entry->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
 
 		// Abort any reader ordered after me but missed my version
