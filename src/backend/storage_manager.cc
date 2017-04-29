@@ -163,6 +163,7 @@ void StorageManager::ApplyChange(bool is_committing){
 		++applied_counter;
 	}
 	if(failed_putting){
+		LOG(txn_->txn_id(), " failed putting!");
 		unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
 		int counter = 0;
 		while(it != read_set_.end()){
@@ -350,7 +351,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 						//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
 						read_set_[key] = result;
 						if (message_){
-							LOG(txn_->txn_id(), "Adding to msg: "<<key);
+							//LOG(txn_->txn_id(), "Adding to msg: "<<key);
 							message_->add_keys(key);
 							message_->add_values(result.second == NULL ? "" : *result.second);
 							message_has_value_ = true;
@@ -459,7 +460,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					result.first = result.first | new_object;
 					read_set_[key] = result;
 					if (message_){
-						LOG(txn_->txn_id(), "Adding to msg: "<<key<<" with value"<<*result.second);
+						//LOG(txn_->txn_id(), "Adding to msg: "<<key<<" with value"<<*result.second);
 						message_->add_keys(key);
 						message_->add_values(result.second == NULL ? "" : *result.second);
 						message_has_value_ = true;

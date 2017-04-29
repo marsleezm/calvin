@@ -547,7 +547,7 @@ void LockedVersionedStorage::PutObject(const Key& key, Value* value) {
 
 
 void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_object) {
-	//LOG(txn_id, " unlock "<<key);
+	LOG(txn_id, " unlock "<<key);
 	KeyEntry* entry;
 	if(new_object){
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
@@ -620,7 +620,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 					ValuePair vp;
 					vp.first = WRITE;
 					vp.second = new Value(*value);
-					//LOG(txn_id, " aborted, but unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
+					LOG(txn_id, " aborted, but unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
 					entry->lock = LockEntry(oldest_tx->my_tx_id_, oldest_tx->abort_bit_, *oldest_tx->abort_bit_, oldest_tx->abort_queue_);
 					//LOG(txn_id, " aborted, but adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
 					oldest_tx->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(oldest_tx->my_tx_id_, oldest_tx->num_aborted_, vp));
