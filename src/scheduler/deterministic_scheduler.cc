@@ -174,13 +174,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
   double last_blocked = 0;
   bool if_blocked = false;
-  int last_printed = 0;
+  int last_printed = 0, out_counter1 = 0;
 
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
+		  LOCKLOG(to_sc_txn.first, " tid is "<<to_sc_txn.second);
 		  if (to_sc_txn.second == Sequencer::num_lc_txns_){
 			  mgr = active_l_tids[to_sc_txn.second];
 			  if (!mgr->CanSCToCommit()){
@@ -241,6 +242,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyFour<int64_t, int64_t, int, bool> pend_txn = my_pend_txns->top();
+		  LOG(pend_txn.first, " is the first one ine pending");
 
 		  int num_aborted = active_g_tids[pend_txn.first]->abort_bit_;
 		  while (!my_pend_txns->empty() && pend_txn.second <= Sequencer::num_lc_txns_ ){
@@ -315,7 +317,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 		  //Abort this transaction
 	  }
-
 	  // Received remote read
 	 else if (scheduler->message_queues[thread]->Pop(&message)) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
@@ -417,25 +418,27 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //			  ++out_counter;
 //		  }
 	  }
+//	  else{
+//		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, my_pend_txns->size() > max_pend,
+//				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+//	  }
+	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
 	  else{
 		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, my_pend_txns->size() > max_pend,
-				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+		  				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+		  if(out_counter1 & 33554432){
+			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
+					  ", num suspend is "<<scheduler->num_suspend[thread]);
+			  if(my_to_sc_txns->size())
+				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
+			  if(my_pend_txns->size())
+				  LOG(-1, my_pend_txns->top().first<<", lc is  "<<my_pend_txns->top().second<<", third is "<<my_pend_txns->top().third);
+			  out_counter1 = 0;
+		  }
+		  ++out_counter1;
+		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
+		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
 	  }
-	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
-//	  else{
-//		  if(out_counter1 & 67108864){
-//			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
-//					  ", num suspend is "<<scheduler->num_suspend[thread]);
-//			  if(my_to_sc_txns->size())
-//				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
-//			  if(my_pend_txns->size())
-//				  LOG(-1, my_pend_txns->top().first<<", lc is  "<<my_pend_txns->top().second<<", third is "<<my_pend_txns->top().third);
-//			  out_counter1 = 0;
-//		  }
-//		  ++out_counter1;
-//		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
-//		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
-//	  }
   }
   return NULL;
 }
