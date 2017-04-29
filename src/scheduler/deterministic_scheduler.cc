@@ -202,7 +202,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  active_l_tids.erase(to_sc_txn.second);
 				  delete mgr;
 				  my_to_sc_txns->pop();
-				  LOG(to_sc_txn.first,  " done, continue!! ");
 				  // Go to the next loop, try to commit as many as possible.
 				  continue;
 			  }
@@ -247,15 +246,19 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // Try to re-execute pending transactions
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  MyFour<int64_t, int64_t, int, bool> pend_txn = my_pend_txns->top();
+		  MyFour<int64_t, int64_t, int, bool> pend_txn;
 
-		  while (!my_pend_txns->empty() && pend_txn.second == Sequencer::num_lc_txns_ ){
+		  while (!my_pend_txns->empty()){
+			  pend_txn = my_pend_txns->top();
 			  my_pend_txns->pop();
-			  LOG(pend_txn.first, " is popped out from pending "<<pend_txn.second);
-			  if(pend_txn.third == active_g_tids[pend_txn.first]->abort_bit_)
-				  break;
+			  if(pend_txn.second == Sequencer::num_lc_txns_ ){
+				  LOG(pend_txn.first, " is popped out from pending "<<pend_txn.second);
+				  if(pend_txn.third == active_g_tids[pend_txn.first]->abort_bit_)
+					  break;
+			  }
 			  else
-				  pend_txn = my_pend_txns->top();
+				  break;
+
 		  }
 		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.fourth<<", num restart is "<< pend_txn.third
 				  <<", abort is "<<pend_txn.fourth);
