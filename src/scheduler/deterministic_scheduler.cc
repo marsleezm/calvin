@@ -246,10 +246,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // Try to re-execute pending transactions
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  MyFour<int64_t, int64_t, int, bool> pend_txn = my_pend_txns->top();
+		  MyFour<int64_t, int64_t, int, bool> pend_txn;
 		  int max_restarted = 0;
 
-		  while (!my_pend_txns->empty() && pend_txn.second == Sequencer::num_lc_txns_){
+		  while (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
 			  pend_txn = my_pend_txns->top();
 			  my_pend_txns->pop();
 			  max_restarted = max(max_restarted, pend_txn.third);
