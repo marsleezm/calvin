@@ -178,6 +178,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
+	  if(out_counter1 & 33554432){
+		  LOG(-1, " I am here in the loop!!!!");
+		  out_counter1 = 0;
+	  }
+	  ++out_counter1;
+
+
+
 	  if (!my_to_sc_txns->empty()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
@@ -203,6 +211,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  active_l_tids.erase(to_sc_txn.second);
 				  delete mgr;
 				  my_to_sc_txns->pop();
+				  LOG(to_sc_txn.first,  " done, continue!! ");
 				  // Go to the next loop, try to commit as many as possible.
 				  continue;
 			  }
