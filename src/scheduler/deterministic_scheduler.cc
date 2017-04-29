@@ -174,6 +174,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
   double last_blocked = 0;
   bool if_blocked = false;
+  int last_printed = 0;
 
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
@@ -288,13 +289,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	 else{
-		 if(my_pend_txns->size())
+		 if(my_pend_txns->size() && last_printed != my_pend_txns->top().second){
 			 LOG(-1, " my pend size is "<<my_pend_txns->size()<<", my pend is first is "<<my_pend_txns->top().second);
+			 last_printed = my_pend_txns->top().second;
+		 }
 		 //else
 		//	 LOG(-1, " my pend size is empty");
 	 }
 
-	 if (!abort_queue.Empty()){
+	  if (!abort_queue.Empty()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
