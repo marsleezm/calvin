@@ -287,14 +287,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 	  }
-	 //else{
-	//	 if(my_pend_txns->size())
-	//		 LOG(-1, " my pend size is "<<my_pend_txns->size()<<", my pend is first is "<<my_pend_txns->top().second);
+	 else{
+		 if(my_pend_txns->size())
+			 LOG(-1, " my pend size is "<<my_pend_txns->size()<<", my pend is first is "<<my_pend_txns->top().second);
 		 //else
 		//	 LOG(-1, " my pend size is empty");
-	 //}
+	 }
 
-	 else if (!abort_queue.Empty()){
+	 if (!abort_queue.Empty()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
