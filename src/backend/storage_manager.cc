@@ -429,7 +429,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		return reinterpret_cast<Value*>(TX_ABORTED);
 	}
 	else{
-		LOG(txn_->txn_id(), " trying to read lock "<<key);
+		//LOG(txn_->txn_id(), " trying to read lock "<<key);
 		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 			// The value has been read already
 			if(read_set_.count(key)){
