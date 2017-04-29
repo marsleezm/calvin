@@ -181,7 +181,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  if (!my_to_sc_txns->empty()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
-		  LOCKLOG(to_sc_txn.first, " tid is "<<to_sc_txn.second);
 		  if (to_sc_txn.second == Sequencer::num_lc_txns_){
 			  mgr = active_l_tids[to_sc_txn.second];
 			  if (!mgr->CanSCToCommit()){
