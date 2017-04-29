@@ -246,25 +246,21 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // Try to re-execute pending transactions
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  MyFour<int64_t, int64_t, int, bool> pend_txn;
+		  MyFour<int64_t, int64_t, int, bool> pend_txn = my_pend_txns->top();
+		  int max_restarted = 0;
 
-		  while (!my_pend_txns->empty()){
+		  while (!my_pend_txns->empty() && pend_txn.second == Sequencer::num_lc_txns_){
 			  pend_txn = my_pend_txns->top();
 			  my_pend_txns->pop();
-			  if(pend_txn.second == Sequencer::num_lc_txns_ ){
-				  LOG(pend_txn.first, " is popped out from pending "<<pend_txn.second);
-				  if(pend_txn.third == active_g_tids[pend_txn.first]->abort_bit_)
-					  break;
-			  }
-			  else
-				  break;
+			  max_restarted = max(max_restarted, pend_txn.third);
+			  LOG(pend_txn.first, " is popped out from pending "<<pend_txn.second);
 
 		  }
-		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.fourth<<", num restart is "<< pend_txn.third
+		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.fourth<<", num restart is "<< max_restarted
 				  <<", abort is "<<pend_txn.fourth);
 
 		  // This pend request may have expired!
-		  if(pend_txn.second == Sequencer::num_lc_txns_  && pend_txn.third == active_g_tids[pend_txn.first]->abort_bit_)
+		  if(pend_txn.second == Sequencer::num_lc_txns_  && max_restarted == active_g_tids[pend_txn.first]->abort_bit_)
 		  {
 			  if(pend_txn.fourth == TO_SEND){
 				  LOG(pend_txn.first," send remote message!!!");
