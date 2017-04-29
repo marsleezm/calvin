@@ -195,7 +195,7 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
   for (int i = 0; i < message.keys_size(); i++) {
 	  Value* val = new Value(message.values(i));
 	  remote_objects_[message.keys(i)] = val;
-	  LOG(StringToInt(message.destination_channel()), "Handle remote to add " << message.keys(i)<<" with value "<<message.values(i));
+	  //LOG(StringToInt(message.destination_channel()), "Handle remote to add " << message.keys(i)<<" with value "<<message.values(i));
   }
 }
 
@@ -453,7 +453,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					return reinterpret_cast<Value*>(SUSPENDED);
 				}
 				else{
-					LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
+					//LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
 					++exec_counter_;
 					++max_counter_;
 					//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
