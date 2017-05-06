@@ -282,9 +282,9 @@ StorageManager::~StorageManager() {
 		LOG(txn_->txn_id(), " sending confirm when committing");
 		SendConfirm(num_restarted_);
 	}
-	LOCKLOG(txn_->txn_id(), " committing and cleaning");
+	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
-		LOG(txn_->txn_id(), "Has message");
+		//LOG(txn_->txn_id(), "Has message");
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
 
