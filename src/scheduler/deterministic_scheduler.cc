@@ -493,7 +493,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					LOG(txn->txn_id(), "before pushing first is "<<pending_confirm.top().second);
 				pending_confirm.push(MyTuple<int64, int64, int>(txn->txn_id(), txn->local_txn_id(),
 					manager->num_restarted_));
-				AGGRLOG(txn->txn_id(), "after pushing first is "<<pending_confirm.top().second);
+				//AGGRLOG(txn->txn_id(), "after pushing first is "<<pending_confirm.top().second);
 				manager->SendLocalReads(false);
 			}
 			else{
@@ -564,7 +564,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				manager->ApplyChange(false);
 				AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<Sequencer::num_lc_txns_);
 				active_l_tids[txn->local_txn_id()] = manager;
-				LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
+				//LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 				to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 				return true;
 			}
