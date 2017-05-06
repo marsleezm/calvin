@@ -469,7 +469,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		}
 		else{
 			AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<Sequencer::num_lc_txns_);
-			active_l_tids[txn->txn_id()] = manager;
+			active_l_tids[txn->local_txn_id()] = manager;
 			//AGGRLOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 			to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 			return true;
