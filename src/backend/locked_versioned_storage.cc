@@ -179,7 +179,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 		LOG(txn_id, " trying to get new object lock!! ["<<key<<"]");
 		if(new_objects_[new_tab_num].count(key) == 0){
 			pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
-			LOG(txn_id, " can not find any entry!");
+			//LOG(txn_id, " can not find any entry!");
 			// This should not happen!!!
 			return ValuePair(SUSPEND, NULL);
 		}
@@ -656,12 +656,12 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 	while (list) {
 	  if (list->txn_id == txn_id) {
 		  entry->head =	list->next;
-		  LOG(txn_id, " trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
+		  //LOG(txn_id, " trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
 		  delete list;
 		  break;
 	  }
 	  else if(list->txn_id > txn_id){
-		  LOG(txn_id, " not mine, invalid version is "<<list->txn_id<<", value addr is "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
+		  //LOG(txn_id, " not mine, invalid version is "<<list->txn_id<<", value addr is "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
 		  entry->head = list->next;
 		  delete list;
 		  list = entry->head;
