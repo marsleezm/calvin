@@ -40,13 +40,13 @@ int dependent_percent;
 // Microbenchmark load generation client.
 class MClient : public Client {
  public:
-  MClient(Configuration* config, int mp)
+  MClient(Configuration* config, float mp)
       : microbenchmark(config->all_nodes.size(), config->this_node_id), config_(config),
-        percent_mp_(mp) {
+        percent_mp_(mp*100) {
   }
   virtual ~MClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id) {
-    if (config_->all_nodes.size() > 1 && rand() % 100 < percent_mp_) {
+    if (config_->all_nodes.size() > 1 && rand() % 10000 < percent_mp_) {
       // Multipartition txn.
       int other1;
       int other2;
@@ -58,7 +58,7 @@ class MClient : public Client {
         other2 = rand() % config_->all_nodes.size();
       } while (other2 == config_->this_node_id || other2 == other1);
 
-      if (rand() %100 < dependent_percent)
+      if (abs(rand()) %10000 < dependent_percent)
     	  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
       else
     	  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
@@ -66,7 +66,7 @@ class MClient : public Client {
       (*txn)->set_multipartition(true);
     } else {
       // Single-partition txn.
-      if (rand() %100 < dependent_percent)
+      if (abs(rand()) %10000 < dependent_percent)
     	  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
       else
     	  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
@@ -85,13 +85,13 @@ class MClient : public Client {
 // TPCC load generation client.
 class TClient : public Client {
  public:
-  TClient(Configuration* config, int mp) : config_(config), percent_mp_(mp) {}
+  TClient(Configuration* config, float mp) : config_(config), percent_mp_(mp*100) {}
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id) {
     TPCC tpcc;
     *txn = new TxnProto();
 
-    if (rand() % 100 < percent_mp_)
+    if (rand() % 10000 < percent_mp_)
       (*txn)->set_multipartition(true);
     else
     	(*txn)->set_multipartition(false);
@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
   //freopen("output.txt","w",stdout);
 
   ConfigReader::Initialize("myconfig.conf");
-  dependent_percent = atoi(ConfigReader::Value("dependent_percent").c_str());
+  dependent_percent = 100*stof(ConfigReader::Value("dependent_percent").c_str());
 
   bool useFetching = false;
   if (argc > 4 && argv[4][0] == 'f')
@@ -167,8 +167,8 @@ int main(int argc, char** argv) {
 
   // Artificial loadgen clients.
   Client* client = (argv[2][0] == 't') ?
-		  reinterpret_cast<Client*>(new TClient(&config, atoi(ConfigReader::Value("distribute_percent").c_str()))) :
-		  reinterpret_cast<Client*>(new MClient(&config, atoi(ConfigReader::Value("distribute_percent").c_str())));
+		  reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()))) :
+		  reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
 
 // #ifdef PAXOS
 //  StartZookeeper(ZOOKEEPER_CONF);
