@@ -446,7 +446,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					return reinterpret_cast<Value*>(SUSPEND_SHOULD_SEND);
 				}
 				else{
-					LOG(txn_->txn_id(), " blocked but has nothing to send.");
+					//LOG(txn_->txn_id(), " blocked but has nothing to send.");
 					return reinterpret_cast<Value*>(SUSPEND_NOT_SEND);
 				}
 			}
