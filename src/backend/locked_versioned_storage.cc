@@ -138,7 +138,7 @@ ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool ne
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
 		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
 		// If its empty entry, create a new entry
-		LOG(txn_id, " trying to safe read new obj ["<<key<<"]");
+		//LOG(txn_id, " trying to safe read new obj ["<<key<<"]");
 		assert(new_objects_[new_tab_num].count(key) != 0);
 		entry = new_objects_[new_tab_num][key];
 		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
@@ -158,7 +158,7 @@ ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool ne
 			DirtyGC(list, Sequencer::num_lc_txns_-GC_THRESHOLD);
 			value_pair.first = NOT_COPY;
 			value_pair.second = list->value;
-			LOG(txn_id, " safe reading ["<<key<<"] from"<<list->txn_id<<", addr is "<<reinterpret_cast<int64>(value_pair.second));
+			//LOG(txn_id, " safe reading ["<<key<<"] from"<<list->txn_id<<", addr is "<<reinterpret_cast<int64>(value_pair.second));
 			break;
 		}
 	}
