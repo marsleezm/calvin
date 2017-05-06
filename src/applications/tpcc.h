@@ -34,8 +34,8 @@ class TPCC : public Application {
   enum TxnType {
     INITIALIZE = 0,
     PAYMENT = 6,
-	NEW_ORDER = 7,
-	//NEW_ORDER = 9,
+	//NEW_ORDER = 7,
+	NEW_ORDER = 9,
     ORDER_STATUS = 11,
     DELIVERY = 12,
     STOCK_LEVEL = 13,
