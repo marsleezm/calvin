@@ -114,7 +114,7 @@ class StorageManager {
 			read_set_[key] = ValuePair(NEW_MASK | WRITE, new Value);
 			//if(read_set_[key].first & NOT_COPY){
 			read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
-			LOG(txn_->txn_id(), " trying to create a copy for key "<<key);//reinterpret_cast<int64>(read_set_[key].second));
+			//LOG(txn_->txn_id(), " trying to create a copy for key "<<key);//reinterpret_cast<int64>(read_set_[key].second));
 			//}
 			new_pointer = read_set_[key].second;
 			return LOCKED;

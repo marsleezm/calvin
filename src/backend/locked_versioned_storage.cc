@@ -313,7 +313,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 		new_objects_[new_tab_num][key] = new KeyEntry();
 		new_objects_[new_tab_num][key]->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
 		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
-		LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock"<<", new tab num is "<<new_tab_num);
+		//LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock"<<", new tab num is "<<new_tab_num);
 		// This should not happen!!!
 		return true;
 	}
