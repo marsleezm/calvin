@@ -193,7 +193,7 @@ class StorageManager {
 		return true;
 	}
 	else{
-		LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
+		//LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
 		++exec_counter_;
 		return false;
 	}
@@ -202,7 +202,7 @@ class StorageManager {
   inline bool ShouldRead()
   {
 	  if (exec_counter_ < max_counter_){
-		  LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
+		  //LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
 		  ++exec_counter_;
 		  return false;
 	  }
