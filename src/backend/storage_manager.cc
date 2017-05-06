@@ -132,7 +132,7 @@ void StorageManager::Abort(){
 // If successfully spec-commit, all data are put into the list and all copied data are deleted
 // If spec-commit fail, all put data are removed, all locked data unlocked and all copied data cleaned
 void StorageManager::ApplyChange(bool is_committing){
-	AGGRLOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing);
+	//AGGRLOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing);
 	int applied_counter = 0;
 	bool failed_putting = false;
 	// All copied data before applied count are deleted
@@ -442,7 +442,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				read_state = SPECIAL;
 				// The tranasction will perform the read again
 				if (message_has_value_){
-					LOG(txn_->txn_id(), " blocked and sent.");
+					//LOG(txn_->txn_id(), " blocked and sent.");
 					return reinterpret_cast<Value*>(SUSPEND_SHOULD_SEND);
 				}
 				else{
