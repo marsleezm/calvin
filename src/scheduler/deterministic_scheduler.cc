@@ -554,7 +554,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				}
 			}
 			else{
-				AGGRLOG(txn->txn_id(),  " spec-committing");
+				//AGGRLOG(txn->txn_id(),  " spec-committing");
 				if (manager->message_has_value_){
 					pending_confirm.push(MyTuple<int64, int64, int>(txn->txn_id(), txn->local_txn_id(),
 						manager->num_restarted_));
