@@ -417,7 +417,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					result.first = result.first | new_object;
 					read_set_[key] = result;
 					if (message_){
-						LOG(txn_->txn_id(), "Adding to msg: "<<key);
+						//LOG(txn_->txn_id(), "Adding to msg: "<<key);
 						message_->add_keys(key);
 						message_->add_values(result.second == NULL ? "" : *result.second);
 						message_has_value_ = true;

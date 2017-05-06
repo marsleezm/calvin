@@ -206,7 +206,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 	}
 
 	pthread_mutex_lock(&entry->mutex_);
-	LOG(txn_id, " trying to get lock for ["<<key<<"].");
+	//LOG(txn_id, " trying to get lock for ["<<key<<"].");
 	// Someone before me has locked this version, I should wait
 	if(entry->lock.tx_id_ < txn_id) {
 		entry->pend_list->push_back(PendingReadEntry(txn_id, abort_bit, num_aborted, pend_queue, abort_queue, true));
@@ -219,20 +219,20 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 	else{
 		if (entry->lock.tx_id_ != NO_LOCK) {
 			//Try to abort this transaction
-			LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
+			//LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
 			bool result = std::atomic_compare_exchange_strong(entry->lock.abort_bit_,
 					&entry->lock.num_aborted_, entry->lock.num_aborted_+1);
 
 			//If the transaction has actually been restarted already.
 			if (result){
-				LOG(txn_id, " add "<<entry->lock.tx_id_<<" to abort queue, key is "<<key);
+				//LOG(txn_id, " add "<<entry->lock.tx_id_<<" to abort queue, key is "<<key);
 				entry->lock.abort_queue_->Push(make_pair(entry->lock.tx_id_, entry->lock.num_aborted_+1));
 			}
-			LOG(txn_id, " stole lock from aboted tx "<<entry->lock.tx_id_<<" my abort num is "<<num_aborted<<" for "<<key);
+			//LOG(txn_id, " stole lock from aboted tx "<<entry->lock.tx_id_<<" my abort num is "<<num_aborted<<" for "<<key);
 			//std::cout<<txn_id<<" stole lock from aboted tx "<<entry->lock.tx_id_<<" for key "<<key<<std::endl;
 		}
-		else
-			LOG(txn_id, " no one has the lock, so I got for "<<key);
+		//else
+			//LOG(txn_id, " no one has the lock, so I got for "<<key);
 		entry->lock = LockEntry(txn_id, abort_bit, num_aborted, abort_queue);
 
 		// Abort any reader ordered after me but missed my version
@@ -246,11 +246,11 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 			// Abort anyone that has missed my version
 			else if(it->my_tx_id_ > txn_id){
 				ASSERT( it->read_from_id_ != txn_id);
-				LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
+				//LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
 				bool result = std::atomic_compare_exchange_strong(it->abort_bit_,
 											&it->num_aborted_, it->num_aborted_+1);
 				if (result){
-					LOG(txn_id, " adding "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
+					//LOG(txn_id, " adding "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
 					it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 				}
 				it = read_from_list->erase(it);
@@ -260,7 +260,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 
 		// Read the latest version and leave read dependency
 		ValuePair value_pair;
-		LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
+		//LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
 		for (DataNode* list = entry->head; list; list = list->next) {
 			if (list->txn_id <= txn_id) {
 				// Read the version and
@@ -274,7 +274,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 					//LOG(txn_id, key<<" first is "<<value_pair.first);
 					value_pair.first = WRITE;
 					value_pair.second = new Value(*list->value);
-					LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", GC addr is "<<reinterpret_cast<int64>(value_pair.second));
+					//LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", GC addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				else{
 					int size = entry->read_from_list->size();
@@ -288,7 +288,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 					ASSERT(list->txn_id != txn_id);
 					value_pair.first = WRITE;
 					value_pair.second = new Value(*list->value);
-					LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO GC addr is "<<reinterpret_cast<int64>(value_pair.second));
+					//LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO GC addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				break;
 			}
