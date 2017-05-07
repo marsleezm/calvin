@@ -175,6 +175,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
   double last_blocked = 0;
   bool if_blocked = false;
+  int out_counter1 = 0;
 
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
@@ -432,22 +433,18 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //		  }
 		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, false,
 				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+
+		  if(out_counter1 & 67108864){
+			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<
+					  ", num suspend is "<<scheduler->num_suspend[thread]);
+			  if(my_to_sc_txns->size())
+				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
+			  out_counter1 = 0;
+		  }
+		  ++out_counter1;
+		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
+		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
 	  }
-	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
-//	  else{
-//		  if(out_counter1 & 67108864){
-//			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
-//					  ", num suspend is "<<scheduler->num_suspend[thread]);
-//			  if(my_to_sc_txns->size())
-//				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
-//			  if(my_pend_txns->size())
-//				  LOG(-1, my_pend_txns->top().first<<", lc is  "<<my_pend_txns->top().second<<", third is "<<my_pend_txns->top().third);
-//			  out_counter1 = 0;
-//		  }
-//		  ++out_counter1;
-//		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
-//		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
-//	  }
   }
   return NULL;
 }
