@@ -32,7 +32,7 @@ using tr1::unordered_map;
 #define DEPENDENT_MASK 8
 
 #define NO_LOCK INT_MAX
-#define GC_THRESHOLD 100
+#define GC_THRESHOLD 400
 
 #define NUM_THREADS 5
 
