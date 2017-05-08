@@ -584,7 +584,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 			assert(warehouse.ParseFromString(*val));
 			warehouse.set_year_to_date(warehouse.year_to_date() + amount);
 			assert(warehouse.SerializeToString(val));
-			LOCKLOG(txn->txn_id(), " updating warehouse "<<warehouse_key);
+			//LOCKLOG(txn->txn_id(), " updating warehouse "<<warehouse_key);
 		}
 	}
 
@@ -988,7 +988,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				customer_key = order.customer_id();
 				tpcc_args->add_order_line_count(order_line_count);
 				tpcc_args->set_customer_key(customer_key);
-				LOCKLOG(txn->txn_id(), ", order is "<<order_key<<", order line count is "<<order_line_count);
+				//LOCKLOG(txn->txn_id(), ", order is "<<order_key<<", order line count is "<<order_line_count);
 
 				char new_order_key[128];
 				snprintf(new_order_key, sizeof(new_order_key), "%sn%s", district_key, order_key.c_str());
@@ -1000,7 +1000,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 		}
 		else{
 			customer_key = tpcc_args->customer_key();
-			LOCKLOG(txn->txn_id(), ", order is "<<order_key<<", order line count is "<<order_line_count);
+			//LOCKLOG(txn->txn_id(), ", order is "<<order_key<<", order line count is "<<order_line_count);
 		}
 
 
