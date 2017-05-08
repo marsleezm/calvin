@@ -176,7 +176,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
 		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
 		// If its empty entry, create a new entry
-		LOG(txn_id, " trying to get new object lock!! ["<<key<<"]");
+		//LOG(txn_id, " trying to get new object lock!! ["<<key<<"]");
 		if(new_objects_[new_tab_num].count(key) == 0){
 			pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
 			//LOG(txn_id, " can not find any entry!");
@@ -401,7 +401,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 		ASSERT(new_objects_[new_tab_num].count(key) != 0);
 		entry = new_objects_[new_tab_num][key];
 		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
-		LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock");
+		//LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock");
 	}
 	else{
 		//If we are accessing the old-object table, then the entry can not be empty!
@@ -642,7 +642,7 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 		ASSERT(new_objects_[new_tab_num].count(key) != 0);
 		entry = new_objects_[new_tab_num][key];
 		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
-		LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock");
+		//LOG(txn_id, " can not find any entry for "<<key<<", so I got the lock");
 	}
 	else{
 		ASSERT(objects_.count(key) != 0);
