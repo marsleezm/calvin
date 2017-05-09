@@ -190,6 +190,7 @@ void stop(int sig) {
 // #ifdef PAXOS
 //  StopZookeeper(ZOOKEEPER_CONF);
 // #endif
+	LOG(-1, " got terminate signal!");
 	DeterministicScheduler::terminate();
 	exit(sig);
 }
