@@ -46,7 +46,7 @@ class MClient : public Client {
   }
   virtual ~MClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
-	//srand(seed);
+	srand(seed);
 
 	if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
 	  // Multipartition txn.
@@ -76,7 +76,7 @@ class MClient : public Client {
 	  (*txn)->set_multipartition(false);
 	}
 	//LOG((*txn)->txn_id(), " the time is "<<GetUTime());
-	(*txn)->set_seed(GetUTime());
+	(*txn)->set_seed(seed);
 	//LOG((*txn)->txn_id(), " the seed is "<<(*txn)->seed());
   }
 
