@@ -507,11 +507,8 @@ void StorageManager::SendLocalReads(){
 	++sent_msg_;
 	for (int i = 0; i < txn_->writers_size(); i++) {
 	  if (txn_->writers(i) != configuration_->this_node_id) {
-<<<<<<< HEAD
 		  //std::cout<<txn_->txn_id()<<" sending reads to " << txn_->writers(i)<<std::endl;
-=======
 		  LOG(txn_->txn_id(), " sending reads to " << txn_->writers(i));
->>>>>>> spec_calvin_locking
 		  message_->set_destination_node(txn_->writers(i));
 		  connection_->Send1(*message_);
 	  }
