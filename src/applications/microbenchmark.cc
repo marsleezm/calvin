@@ -275,10 +275,11 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			Rand rand;
 			rand.seed(txn->seed());
 			GetKeys(txn, &rand);
-//			string rw = "";
-//			for(int i=0; i<txn->read_write_set_size(); ++i)
-//				rw += txn->read_write_set(i) +" ";
-//			LOG(txn->txn_id(), ", the seed is "<<txn->seed()<<", rw is "<<rw);
+
+			string rw = "";
+			for(int i=0; i<txn->read_write_set_size(); ++i)
+				rw += txn->read_write_set(i) +" ";
+			std::cout<<txn->txn_id()<< ", the seed is "<<txn->seed()<<", rw is "<<rw << std::endl;
 		}
 
 		for (int i = 0; i < indexAccessNum; i++) {
@@ -300,7 +301,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			}
 			else{
 				indexed_key = tpcc_args->indexed_keys(i);
-				//LOG(txn->txn_id(), " skipped, indexed_key is "<<indexed_key);
+				LOG(txn->txn_id(), " skipped, indexed_key is "<<indexed_key);
 			}
 
 			if(storage->ShouldRead()){
