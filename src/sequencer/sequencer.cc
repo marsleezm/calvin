@@ -518,7 +518,7 @@ void Sequencer::RunReader() {
     }
 
     int64 msg_id = batch_number | ((uint64)node_id) <<40;
-    SEQLOG(-1, "Finished loading for "<<batch_number);
+    SEQLOG(-1, " finished loading for "<<batch_number);
     if(involved_parts.size()){
     	std::vector<int> output(involved_parts.size());
     	std::copy(involved_parts.begin(), involved_parts.end(), output.begin());

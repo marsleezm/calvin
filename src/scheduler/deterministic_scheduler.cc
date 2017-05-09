@@ -331,7 +331,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  LOG(txn_id, ": got remote msg from" << message.source_node());
 		  //std::cout<<txn_id<<" wtf, got remote msg from "<<message.source_node()<<std::endl;
 		  StorageManager* manager = active_g_tids[txn_id];
-		  LOG(txn_id, " got remote msg from" << message.source_node());
 		  if (manager == NULL){
 			  manager = new StorageManager(scheduler->configuration_,
 							   scheduler->thread_connections_[thread],
@@ -387,6 +386,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  else{
 				  // Blocked, can not read
+				  LOG(txn_id, " is pused back into pend queue because local id "<<
+						  txn->local_txn_id()<<" is smaller than its num lc txn "<<Sequencer::num_lc_txns_);
 				  my_pend_txns->push(MyFour<int64_t, int64_t, int, bool>(txn_id, txn->local_txn_id(), manager->num_restarted_, TO_READ));
 			  }
 		  }

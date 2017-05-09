@@ -90,7 +90,7 @@ inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data
 #define LOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
 #define PLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
 #define LOCKLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
-//#define SEQLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
+#define SEQLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
 #define SEQLOG(txid, x)
 #else
 
