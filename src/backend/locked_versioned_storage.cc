@@ -200,9 +200,9 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 //			//
 //			assert(1==2);
 //		}
+		LOG(txn_id, " trying to read lock"<<key);
 		ASSERT(objects_.count(key) != 0);
 		entry = objects_[key];
-
 	}
 
 	pthread_mutex_lock(&entry->mutex_);
