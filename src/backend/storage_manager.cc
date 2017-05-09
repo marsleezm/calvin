@@ -146,7 +146,7 @@ void StorageManager::Abort(){
 // If successfully spec-commit, all data are put into the list and all copied data are deleted
 // If spec-commit fail, all put data are removed, all locked data unlocked and all copied data cleaned
 void StorageManager::ApplyChange(bool is_committing){
-	LOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing);
+	//LOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing);
 	int applied_counter = 0;
 	bool failed_putting = false;
 	// All copied data before applied count are deleted
@@ -163,6 +163,7 @@ void StorageManager::ApplyChange(bool is_committing){
 		++applied_counter;
 	}
 	if(failed_putting){
+		LOG(txn_->txn_id(), " failed putting!");
 		unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
 		int counter = 0;
 		while(it != read_set_.end()){
@@ -194,13 +195,13 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
   for (int i = 0; i < message.keys_size(); i++) {
 	  Value* val = new Value(message.values(i));
 	  remote_objects_[message.keys(i)] = val;
-	  LOG(StringToInt(message.destination_channel()), "Handle remote to add " << message.keys(i)<<" with value "<<message.values(i));
+	  //LOG(StringToInt(message.destination_channel()), "Handle remote to add " << message.keys(i)<<" with value "<<message.values(i));
   }
 }
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	LOCKLOG(txn_->txn_id(), " committing and cleaning");
+	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
 		LOG(txn_->txn_id(), "Has message");
 		if (message_has_value_){
@@ -350,7 +351,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 						//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
 						read_set_[key] = result;
 						if (message_){
-							LOG(txn_->txn_id(), "Adding to msg: "<<key);
+							//LOG(txn_->txn_id(), "Adding to msg: "<<key);
 							message_->add_keys(key);
 							message_->add_values(result.second == NULL ? "" : *result.second);
 							message_has_value_ = true;
@@ -428,7 +429,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		return reinterpret_cast<Value*>(TX_ABORTED);
 	}
 	else{
-		LOG(txn_->txn_id(), " trying to read lock "<<key);
+		//LOG(txn_->txn_id(), " trying to read lock "<<key);
 		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 			// The value has been read already
 			if(read_set_.count(key)){
@@ -452,14 +453,14 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					return reinterpret_cast<Value*>(SUSPENDED);
 				}
 				else{
-					LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
+					//LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
 					++exec_counter_;
 					++max_counter_;
 					//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
 					result.first = result.first | new_object;
 					read_set_[key] = result;
 					if (message_){
-						LOG(txn_->txn_id(), "Adding to msg: "<<key<<" with value"<<*result.second);
+						//LOG(txn_->txn_id(), "Adding to msg: "<<key<<" with value"<<*result.second);
 						message_->add_keys(key);
 						message_->add_values(result.second == NULL ? "" : *result.second);
 						message_has_value_ = true;
@@ -502,10 +503,15 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 }
 
 void StorageManager::SendLocalReads(){
+	LOG(txn_->txn_id(), " trying to send remote msg, size of writers are "<<txn_->writers_size());
 	++sent_msg_;
-	for (int i = 0; i < txn_->writers().size(); i++) {
+	for (int i = 0; i < txn_->writers_size(); i++) {
 	  if (txn_->writers(i) != configuration_->this_node_id) {
+<<<<<<< HEAD
 		  //std::cout<<txn_->txn_id()<<" sending reads to " << txn_->writers(i)<<std::endl;
+=======
+		  LOG(txn_->txn_id(), " sending reads to " << txn_->writers(i));
+>>>>>>> spec_calvin_locking
 		  message_->set_destination_node(txn_->writers(i));
 		  connection_->Send1(*message_);
 	  }
