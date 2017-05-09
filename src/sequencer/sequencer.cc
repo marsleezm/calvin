@@ -258,14 +258,14 @@ void Sequencer::RunPaxos() {
 	  MessageProto* single_part_msg;
 	  if(my_single_part_msg_.Pop(&single_part_msg)){
 		  int64 to_propose_batch = single_part_msg->batch_number();
-		  //SEQLOG(-1, " got single part msg for batch"<<to_propose_batch<<", proposed batch is "<<proposed_batch);
+		  SEQLOG(-1, " got single part msg for batch"<<to_propose_batch<<", proposed batch is "<<proposed_batch);
 		  if (num_pending[to_propose_batch % NUM_PENDING_BATCH] == 0 && to_propose_batch == proposed_batch+1){
-			  //SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", proposed batch is "<<proposed_batch);
+			  SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", proposed batch is "<<proposed_batch);
 			  if (multi_part_txns.count(to_propose_batch) != 0){
 				  priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg> msgs = multi_part_txns[to_propose_batch];
 				  for(uint i = 0; i < msgs.size(); ++i){
 					  MessageProto* msg = msgs.top();
-					  //SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", adding message "<<msg->msg_id());
+					  SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", adding message "<<msg->msg_id());
 					  msgs.pop();
 					  for(int j = 0; j < msg->data_size(); ++j)
 						  single_part_msg->add_data(msg->data(j));
@@ -518,11 +518,11 @@ void Sequencer::RunReader() {
     }
 
     int64 msg_id = batch_number | ((uint64)node_id) <<40;
-    //SEQLOG(-1, " finished loading for "<<batch_number);
+    SEQLOG(-1, " finished loading for "<<batch_number);
     if(involved_parts.size()){
     	std::vector<int> output(involved_parts.size());
     	std::copy(involved_parts.begin(), involved_parts.end(), output.begin());
-    	//SEQLOG(-1, "multi-part txn's size is "<<involved_parts.size());
+    	SEQLOG(-1, "multi-part txn's size is "<<involved_parts.size());
     	multi_part_msg->set_msg_id(msg_id);
     	pending_sent_skeen[batch_number%NUM_PENDING_BATCH] = MyFour<int, int64, vector<int>, MessageProto*>
     		(involved_parts.size(), 0, output, multi_part_msg);
