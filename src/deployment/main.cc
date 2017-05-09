@@ -45,7 +45,7 @@ class MClient : public Client {
         percent_mp_(mp*100) {
   }
   virtual ~MClient() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
+  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
 	srand(seed);
 
 	if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
@@ -80,7 +80,7 @@ class MClient : public Client {
 	//LOG((*txn)->txn_id(), " the seed is "<<(*txn)->seed());
   }
 
-  virtual void GetDetTxn(TxnProto** txn, int txn_id, int seed) {
+  virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) {
 	  srand(seed);
 	  if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
 		  // Multipartition txn.
@@ -123,7 +123,7 @@ class TClient : public Client {
  public:
   TClient(Configuration* config, double mp) : config_(config), percent_mp_(mp*100) {}
   virtual ~TClient() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id, int seed) {
+  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
     TPCC tpcc;
     *txn = new TxnProto();
     if (abs(rand())%10000 < percent_mp_)
@@ -150,7 +150,7 @@ class TClient : public Client {
     (*txn)->set_seed(seed);
   }
 
-  virtual void GetDetTxn(TxnProto** txn, int txn_id, int seed) {
+  virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) {
     TPCC tpcc;
     srand(seed);
     *txn = new TxnProto();
