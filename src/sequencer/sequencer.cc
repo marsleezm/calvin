@@ -408,9 +408,14 @@ void Sequencer::RunReader() {
       			<< num_pend_txns_ << " pending, time is "<<second++<<"\n" << std::flush;
 	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
 		  for(int i = 0; i<NUM_THREADS; ++i){
-			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-				  <<", num committed txn is "<<Sequencer::num_lc_txns_
-				  <<", waiting queue is"<<std::endl;
+                if (scheduler_->to_sc_txns_[i]->size())
+			        std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
+				    <<", num committed txn is "<<Sequencer::num_lc_txns_
+				    <<", waiting queue is"<<std::endl;
+                else
+                    std::cout<< " doing nothing, no top,  num committed txn is "<<Sequencer::num_lc_txns_
+                    <<", waiting queue is"<<std::endl;
+
 			  if(scheduler_->pending_txns_[i]->size())
 				  std::cout<<"Pend txn size is "<<scheduler_->pending_txns_[i]->top().second<<"\n";
 		  }
