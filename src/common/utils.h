@@ -145,7 +145,7 @@ static inline double GetTime() {
 
 // Returns the number of seconds since midnight according to local system time,
 // to the nearest microsecond.
-static inline double GetUTime() {
+static inline int64 GetUTime() {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   return tv.tv_sec*1e6 + tv.tv_usec;
