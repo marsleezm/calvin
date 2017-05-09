@@ -269,7 +269,14 @@ public:
 		fourth = t4;
 	}
 
-	MyFour(){}
+	MyFour() {}
+
+	MyFour(const MyFour& mf){
+		first = mf.first;
+		second = mf.second;
+		third = mf.third;
+		fourth = mf.fourth;
+	}
 };
 
 
@@ -661,6 +668,41 @@ class AtomicMap {
   // DISALLOW_COPY_AND_ASSIGN
   AtomicMap(const AtomicMap<K, V>&);
   AtomicMap& operator=(const AtomicMap<K, V>&);
+};
+
+
+template<typename K, typename V>
+class MyAtomicMap {
+ public:
+	MyAtomicMap() {
+		pthread_mutex_init(&mutex_, NULL);
+	}
+  ~MyAtomicMap() {}
+
+  inline V Lookup(const K& k) {
+	  V v;
+	  pthread_mutex_lock(&mutex_);
+	  v = map_[k];
+	  pthread_mutex_unlock(&mutex_);
+	  return v;
+  }
+
+  inline void Put(const K& k, const V& v) {
+	pthread_mutex_lock(&mutex_);
+    map_[k] = v;
+    pthread_mutex_unlock(&mutex_);
+  }
+
+  inline void Erase(const K& k) {
+	pthread_mutex_lock(&mutex_);
+	map_.erase(k);
+	pthread_mutex_unlock(&mutex_);
+  }
+
+ private:
+  unordered_map<K, V> map_;
+  pthread_mutex_t mutex_;
+
 };
 
 
