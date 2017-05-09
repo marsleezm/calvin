@@ -276,10 +276,10 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			rand.seed(txn->seed());
 			GetKeys(txn, &rand);
 
-			string rw = "";
-			for(int i=0; i<txn->read_write_set_size(); ++i)
-				rw += txn->read_write_set(i) +" ";
-			std::cout<<txn->txn_id()<< ", the seed is "<<txn->seed()<<", rw is "<<rw << std::endl;
+//			string rw = "";
+//			for(int i=0; i<txn->read_write_set_size(); ++i)
+//				rw += txn->read_write_set(i) +" ";
+//			std::cout<<txn->txn_id()<< ", the seed is "<<txn->seed()<<", rw is "<<rw << std::endl;
 		}
 
 		for (int i = 0; i < indexAccessNum; i++) {
