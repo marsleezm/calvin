@@ -658,7 +658,7 @@ void* Sequencer::FetchMessage() {
 			  {
 				  TxnProto* txn = new TxnProto();
 				  txn->ParseFromString(batch_message->data(i));
-				  LOG(-1, " batch "<<batch_message->batch_number()<<" has txn of id "<<txn->txn_id()<<" with local "<<fetched_txn_num_);
+				  //LOG(-1, " batch "<<batch_message->batch_number()<<" has txn of id "<<txn->txn_id()<<" with local "<<fetched_txn_num_);
 				  txn->set_local_txn_id(fetched_txn_num_++);
 				  txns_queue_->Push(txn);
 				  ++num_fetched_this_round;
