@@ -287,8 +287,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  active_txns[IntToString(txn->txn_id())] = manager;
 		  }
 	  }
-	  // Try to handle recon_txns
 
+	  // Try to handle recon_txns
 	  if(recon_txns.size()){
 
 		  TxnProto* txn = recon_txns.front();
