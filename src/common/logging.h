@@ -77,7 +77,7 @@ inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data
 }
 
 //#define LOCKLOGGING
-//#define SEQLOGGING
+#define SEQLOGGING
 #define DOASSERT
 
 #ifdef DOASSERT
