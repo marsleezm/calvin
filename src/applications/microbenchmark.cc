@@ -290,20 +290,20 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 				//	std::cout<<" something is wrong! "<<txn->read_write_set(i)<<std::endl;
 				index_val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL){
-					LOG(txn->txn_id(), " index val is "<<*index_val);
+					//LOG(txn->txn_id(), " index val is "<<*index_val);
 					indexed_key = *index_val;
 					tpcc_args->add_indexed_keys(indexed_key);
 					//if(StringToInt(indexed_key) < 0 )
 					//	std::cout<<" indexed is wrong! "<<indexed_key<<std::endl;
 					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
-					LOG(txn->txn_id(), " after change, index val is "<<*index_val);
+					//LOG(txn->txn_id(), " after change, index val is "<<*index_val);
 				}
 				else
 					return reinterpret_cast<int64>(index_val);
 			}
 			else{
 				indexed_key = tpcc_args->indexed_keys(i);
-				LOG(txn->txn_id(), " skipped, indexed_key is "<<indexed_key);
+				//LOG(txn->txn_id(), " skipped, indexed_key is "<<indexed_key);
 			}
 
 			if(storage->ShouldRead()){
