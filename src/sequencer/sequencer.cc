@@ -43,6 +43,9 @@ double worker_end[SAMPLES];
 double scheduler_unlock[SAMPLES];
 #endif
 
+
+#define MAX_BATCH_PROPOSE 5
+
 int64_t Sequencer::num_lc_txns_=0;
 //int64_t Sequencer::max_commit_ts=-1;
 //int64_t Sequencer::num_c_txns_=0;
@@ -253,6 +256,7 @@ void Sequencer::RunPaxos() {
   queue<MessageProto*> pending_paxos_props;
 
   unordered_map<int64, MessageProto*> pending_received_skeen;
+  int proposed_for_batch = 0;
 
   while (!deconstructor_invoked_) {
 	  // I need to run a multicast protocol to propose this txn to other partitions
@@ -299,9 +303,20 @@ void Sequencer::RunPaxos() {
 			  delete msg;
 		  }
 		  else if (msg_type == MessageProto::SKEEN_REQ){
-			  int64 to_propose_batch = max(max_batch, proposed_batch+2);
+			  int64 to_propose_batch = max(max_batch, proposed_batch+1);
 			  // Increase random_batch with 50% probability, to avoid the case that messages keep being aggregated in this batch
-			  max_batch = to_propose_batch;
+			  if(max_batch == to_propose_batch){
+				  if (proposed_for_batch+1 == MAX_BATCH_PROPOSE){
+					  proposed_for_batch = 0;
+					  max_batch = max_batch + 1;
+				  }
+				  else
+					  ++proposed_for_batch;
+			  }
+			  else{
+				  proposed_for_batch = 1;
+				  max_batch = to_propose_batch;
+			  }
 
 			  num_pending[to_propose_batch] += 1;
 			  // Add data to msg;
@@ -332,7 +347,10 @@ void Sequencer::RunPaxos() {
 				  //Reply to allstd::cout<<"Got batch"
 				  int64 final_batch = max(max_batch, max(proposed_batch+1, entry.second));
 				  // Increase random_batch with 50% probability, to avoid the case that messages keep being aggregated in this batch
-				  max_batch = final_batch;
+				  if(max_batch != final_batch){
+					  max_batch = final_batch;
+					  proposed_for_batch = 0;
+				  }
 
 				  SEQLOG(-1, " finalzing skeen request: "<<msg->msg_id()<<", proposing "<<final_batch);
 
