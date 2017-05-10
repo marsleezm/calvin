@@ -284,7 +284,7 @@ void Sequencer::RunPaxos() {
               ++proposed_batch;
 		  }
 		  else{
-			  SEQLOG(-1, " not ready to proceed "<<to_propose_batch<<", num pending is "<<num_pending[to_propose_batch]);
+			  //SEQLOG(-1, " not ready to proceed "<<to_propose_batch<<", num pending is "<<num_pending[to_propose_batch]);
 			  pending_paxos_props.push(single_part_msg);
 		  }
            
@@ -295,7 +295,7 @@ void Sequencer::RunPaxos() {
 	  if(paxos_connection_->GetMessage(msg)){
 		  int msg_type = msg->type();
 		  if(msg_type == MessageProto::GLOBAL_PAXOS_REQ){
-			  SEQLOG(-1, "replying global paxos: "<<msg->batch_number());
+			  //SEQLOG(-1, "replying global paxos: "<<msg->batch_number());
 			  msg->set_destination_node(msg->source_node());
 			  msg->set_destination_channel("scheduler_");
 			  msg->set_type(MessageProto::TXN_BATCH);
@@ -368,7 +368,7 @@ void Sequencer::RunPaxos() {
 				  //Put it to the batch
                   multi_part_txns[final_batch].push(entry.fourth);
                   pending_sent_skeen.Erase(index);
-                  SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", pushed "<<entry.fourth->msg_id()<<" to"<<final_batch<<" and size is "<<multi_part_txns[final_batch].size());
+                  //SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", pushed "<<entry.fourth->msg_id()<<" to"<<final_batch<<" and size is "<<multi_part_txns[final_batch].size());
                   //SEQLOG(-1, " For "<<msg->msg_id()<<", num pending is "<<num_pending[final_batch]<<", proposed_batch is"<<proposed_batch);
 
     			  if( num_pending[final_batch] == 0 && proposed_batch+1 == final_batch)
@@ -538,11 +538,11 @@ void Sequencer::RunReader() {
     }
 
     int64 msg_id = batch_number | ((uint64)node_id) <<40;
-    SEQLOG(-1, " finished loading for "<<batch_number);
+    //SEQLOG(-1, " finished loading for "<<batch_number);
     if(involved_parts.size()){
     	std::vector<int> output(involved_parts.size());
     	std::copy(involved_parts.begin(), involved_parts.end(), output.begin());
-    	SEQLOG(-1, "multi-part txn's size is "<<involved_parts.size());
+    	//SEQLOG(-1, "multi-part txn's size is "<<involved_parts.size());
     	multi_part_msg->set_msg_id(msg_id);
     	pending_sent_skeen.Put(batch_number, MyFour<int, int64, vector<int>, MessageProto*>
     		(involved_parts.size(), 0, output, multi_part_msg));
