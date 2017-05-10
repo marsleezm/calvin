@@ -190,6 +190,7 @@ void stop(int sig) {
 // #ifdef PAXOS
 //  StopZookeeper(ZOOKEEPER_CONF);
 // #endif
+	LOG(-1, " received terminate!");
 	DeterministicScheduler::terminate();
 	exit(sig);
 }
@@ -275,8 +276,13 @@ int main(int argc, char** argv) {
 
 	sequencer.SetScheduler(scheduler);
 
+	LOG(-1, " started spinning, time is "<<GetTime());
 	Spin(atoi(ConfigReader::Value("duration").c_str()));
+	LOG(-1, " after spinning, time is "<<GetTime());
 	DeterministicScheduler::terminate();
+
+	LOG(-1, " trying to finish early!!!");
+
 	delete scheduler;
 	delete batch_connection;
 	return 0;

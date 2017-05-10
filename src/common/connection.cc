@@ -77,6 +77,7 @@ pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 ConnectionMultiplexer::~ConnectionMultiplexer() {
 
+	LOG(-1, " destroying connection!");
   // Stop the multixplexer's main loop.
   deconstructor_invoked_ = true;
   pthread_join(thread_, NULL);
@@ -95,6 +96,7 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
     delete it->second;
   }
   
+  LOG(-1, " size of remote result is "<<remote_result_.size());
   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = remote_result_.begin();
        it != remote_result_.end(); ++it) {
     delete it->second;
