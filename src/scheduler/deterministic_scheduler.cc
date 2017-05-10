@@ -437,7 +437,7 @@ int abort_number = 0;
     	}
     	else {
     		// WTF is this magic code doing???
-    		if(done_txn->writers_size() == 0 || rand() % done_txn->writers_size() == 0) {
+    		if(done_txn->writers_size() == 0 || done_txn->writers(0) == scheduler->configuration_->this_node_id) {
     			txns++;
     		}
     		delete done_txn;

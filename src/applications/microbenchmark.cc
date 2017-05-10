@@ -34,7 +34,6 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
 }
 
 
-
 TxnProto* Microbenchmark::InitializeTxn() {
   // Create the new transaction object
   TxnProto* txn = new TxnProto();
@@ -99,15 +98,15 @@ TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
   for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 	  txn->add_read_write_set(IntToString(*it));
 
-  GetRandomKeys(&keys,
-              kRWSetSize-2*indexAccessNum,
-              nparts * index_records,
-              nparts * kDBSize,
-              part);
-
-
-  for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-	  txn->add_read_write_set(IntToString(*it));
+//  GetRandomKeys(&keys,
+//              kRWSetSize-2*indexAccessNum,
+//              nparts * index_records,
+//              nparts * kDBSize,
+//              part);
+//
+//
+//  for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+//	  txn->add_read_write_set(IntToString(*it));
 
   txn->add_readers(part);
   txn->add_writers(part);
@@ -116,8 +115,8 @@ TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
 }
 
 // Create a non-dependent multi-partition transaction
-TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int part1, int part2, int part3) {
-	assert(part1 != part2 || nparts == 1);
+TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
+	//assert(part1 != part2 || nparts == 1);
 	// Create the new transaction object
 	TxnProto* txn = new TxnProto();
 
@@ -129,46 +128,39 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int part1, int part2, int par
 
 	set<int> keys;
 
-	int other_keys_per_part = kRWSetSize/3;
+	int avg_keys_per_part = kRWSetSize/num_parts;
+	int keys_first_part = kRWSetSize - avg_keys_per_part * (num_parts-1);
 	GetRandomKeys(&keys,
-			kRWSetSize-2*other_keys_per_part,
+			keys_first_part,
               nparts * index_records,
               nparts * kDBSize,
-              part1);
-	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+			  parts[0]);
+	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 		txn->add_read_write_set(IntToString(*it));
+	}
+	txn->add_readers(parts[0]);
+	txn->add_writers(parts[0]);
 
-	GetRandomKeys(&keys,
-			other_keys_per_part,
-              nparts * index_records,
-              nparts * kDBSize,
-              part2);
-	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-		txn->add_read_write_set(IntToString(*it));
-
-	GetRandomKeys(&keys,
-			other_keys_per_part,
-              nparts * index_records,
-              nparts * kDBSize,
-              part3);
-	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-		txn->add_read_write_set(IntToString(*it));
-
-
-	txn->add_readers(part1);
-	txn->add_readers(part2);
-	txn->add_readers(part3);
-	txn->add_writers(part1);
-	txn->add_writers(part2);
-	txn->add_writers(part3);
+	for(int i = 1; i<num_parts; ++i){
+		GetRandomKeys(&keys,
+						avg_keys_per_part,
+		              nparts * index_records,
+		              nparts * kDBSize,
+		              parts[i]);
+		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+			txn->add_read_write_set(IntToString(*it));
+		}
+		txn->add_readers(parts[i]);
+		txn->add_writers(parts[i]);
+	}
 
 	return txn;
 }
 
 
 // Create a non-dependent multi-partition transaction
-TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int part1, int part2, int part3) {
-	assert(part1 != part2 || nparts == 1);
+TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts) {
+	//assert(part1 != part2 || nparts == 1);
 	// Create the new transaction object
 	TxnProto* txn = new TxnProto();
 
@@ -177,48 +169,35 @@ TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int part1, int part2
 	txn->set_txn_type(MICROTXN_DEP_MP);
 
 	// Add two hot keys to read/write set---one in each partition.
+	int avg_index_per_part = indexAccessNum/num_parts;
+	int index_first_part = indexAccessNum- avg_index_per_part*(num_parts-1);
 
 	set<int> keys;
 	GetRandomKeys(&keys,
-                indexAccessNum,
+			index_first_part,
                 nparts * 0,
                 nparts * index_records,
-                part1);
-	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+                parts[0]);
+	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 		txn->add_read_write_set(IntToString(*it));
+		//std::cout<<txn_id<<" adding index "<<IntToString(*it)<<" for "<<parts[0] <<std::endl;
+	}
+	txn->add_readers(parts[0]);
+	txn->add_writers(parts[0]);
 
-	int other_keys_per_part = (kRWSetSize-indexAccessNum*2)/3;
-	GetRandomKeys(&keys,
-			kRWSetSize-indexAccessNum*2-2*other_keys_per_part,
-			  nparts * index_records,
-			  nparts * kDBSize,
-			  part1);
-	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-		txn->add_read_write_set(IntToString(*it));
-
-	GetRandomKeys(&keys,
-			other_keys_per_part,
-			  nparts * index_records,
-			  nparts * kDBSize,
-			  part2);
-	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-		txn->add_read_write_set(IntToString(*it));
-
-	GetRandomKeys(&keys,
-			other_keys_per_part,
-			  nparts * index_records,
-			  nparts * kDBSize,
-			  part3);
-	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-		txn->add_read_write_set(IntToString(*it));
-
-
-	txn->add_readers(part1);
-	txn->add_readers(part2);
-	txn->add_readers(part3);
-	txn->add_writers(part1);
-	txn->add_writers(part2);
-	txn->add_writers(part3);
+	for(int i = 1; i<num_parts; ++i){
+		GetRandomKeys(&keys,
+					  avg_index_per_part,
+		              nparts * 0,
+					  nparts * index_records,
+		              parts[i]);
+		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+			txn->add_read_write_set(IntToString(*it));
+			//std::cout<<txn_id<<" adding "<<IntToString(*it)<<" for "<<parts[i]<<std::endl;
+		}
+		txn->add_readers(parts[i]);
+		txn->add_writers(parts[i]);
+	}
 
 	return txn;
 }
@@ -237,6 +216,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 		for (int i = 0; i < indexAccessNum; i++) {
 			Value* index_val = storage->ReadObject(txn->read_write_set(i)), *next_val;
 			//LOG(txn->txn_id(), " getting "<<txn->read_write_set(i)<<", index value is "<<(*index_val));
+			//std::cout<<txn->txn_id()<<" accessing "<<txn->read_write_set(i)<<", index number is "<<indexAccessNum<<std::endl;
 			if(index_val == 0){
 				LOG(txn->txn_id(), "This is weird, checking what's in the txn's data");
 				string rw ="", predrw="";
@@ -250,6 +230,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 				assert(1== 2);
 			}
 			if (txn->pred_read_write_set(i).compare(*index_val) == 0){
+				//std::cout<<txn->txn_id()<<" is "<<txn->multipartition()<<", accessing "<<*index_val<<std::endl;
 				//LOG(txn->txn_id(), " prediction is correct for "<<*index_val);
 				next_val = storage->ReadObject(*index_val);
 				*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
@@ -260,10 +241,10 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 				return FAILURE;
 			}
 		}
-		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++) {
-			Value* index_val = storage->ReadObject(txn->read_write_set(i+indexAccessNum));
-			*index_val = IntToString(StringToInt(*index_val) +  txn->seed()% 100 -50);
-		}
+//		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++) {
+//			Value* index_val = storage->ReadObject(txn->read_write_set(i+indexAccessNum));
+//			*index_val = IntToString(StringToInt(*index_val) +  txn->seed()% 100 -50);
+//		}
 		return SUCCESS;
 	}
 	else{
@@ -287,11 +268,8 @@ int Microbenchmark::ReconExecute(TxnProto* txn, ReconStorageManager* storage) co
 		//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
 		if(storage->ShouldExec()){
 			Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
-			if(read_state == NORMAL){
-				if(i < indexAccessNum){
-					txn->add_pred_read_write_set(*val);
-				}
-			}
+			if(read_state == NORMAL)
+				txn->add_pred_read_write_set(*val);
 			else
 				return SUSPENDED;
 		}
