@@ -352,7 +352,7 @@ void Sequencer::RunPaxos() {
 					  proposed_for_batch = 0;
 				  }
 
-				  SEQLOG(-1, " finalzing skeen request: "<<msg->msg_id()<<", proposing "<<final_batch);
+				  //lzing skeen request: "<<msg->msg_id()<<", proposing "<<final_batch);
 
 				  MessageProto reply_msg;
 				  reply_msg.set_type(MessageProto::SKEEN_REPLY);
@@ -641,9 +641,13 @@ void Sequencer::RunLoader(){
 			<< num_pend_txns_ << " pending\n" << std::flush;
 	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
 		  for(int i = 0; i<num_threads; ++i){
+			  if(scheduler_->to_sc_txns_[i]->size())
 			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
 				  <<", num committed txn is "<<Sequencer::num_lc_txns_
 				  <<", waiting queue is"<<std::endl;
+			  else
+				  std::cout<< " doing nothing, there is no top, num committed txn is "<<Sequencer::num_lc_txns_
+					  <<", waiting queue is"<<std::endl;
 			  //for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
 			//	  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
 			//	  //std::cout<<t.first<<",";
