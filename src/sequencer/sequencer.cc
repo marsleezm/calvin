@@ -264,14 +264,14 @@ void Sequencer::RunPaxos() {
 	  MessageProto* single_part_msg;
 	  if(my_single_part_msg_.Pop(&single_part_msg)){
 		  int64 to_propose_batch = single_part_msg->batch_number();
-		  SEQLOG(-1, " got single part msg for batch "<<to_propose_batch<<", proposed batch is "<<proposed_batch);
+		  //SEQLOG(-1, " got single part msg for batch "<<to_propose_batch<<", proposed batch is "<<proposed_batch);
 		  if (num_pending[to_propose_batch] == 0 && to_propose_batch == proposed_batch+1){
-			  SEQLOG(-1, " proposing to global "<<to_propose_batch<<", proposed batch is "<<proposed_batch);
+			  //SEQLOG(-1, " proposing to global "<<to_propose_batch<<", proposed batch is "<<proposed_batch);
 			  if (multi_part_txns.count(to_propose_batch) != 0){
 				  priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg> msgs = multi_part_txns[to_propose_batch];
 				  for(uint i = 0; i < msgs.size(); ++i){
 					  MessageProto* msg = msgs.top();
-					  SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", adding message "<<msg->msg_id());
+					  //SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", adding message "<<msg->msg_id());
 					  msgs.pop();
 					  for(int j = 0; j < msg->data_size(); ++j)
 						  single_part_msg->add_data(msg->data(j));
@@ -322,7 +322,7 @@ void Sequencer::RunPaxos() {
 			  // Add data to msg;
 			  msg->set_propose_batch(to_propose_batch);
 			  pending_received_skeen[msg->msg_id()] = msg;
-			  SEQLOG(-1, " replying skeen request: "<<msg->msg_id()<<", proposing "<<to_propose_batch);
+			  //SEQLOG(-1, " replying skeen request: "<<msg->msg_id()<<", proposing "<<to_propose_batch);
 
 			  MessageProto reply;
 			  reply.set_destination_channel("paxos");
@@ -339,7 +339,7 @@ void Sequencer::RunPaxos() {
 			  int64 msg_id = msg->msg_id();
 			  int index = msg->batch_number();
 			  MyFour<int, int64, vector<int>, MessageProto*> entry = pending_sent_skeen.Lookup(index);
-			  SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", he proposed "<<msg->propose_batch()<<", remaining is "<<entry.first);
+			  //SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", he proposed "<<msg->propose_batch()<<", remaining is "<<entry.first);
 			  entry.second = max(msg->propose_batch(), entry.second);
 			  //pending_skeen_msg[msg_id].third->set_batch_number(new_batch);
 			  if (entry.first == 1)
@@ -369,14 +369,13 @@ void Sequencer::RunPaxos() {
                   multi_part_txns[final_batch].push(entry.fourth);
                   pending_sent_skeen.Erase(index);
                   SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", pushed "<<entry.fourth->msg_id()<<" to"<<final_batch<<" and size is "<<multi_part_txns[final_batch].size());
-                  SEQLOG(-1, " For "<<msg->msg_id()<<", num pending is "<<num_pending[final_batch]<<", proposed_batch is"<<proposed_batch);
+                  //SEQLOG(-1, " For "<<msg->msg_id()<<", num pending is "<<num_pending[final_batch]<<", proposed_batch is"<<proposed_batch);
 
     			  if( num_pending[final_batch] == 0 && proposed_batch+1 == final_batch)
     				  propose_global(proposed_batch, num_pending, pending_paxos_props, multi_part_txns);
 			  }
 			  else{
 				  entry.first -= 1;
-				  SEQLOG(index, " first is "<<entry.first<<", trying to put back to map");
 				  pending_sent_skeen.Put(index, entry);
 			  }
 
@@ -393,10 +392,9 @@ void Sequencer::RunPaxos() {
 
 			  //Put it to the batch
 			  multi_part_txns[new_batch].push(pending_received_skeen[msg->msg_id()]);
-			  SEQLOG(-1, " got skeen final: "<<msg->msg_id()<<", batch number is "<<new_batch<<", pushed "<<reinterpret_cast<int64>(pending_received_skeen[msg->msg_id()])<<", size is"<<multi_part_txns[new_batch].size());
+			  //SEQLOG(-1, " got skeen final: "<<msg->msg_id()<<", batch number is "<<new_batch<<", pushed "<<reinterpret_cast<int64>(pending_received_skeen[msg->msg_id()])<<", size is"<<multi_part_txns[new_batch].size());
 			  num_pending[blocked_batch] -= 1;
 
-			  SEQLOG(-1, " got skeen final: "<<msg->msg_id()<<", pending is "<<num_pending[blocked_batch]);
 			  if(num_pending[blocked_batch] == 0 && blocked_batch == proposed_batch+1){
 				  pending_received_skeen.erase(msg->msg_id());
 				  propose_global(proposed_batch, num_pending, pending_paxos_props, multi_part_txns);
@@ -425,7 +423,7 @@ void Sequencer::propose_global(int64& proposed_batch, map<int, int>& num_pending
 				for(uint i = 0; i < msgs.size(); ++i){
 					MessageProto* msg = msgs.top();
 					msgs.pop();
-					SEQLOG(-1, " Proposing to global "<<next_batch<<", adding message "<<msg->msg_id());
+					//SEQLOG(-1, " Proposing to global "<<next_batch<<", adding message "<<msg->msg_id());
 					for(int j = 0; j < msg->data_size(); ++j)
 						propose_msg->add_data(msg->data(j));
 					delete msg;
@@ -558,7 +556,7 @@ void Sequencer::RunReader() {
     	batches[*it].set_msg_id(msg_id);
     	connection_->Send(batches[*it]);
     	batches[*it].clear_data();
-    	SEQLOG(-1, " Sending skeen request "<<msg_id<<" to "<<*it);
+    	//SEQLOG(-1, " Sending skeen request "<<msg_id<<" to "<<*it);
     }
 
     //batch_number += configuration_->all_nodes.size();
@@ -734,7 +732,7 @@ void* Sequencer::FetchMessage() {
 MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
   if (batches_.count(batch_id) > 0) {
     // Requested batch has already been received.
-	  SEQLOG(-1, "Already received batch "<<batch_id);
+	  //SEQLOG(-1, "Already received batch "<<batch_id);
 	  MessageProto* batch = batches_[batch_id];
 	  batches_.erase(batch_id);
 	  return batch;
