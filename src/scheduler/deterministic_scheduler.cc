@@ -265,7 +265,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if(pend_txn.second == Sequencer::num_lc_txns_  && max_restarted == active_g_tids[pend_txn.first]->abort_bit_)
 		  {
 			  if(pend_txn.fourth == TO_SEND){
-				  LOG(pend_txn.first," send remote message!!!");
+				  //LOG(pend_txn.first," send remote message!!!");
 				  active_g_tids[pend_txn.first]->SendLocalReads();
 			  }
 			  else{
