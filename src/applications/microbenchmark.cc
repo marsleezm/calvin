@@ -215,7 +215,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 		//LOG(txn->txn_id(), " transactions is dependent!");
 		for (int i = 0; i < indexAccessNum; i++) {
 			Value* index_val = storage->ReadObject(txn->read_write_set(i)), *next_val;
-			//LOG(txn->txn_id(), " getting "<<txn->read_write_set(i)<<", index value is "<<(*index_val));
+			LOG(txn->txn_id(), " getting "<<txn->read_write_set(i)<<", index value is "<<(*index_val));
 			//std::cout<<txn->txn_id()<<" accessing "<<txn->read_write_set(i)<<", index number is "<<indexAccessNum<<std::endl;
 			if(index_val == 0){
 				LOG(txn->txn_id(), "This is weird, checking what's in the txn's data");
@@ -231,13 +231,13 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 			}
 			if (txn->pred_read_write_set(i).compare(*index_val) == 0){
 				//std::cout<<txn->txn_id()<<" is "<<txn->multipartition()<<", accessing "<<*index_val<<std::endl;
-				//LOG(txn->txn_id(), " prediction is correct for "<<*index_val);
+				LOG(txn->txn_id(), " prediction is correct for "<<*index_val);
 				next_val = storage->ReadObject(*index_val);
 				*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 				*next_val = IntToString(StringToInt(*next_val) +  txn->seed()% 100 -50);
 			}
 			else{
-				//LOG(txn->txn_id(), " prediction is wrong for "<<*index_val);
+				LOG(txn->txn_id(), " prediction is wrong for "<<*index_val);
 				return FAILURE;
 			}
 		}

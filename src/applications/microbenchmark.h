@@ -62,10 +62,10 @@ class Microbenchmark : public Application {
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part);
   inline int RandomLocalKey(const int key_start, const int key_limit, const int part) const {
-		return key_start + part + nparts * (rand() % ((key_limit - key_start)/nparts));
+		return key_start + part + nparts * (abs(rand()) % ((key_limit - key_start)/nparts));
   }
-  inline int NotSoRandomLocalKey(const int rand_num, const int key_start, const int key_limit, const int part) const {
-		return key_start + part + nparts * (rand_num % ((key_limit - key_start)/nparts));
+  inline int NotSoRandomLocalKey(const int64 rand_num, const int key_start, const int key_limit, const int part) const {
+		return key_start + part + nparts * (abs(rand_num) % ((key_limit - key_start)/nparts));
   }
   Microbenchmark() {}
 };
