@@ -115,7 +115,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     	channel.append(IntToString(i));
     	thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
         for (int j = 0; j<LATENCY_SIZE*NUM_THREADS; ++j)
-            latency[i] = 0;
+            latency[j] = 0;
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
