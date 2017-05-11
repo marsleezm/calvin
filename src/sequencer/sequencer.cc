@@ -580,7 +580,7 @@ void Sequencer::output(){
     ofstream myfile;
     myfile.open ("output.txt");
     int count =0;
-    int64 latency = 0;
+    pair<int64, int64> latency;
     myfile << "THROUGHPUT" << '\n';
     while(abort[count] != -1 && count < THROUGHPUT_SIZE){
         myfile << throughput[count] << ", "<< abort[count] << '\n';
@@ -590,8 +590,8 @@ void Sequencer::output(){
 
     for(int i = 0; i<NUM_THREADS; ++i){
     	count = 0;
-		while((latency = scheduler_->latency[i][count]) != 0 && count < LATENCY_SIZE){
-			myfile << latency << '\n';
+		while(scheduler_->latency[i][count].first != 0 && count < LATENCY_SIZE){
+			myfile << scheduler_->latency[i][count].first<<", "<<scheduler_->latency[i][count].second << '\n';
 			++count;
 		}
     }

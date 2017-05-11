@@ -34,12 +34,23 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
   txn->set_status(TxnProto::NEW);
 
   bool mp = txn->multipartition();
-  int remote_node;
+
+  int remote_node = -1, remote_warehouse_id = -1;
   if (mp) {
-    do {
-      remote_node = rand() % config->all_nodes.size();
-    } while (config->all_nodes.size() > 1 &&
-             remote_node == config->this_node_id);
+     do {
+       remote_node = rand() % config->all_nodes.size();
+     } while (config->all_nodes.size() > 1 &&
+              remote_node == config->this_node_id);
+
+     do {
+ 		remote_warehouse_id = rand() % (WAREHOUSES_PER_NODE *
+ 										config->all_nodes.size());
+     } while (config->all_nodes.size() > 1 &&
+ 		   config->LookupPartition(remote_warehouse_id) !=
+ 			 remote_node);
+
+     txn->add_readers(remote_node);
+     txn->add_writers(remote_node);
   }
 
   // Create an arg list
@@ -64,8 +75,6 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
     // New Order
     case NEW_ORDER:
     	{
-    	std::set<int> readers;
-    	readers.insert(config->this_node_id);
 		txn->add_readers(config->this_node_id);
 		txn->add_writers(config->this_node_id);
       // First, we pick a local warehouse
@@ -83,7 +92,6 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
         // 0th key in read-write set is district
         txn->add_read_write_set(district_key);
 
-
         // Finally, we pick a random customer
         customer_id = rand() % CUSTOMERS_PER_DISTRICT;
         snprintf(customer_key, sizeof(customer_key),
@@ -94,6 +102,17 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
         // We set the length of the read and write set uniformly between 5 and 15
         order_line_count = (rand() % 11) + 5;
+
+        // Only do remote transaction to another node
+        char remote_warehouse_key[128];
+        if(mp){
+     		snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
+     				 "w%d", remote_warehouse_id);
+        }
+        else {
+        	snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
+        	            			"%s", warehouse_key);
+        }
 
         // Iterate through each order line
         for (int i = 0; i < order_line_count; i++) {
@@ -109,41 +128,10 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
         	snprintf(item_key, sizeof(item_key), "i%d", item);
 
         	// Create an order line warehouse key (default is local)
-        	char remote_warehouse_key[128];
 
 			// We loop until we actually get a remote one
 			// TODO: This part should be optimized
-        	if (mp) {
-				int remote_warehouse_id;
-				do {
-					remote_warehouse_id = rand() % (WAREHOUSES_PER_NODE *
-													config->all_nodes.size());
-					snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
-							 "w%d", remote_warehouse_id);
-				} while (config->all_nodes.size() > 1 &&
-					   config->LookupPartition(remote_warehouse_key) !=
-						 remote_node);
-        	}
-        	else
-            	snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
-            			"%s", warehouse_key);
-
 			// Determine if we should add it to read set to avoid duplicates
-			bool needed = true;
-			for (int j = 0; j < txn->read_set_size(); j++) {
-			  if (txn->read_set(j) == remote_warehouse_key){
-				needed = false;
-				break;
-			  }
-			}
-			if (needed){
-				txn->add_read_set(remote_warehouse_key);
-				if(readers.count(remote_node) == 0){
-					txn->add_readers(remote_node);
-					txn->add_writers(remote_node);
-					readers.insert(remote_node);
-				}
-			}
 
 			// Finally, we set the stock key to the read and write set
 			Key stock_key = string(remote_warehouse_key) + "s" + item_key;
@@ -193,26 +181,15 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
 		// If the probability is 15%, we make it a remote customer
 		} else {
-			int remote_warehouse_id;
 			int remote_district_id;
 			int remote_customer_id;
 			char remote_warehouse_key[40];
-			do {
-				remote_warehouse_id = rand() % (WAREHOUSES_PER_NODE *
-                                          config->all_nodes.size());
-				snprintf(remote_warehouse_key, sizeof(remote_warehouse_key), "w%d",
-						remote_warehouse_id);
-
-				remote_district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-
-				remote_customer_id = rand() % CUSTOMERS_PER_DISTRICT;
-				snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d",
-                   remote_warehouse_id, remote_district_id, remote_customer_id);
-			} while (config->all_nodes.size() > 1 &&
-                 config->LookupPartition(remote_warehouse_key) != remote_node);
-
-			txn->add_readers(remote_node);
-			txn->add_writers(remote_node);
+			snprintf(remote_warehouse_key, sizeof(remote_warehouse_key), "w%d",
+					remote_warehouse_id);
+			remote_district_id = rand() % DISTRICTS_PER_WAREHOUSE;
+			remote_customer_id = rand() % CUSTOMERS_PER_DISTRICT;
+			snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d",
+			   remote_warehouse_id, remote_district_id, remote_customer_id);
 		}
 
 		// We only do secondary keying ~60% of the time
