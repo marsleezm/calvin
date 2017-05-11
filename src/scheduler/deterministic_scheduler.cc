@@ -110,6 +110,9 @@ Spin(2);
     channel.append(IntToString(i));
     thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
+    for (int j = 0; j<LATENCY_SIZE; ++j)
+    	latency[i][j] = 0;
+
     cpu_set_t cpuset;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -175,6 +178,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   double last_blocked = 0;
   bool if_blocked = false;
   int last_printed = 0, out_counter1 = 0, last_sc = -1;
+  int sample_count = 0, latency_count = 0;
+  int64* latency_array = scheduler->latency[thread];
 
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
@@ -200,6 +205,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  active_g_tids.erase(to_sc_txn.first);
 				  //LOG(to_sc_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(mgr));
 				  active_l_tids.erase(to_sc_txn.second);
+				  AddLatency(sample_count, latency_count, latency_array, mgr->get_txn());
 				  delete mgr;
 				  my_to_sc_txns->pop();
                   if (my_to_sc_txns->size())
@@ -228,7 +234,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  LOG(to_wait_txn.first, " is the first, addr is "<<reinterpret_cast<int64>(manager));
 			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
 				  --scheduler->num_suspend[thread];
-				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids) == false)
+				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == false)
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->num_restarted_, manager));
 			  }
 			  else{
@@ -290,6 +296,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  LOG(pend_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					  active_g_tids.erase(pend_txn.first);
 					  active_l_tids.erase(pend_txn.second);
+					  AddLatency(sample_count, latency_count, latency_array, manager->get_txn());
 					  delete manager;
 					  LOG(-1, pend_txn.first<< " committed!");
 				  }
@@ -317,7 +324,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  scheduler->num_suspend[thread] -= manager->is_suspended_;
 				  ++Sequencer::num_aborted_;
 				  manager->Abort();
-				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids) == false)
+				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == false)
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_abort_txn.first, manager->num_restarted_, manager));
 			  }
 		  }
@@ -381,6 +388,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  active_g_tids.erase(txn_id);
 					  LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					  active_l_tids.erase(txn->local_txn_id());
+					  AddLatency(sample_count, latency_count, latency_array, txn);
 					  delete manager;
 				  }
 			  }
@@ -398,7 +406,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if(retry_txns.front().first < Sequencer::num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->num_restarted_)
 			  retry_txns.pop();
 		  else{
-			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, active_l_tids) == true)
+			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == true)
 				  retry_txns.pop();
 			  else{
 				  retry_txns.front().second = retry_txns.front().third->num_restarted_;
@@ -418,6 +426,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		  if (got_it == true) {
 			  // Create manager.
+			  txn->set_start_time(GetUTime());
 			  StorageManager* manager;
 			  if (active_g_tids.count(txn->txn_id()) == 0)
 				  manager = new StorageManager(scheduler->configuration_,
@@ -427,7 +436,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager = active_g_tids[txn->txn_id()];
 				  manager->SetupTxn(txn);
 			  }
-			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids) == false)
+			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == false)
 				  retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->num_restarted_, manager));
 		  }
 //		  else{
@@ -464,7 +473,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 }
 
 bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
-		unordered_map<int64_t, StorageManager*>& active_g_tids, unordered_map<int64_t, StorageManager*>& active_l_tids){
+		unordered_map<int64_t, StorageManager*>& active_g_tids, unordered_map<int64_t, StorageManager*>& active_l_tids,
+		int& sample_count, int& latency_count, int64* latency_array){
 	TxnProto* txn = manager->get_txn();
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way
 	if(manager->ReadOnly()){
@@ -473,6 +483,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			//Sequencer::max_commit_ts = txn->txn_id();
 			++Sequencer::num_lc_txns_;
 			application_->ExecuteReadOnly(manager);
+			AddLatency(sample_count, latency_count, latency_array, txn);
 			delete manager;
 			return true;
 		}
@@ -527,6 +538,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					//LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					active_l_tids.erase(txn->local_txn_id());
 					//num_suspend[thread] -= manager->was_suspended_;
+					AddLatency(sample_count, latency_count, latency_array, txn);
 					delete manager;
 					return true;
 				}
