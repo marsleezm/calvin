@@ -296,6 +296,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  LOG(pend_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					  active_g_tids.erase(pend_txn.first);
 					  active_l_tids.erase(pend_txn.second);
+					  AddLatency(sample_count, latency_count, latency_array, manager->get_txn());
 					  delete manager;
 					  LOG(-1, pend_txn.first<< " committed!");
 				  }
@@ -377,6 +378,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  active_g_tids.erase(txn_id);
 					  LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					  active_l_tids.erase(txn->local_txn_id());
+					  AddLatency(sample_count, latency_count, latency_array, txn);
 					  delete manager;
 				  }
 			  }
@@ -469,6 +471,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			//Sequencer::max_commit_ts = txn->txn_id();
 			++Sequencer::num_lc_txns_;
 			application_->ExecuteReadOnly(manager);
+			AddLatency(sample_count, latency_count, latency_array, txn);
 			delete manager;
 			return true;
 		}
