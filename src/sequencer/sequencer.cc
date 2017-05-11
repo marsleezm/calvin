@@ -530,7 +530,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
     }
     myfile << "LATENCY" << '\n';
     count = 0;
-    while((latency = scheduler->latency[count]) != 0){
+    while((latency = scheduler->latency[count]) != 0  && count < LATENCY_SIZE * NUM_THREADS){
         myfile << latency << '\n';
         ++count;
     }
