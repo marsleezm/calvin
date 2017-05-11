@@ -428,6 +428,61 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	int order_line_amount_total = 0;
 	double system_time = tpcc_args->system_time();
 
+    // Create an order key to add to write set
+	// Next we create an Order object
+    char order_key[128];
+    snprintf(order_key, sizeof(order_key), "%so%d",
+             district_key.c_str(), order_number);
+
+	// Retrieve the customer we are looking for
+    Key customer_key = txn->read_set(1);
+    if(storage->ShouldRead()){
+		val = storage->ReadLock(customer_key, read_state, false);
+		if (read_state == SPECIAL)
+			return reinterpret_cast<int64>(val);
+		else if(read_state == NORMAL){
+	    	Customer customer;
+			assert(customer.ParseFromString(*val));
+			customer.set_last_order(order_key);
+			assert(customer.SerializeToString(val));
+		}
+    }
+
+	// We write the order to storage
+    int result = storage->LockObject(order_key, val_copy);
+	if(result == LOCK_FAILED)
+		return TX_ABORTED;
+	else if (result == LOCKED){
+		Order order;
+		order.set_id(order_key);
+		order.set_warehouse_id(warehouse_key);
+		order.set_district_id(district_key);
+		order.set_customer_id(customer_key);
+
+		// Set some of the auxiliary data
+		order.set_entry_date(system_time);
+		order.set_carrier_id(-1);
+		order.set_order_line_count(order_line_count);
+		order.set_all_items_local(!txn->multipartition());
+		assert(order.SerializeToString(val_copy));
+	}
+
+    char new_order_key[128];
+    snprintf(new_order_key, sizeof(new_order_key),
+             "%sno%d", district_key.c_str(), order_number);
+
+	// Finally, we write the order line to storage
+    result = storage->LockObject(new_order_key, val_copy);
+	if(result == LOCK_FAILED)
+		return TX_ABORTED;
+	else if (result == LOCKED){
+		NewOrder new_order;
+		new_order.set_id(new_order_key);
+		new_order.set_warehouse_id(warehouse_key);
+		new_order.set_district_id(district_key);
+		assert(new_order.SerializeToString(val_copy));
+	}
+
 	for (int i = 0; i < order_line_count; i++) {
 		// For each order line we parse out the three args
 		string stock_key = txn->read_write_set(i + 1);
@@ -498,61 +553,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		//   storage->PutObject(stock_key, stock_value);
 		// Next, we create a new order line object with std attributes
 
-	}
-
-    // Create an order key to add to write set
-	// Next we create an Order object
-    char order_key[128];
-    snprintf(order_key, sizeof(order_key), "%so%d",
-             district_key.c_str(), order_number);
-
-	// Retrieve the customer we are looking for
-    Key customer_key = txn->read_set(1);
-    if(storage->ShouldRead()){
-		val = storage->ReadLock(customer_key, read_state, false);
-		if (read_state == SPECIAL)
-			return reinterpret_cast<int64>(val);
-		else if(read_state == NORMAL){
-	    	Customer customer;
-			assert(customer.ParseFromString(*val));
-			customer.set_last_order(order_key);
-			assert(customer.SerializeToString(val));
-		}
-    }
-
-	// We write the order to storage
-    int result = storage->LockObject(order_key, val_copy);
-	if(result == LOCK_FAILED)
-		return TX_ABORTED;
-	else if (result == LOCKED){
-		Order order;
-		order.set_id(order_key);
-		order.set_warehouse_id(warehouse_key);
-		order.set_district_id(district_key);
-		order.set_customer_id(customer_key);
-
-		// Set some of the auxiliary data
-		order.set_entry_date(system_time);
-		order.set_carrier_id(-1);
-		order.set_order_line_count(order_line_count);
-		order.set_all_items_local(!txn->multipartition());
-		assert(order.SerializeToString(val_copy));
-	}
-
-    char new_order_key[128];
-    snprintf(new_order_key, sizeof(new_order_key),
-             "%sno%d", district_key.c_str(), order_number);
-
-	// Finally, we write the order line to storage
-    result = storage->LockObject(new_order_key, val_copy);
-	if(result == LOCK_FAILED)
-		return TX_ABORTED;
-	else if (result == LOCKED){
-		NewOrder new_order;
-		new_order.set_id(new_order_key);
-		new_order.set_warehouse_id(warehouse_key);
-		new_order.set_district_id(district_key);
-		assert(new_order.SerializeToString(val_copy));
 	}
 
 	return SUCCESS;
