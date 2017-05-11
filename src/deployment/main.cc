@@ -80,7 +80,7 @@ class MClient : public Client {
 
       (*txn)->set_multipartition(false);
     }
-    (*txn)->set_seed(GetTime());
+    (*txn)->set_seed(GetUTime());
   }
 
  private:

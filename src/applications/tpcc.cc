@@ -52,7 +52,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
   int order_line_count;
   Value customer_value;
   std::set<int> items_used;
-  txn->set_seed(GetTime());
+  txn->set_seed(GetUTime());
 
 
   // We set the read and write set based on type
