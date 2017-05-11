@@ -20,6 +20,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "proto/message.pb.h"
 #include "common/types.h"
 #include "common/logging.h"
 
@@ -660,6 +661,40 @@ class AtomicMap {
 };
 
 
+template<typename K, typename V>
+class MyAtomicMap {
+ public:
+	MyAtomicMap() {
+		pthread_mutex_init(&mutex_, NULL);
+	}
+  ~MyAtomicMap() {}
+
+  inline V Lookup(const K& k) {
+	  V v;
+	  pthread_mutex_lock(&mutex_);
+	  v = map_[k];
+	  pthread_mutex_unlock(&mutex_);
+	  return v;
+  }
+
+  inline void Put(const K& k, const V& v) {
+	pthread_mutex_lock(&mutex_);
+    map_[k] = v;
+    pthread_mutex_unlock(&mutex_);
+  }
+
+  inline void Erase(const K& k) {
+	pthread_mutex_lock(&mutex_);
+	map_.erase(k);
+	pthread_mutex_unlock(&mutex_);
+  }
+
+ private:
+  unordered_map<K, V> map_;
+  pthread_mutex_t mutex_;
+
+};
+
 struct ValuePair{
 	int first;
 	Value* second = NULL;
@@ -814,6 +849,15 @@ public:
     bool operator() (ReadFromEntry left, ReadFromEntry right)
     {
     	return (left.my_tx_id_ > right.my_tx_id_);
+    }
+};
+
+class CompareMsg
+{
+public:
+    bool operator() (MessageProto* left, MessageProto* right)
+    {
+    	return (left->msg_id() > right->msg_id());
     }
 };
 

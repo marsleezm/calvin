@@ -29,6 +29,12 @@ message MessageProto {
     MESSAGE_PTR = 7;
     READ_CONFIRM = 8;
     MULTI_READ_CONFIRM = 9;
+    LOCAL_PAXOS = 10;
+    GLOBAL_PAXOS_REQ = 11;
+    GLOBAL_PAXOS_REPLY = 12;
+    SKEEN_REQ = 13;
+   	SKEEN_PROPOSE = 14;
+	SKEEN_REPLY = 15;
   };
   required MessageType type = 9;
 
@@ -44,10 +50,12 @@ message MessageProto {
   repeated int32 final_abort_nums = 13;
   optional int32 num_aborted = 14;
   optional bool confirmed = 15;
+   optional int64 msg_id = 16;
 
   // For TXN_BATCH messages, 'batch_number' identifies the epoch of the txn
   // batch being sent.
   optional int64 batch_number = 21;
+  optional int64 propose_batch = 22;
 
   // For READ_RESULT messages, 'keys(i)' and 'values(i)' store the key and
   // result of a read, respectively.

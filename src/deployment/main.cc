@@ -264,7 +264,7 @@ int main(int argc, char** argv) {
 	assert(argv[2][1] == 'n');
 	int queue_mode = NORMAL_QUEUE;
 
-	Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), batch_connection,
+	Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), multiplexer.NewConnection("paxos"), batch_connection,
 		  	  client, storage, queue_mode);
 
 	DeterministicScheduler* scheduler;
