@@ -522,6 +522,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 
 	// We write the order to storage
 	int result = storage->LockObject(order_key, val_copy);
+
 	if(result == LOCK_FAILED)
 		return TX_ABORTED;
 	else if (result == LOCKED){
@@ -538,6 +539,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		order.set_all_items_local(!txn->multipartition());
 		assert(order.SerializeToString(val_copy));
 	}
+
 
 	char new_order_key[128];
 	snprintf(new_order_key, sizeof(new_order_key),
