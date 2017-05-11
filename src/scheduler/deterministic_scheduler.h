@@ -14,6 +14,9 @@
 #include <pthread.h>
 
 #include <deque>
+#define LATENCY_SIZE 1000
+#define SAMPLE_RATE 500
+#define THROUGHPUT_SIZE 500
 
 #include "scheduler/scheduler.h"
 #include "common/utils.h"
@@ -120,6 +123,12 @@ class DeterministicScheduler : public Scheduler {
   
   int queue_mode_;
   int abort_batch_size;
+  bool deconstructor_invoked_ = false;
+
+ 	 public:
+        int64 latency[LATENCY_SIZE*NUM_THREADS];
+        double throughput[THROUGHPUT_SIZE];
+        double abort[THROUGHPUT_SIZE];
 
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

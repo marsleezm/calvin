@@ -36,6 +36,7 @@
 //pthread_mutex_t mutex_for_item;
 
 int dependent_percent;
+int multi_txn_num_parts;
 
 // Microbenchmark load generation client.
 class MClient : public Client {
@@ -47,23 +48,29 @@ class MClient : public Client {
   virtual ~MClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id) {
     if (config_->all_nodes.size() > 1 && rand() % 10000 < percent_mp_) {
-      // Multipartition txn.
-      int other1;
-      int other2;
-      do {
-        other1 = rand() % config_->all_nodes.size();
-      } while (other1 == config_->this_node_id);
+    	// Multi-partition txn.
+    	int parts[multi_txn_num_parts];
+    	parts[0] = config_->this_node_id;
+    	int counter = 1;
+    	while (counter != multi_txn_num_parts){
+    		int new_part = abs(rand()) %  config_->all_nodes.size(), i = 0;
+    		for(i =0; i< counter; ++i){
+    			if(parts[i] == new_part){
+    				break;
+    			}
+    		}
+    		if (i == counter){
+    			parts[i] = new_part;
+    			++counter;
+    		}
+    	}
 
-      do {
-        other2 = rand() % config_->all_nodes.size();
-      } while (other2 == config_->this_node_id || other2 == other1);
+    	if (abs(rand()) %10000 < dependent_percent)
+    		*txn = microbenchmark.MicroTxnDependentMP(txn_id, parts, multi_txn_num_parts);
+    	else
+    		*txn = microbenchmark.MicroTxnMP(txn_id, parts, multi_txn_num_parts);
 
-      if (abs(rand()) %10000 < dependent_percent)
-    	  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
-      else
-    	  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
-
-      (*txn)->set_multipartition(true);
+    	(*txn)->set_multipartition(true);
     } else {
       // Single-partition txn.
       if (abs(rand()) %10000 < dependent_percent)
@@ -151,6 +158,7 @@ int main(int argc, char** argv) {
 
   ConfigReader::Initialize("myconfig.conf");
   dependent_percent = 100*stof(ConfigReader::Value("dependent_percent").c_str());
+  multi_txn_num_parts = stof(ConfigReader::Value("multi_txn_num_parts").c_str());
 
   bool useFetching = false;
   if (argc > 4 && argv[4][0] == 'f')
@@ -240,7 +248,10 @@ int main(int argc, char** argv) {
 									 client, queue_mode);
   }
 
+  std::cout<<"Duration is "<<atoi(ConfigReader::Value("duration").c_str())<<std::endl;
   Spin(atoi(ConfigReader::Value("duration").c_str()));
+  std::cout<<"Finished duration"<<std::endl;
+  sequencer.output(scheduler);
   delete scheduler;
   return 0;
 }

@@ -15,6 +15,7 @@
 #include "proto/txn.pb.h"
 #include "common/configuration.h"
 #include "common/config_reader.h"
+#include "scheduler/deterministic_scheduler.h"
 
 //#define PAXOS
 //#define PREFETCHING
@@ -22,8 +23,8 @@
 
 //#define MAX_BATCH_SIZE 56
 
-#define SAMPLES 100000
-#define SAMPLE_RATE 999
+//#define SAMPLES 100000
+//#define SAMPLE_RATE 999
 //#define VERBOSE_SEQUENCER
 
 //#define LATENCY_TEST
@@ -68,6 +69,7 @@ class Sequencer {
   ~Sequencer();
 
   AtomicQueue<TxnProto*>* GetTxnsQueue() { return txns_queue_;}
+  void output(DeterministicScheduler* scheduler);
 
  private:
   // Sequencer's main loops:

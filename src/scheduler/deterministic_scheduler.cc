@@ -80,6 +80,11 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     txns_queue = new AtomicQueue<TxnProto*>();
     done_queue = new AtomicQueue<TxnProto*>();
 
+    for(int i = 0; i < THROUGHPUT_SIZE; ++i){
+        throughput[i] = -1;
+        abort[i] = -1;
+    }
+
     for (int i = 0; i < NUM_THREADS; i++) {
     	message_queues[i] = new AtomicQueue<MessageProto>();
     }
@@ -109,6 +114,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     	string channel("scheduler");
     	channel.append(IntToString(i));
     	thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
+        for (int j = 0; j<LATENCY_SIZE*NUM_THREADS; ++j)
+            latency[i] = 0;
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
@@ -157,7 +164,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   reply_recon_msg.set_type(MessageProto::RECON_INDEX_REPLY);
   reply_recon_msg.set_destination_channel("sequencer");
   reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
-  while (true) {
+  while (!scheduler->deconstructor_invoked_) {
 	  if (scheduler->message_queues[thread]->Pop(&message)){
 
 		  // If I get read_result when executing a transaction
@@ -292,6 +299,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  if(recon_txns.size()){
 
 		  TxnProto* txn = recon_txns.front();
+          if (txn->start_time() == 0)
+            txn->set_start_time(GetUTime());
 		  //LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
 		  recon_txns.pop();
 		  ReconStorageManager* manager;
@@ -354,6 +363,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 }
 
 DeterministicScheduler::~DeterministicScheduler() {
+	deconstructor_invoked_ = true;
 }
 
 // Returns ptr to heap-allocated
@@ -394,6 +404,8 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
   int batch_number = 0;
 int test = 0;
 int abort_number = 0;
+	int latency_count = 0;
+	int sample_count = 0;
 
 	MessageProto restart_msg;
 	restart_msg.set_destination_channel("sequencer");
@@ -404,7 +416,7 @@ int abort_number = 0;
 	//set<int> locked;
 	//set<int> executing;
 
-  while (true) {
+  while (!scheduler->deconstructor_invoked_) {
     TxnProto* done_txn;
     bool got_it = scheduler->done_queue->Pop(&done_txn);
     if (got_it == true) {
@@ -437,8 +449,17 @@ int abort_number = 0;
     	}
     	else {
     		// WTF is this magic code doing???
-    		if(done_txn->writers_size() == 0 || rand() % done_txn->writers_size() == 0) {
+    		if(done_txn->writers_size() == 0 || done_txn->writers(0) == scheduler->configuration_->this_node_id) {
     			txns++;
+                if (sample_count == SAMPLE_RATE)
+                {
+                    if(latency_count == LATENCY_SIZE*NUM_THREADS)
+                        latency_count = 0;
+                    scheduler->latency[latency_count] = GetUTime() - done_txn->start_time();
+                    ++latency_count;
+                    sample_count = 0;
+                }
+                ++sample_count;
     		}
     		delete done_txn;
     	}
@@ -465,6 +486,8 @@ int abort_number = 0;
           }
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
+          if (txn->start_time() == 0)
+        	  txn->set_start_time(GetUTime());
           batch_offset++;
           LOG(txn->txn_id(), " is being locked, batch is "<<batch_message->batch_number());
           scheduler->lock_manager_->Lock(txn);
@@ -500,6 +523,8 @@ int abort_number = 0;
                 << pending_txns << " pending \n"
 				<< std::flush;
       // Reset txn count.
+      scheduler->throughput[test] = (static_cast<double>(txns) / total_time);
+      scheduler->abort[test] = abort_number/total_time;
       time = GetTime();
       txns = 0;
       abort_number = 0;
