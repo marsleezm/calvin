@@ -54,7 +54,6 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
   std::set<int> items_used;
   txn->set_seed(GetUTime());
 
-
   // We set the read and write set based on type
   switch (txn_type) {
     // Initialize

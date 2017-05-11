@@ -254,8 +254,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 	  }
-
-	  if(scheduler->txns_queue->Pop(&txn)){
+	  else if(scheduler->txns_queue->Pop(&txn)){
 		  // No remote read result found, start on next txn if one is waiting.
 		  // Create manager.
 		  StorageManager* manager;
@@ -294,9 +293,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  active_txns[IntToString(txn->txn_id())] = manager;
 		  }
 	  }
-
 	  // Try to handle recon_txns
-	  if(recon_txns.size()){
+	  else if(recon_txns.size()){
 
 		  TxnProto* txn = recon_txns.front();
           if (txn->start_time() == 0)
@@ -345,8 +343,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // If I need to execute some dependent txns to get its read/write set AND only if I am not processing
 	  // a batch of reconnainssance message
-
-	  if(scheduler->recon_queue_->Pop(&message))
+	  else if(scheduler->recon_queue_->Pop(&message))
 	  {
 		  //LOG(-1, " got new recon batch: "<<message.batch_number());
 		  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
