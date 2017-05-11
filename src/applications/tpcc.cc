@@ -599,7 +599,61 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	// We initialize the order line amount total to 0
 	int order_line_amount_total = 0;
 	double system_time = txn->seed();
-	//txn->set_seed(system_time);
+
+	char order_key[128];
+	snprintf(order_key, sizeof(order_key), "%so%d",
+			 district_key.c_str(), order_number);
+
+	// Retrieve the customer we are looking for
+	Key customer_key = txn->read_write_set(1);
+	Value* customer_val = storage->ReadObject(customer_key);
+	Customer customer;
+	assert(customer.ParseFromString(*customer_val));
+	customer.set_last_order(order_key);
+	//LOG(txn->txn_id(), " last of customer "<<customer_key<<" is "<<customer.last());
+	assert(customer.SerializeToString(customer_val));
+	//storage->WriteToBuffer(customer_key, customer.SerializeAsString());
+
+
+	//if(txn->pred_write_set(order_line_count).compare(order_key) == 0){
+		// We write the order to storage
+		Order order;
+		order.set_id(order_key);
+		order.set_warehouse_id(warehouse_key);
+		order.set_district_id(district_key);
+		order.set_customer_id(customer_key);
+
+		// Set some of the auxiliary data
+		order.set_entry_date(system_time);
+		order.set_carrier_id(-1);
+		order.set_order_line_count(order_line_count);
+		order.set_all_items_local(!txn->multipartition());
+		Value* order_value = new Value();
+		assert(order.SerializeToString(order_value));
+		storage->PutObject(order_key, order_value);
+		//storage->WriteToBuffer(order_key, order.SerializeAsString());
+	//}
+	//else
+	//	return FAILURE;
+
+	char new_order_key[128];
+	snprintf(new_order_key, sizeof(new_order_key),
+			 "%sno%d", district_key.c_str(), order_number);
+
+	// Finally, we write the order line to storage
+	//if(txn->pred_write_set(order_line_count+1).compare(new_order_key) == 0){
+		NewOrder new_order;
+		new_order.set_id(new_order_key);
+		new_order.set_warehouse_id(warehouse_key);
+		new_order.set_district_id(district_key);
+
+		Value* new_order_value = new Value();
+		assert(new_order.SerializeToString(new_order_value));
+		storage->PutObject(new_order_key, new_order_value);
+		//storage->WriteToBuffer(new_order_key, new_order.SerializeAsString());
+	//}
+	//else
+	//	return FAILURE;
 
 	for (int i = 0; i < order_line_count; i++) {
 		// For each order line we parse out the three args
@@ -662,61 +716,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		//	return FAILURE;
 
 	}
-
-    char order_key[128];
-    snprintf(order_key, sizeof(order_key), "%so%d",
-             district_key.c_str(), order_number);
-
-	// Retrieve the customer we are looking for
-    Key customer_key = txn->read_write_set(1);
-	Value* customer_val = storage->ReadObject(customer_key);
-	Customer customer;
-	assert(customer.ParseFromString(*customer_val));
-	customer.set_last_order(order_key);
-	//LOG(txn->txn_id(), " last of customer "<<customer_key<<" is "<<customer.last());
-	assert(customer.SerializeToString(customer_val));
-	//storage->WriteToBuffer(customer_key, customer.SerializeAsString());
-
-
-    //if(txn->pred_write_set(order_line_count).compare(order_key) == 0){
-    	// We write the order to storage
-		Order order;
-		order.set_id(order_key);
-		order.set_warehouse_id(warehouse_key);
-		order.set_district_id(district_key);
-		order.set_customer_id(customer_key);
-
-		// Set some of the auxiliary data
-		order.set_entry_date(system_time);
-		order.set_carrier_id(-1);
-		order.set_order_line_count(order_line_count);
-		order.set_all_items_local(!txn->multipartition());
-		Value* order_value = new Value();
-		assert(order.SerializeToString(order_value));
-		storage->PutObject(order_key, order_value);
-		//storage->WriteToBuffer(order_key, order.SerializeAsString());
-    //}
-    //else
-    //	return FAILURE;
-
-    char new_order_key[128];
-    snprintf(new_order_key, sizeof(new_order_key),
-             "%sno%d", district_key.c_str(), order_number);
-
-	// Finally, we write the order line to storage
-    //if(txn->pred_write_set(order_line_count+1).compare(new_order_key) == 0){
-		NewOrder new_order;
-		new_order.set_id(new_order_key);
-		new_order.set_warehouse_id(warehouse_key);
-		new_order.set_district_id(district_key);
-
-		Value* new_order_value = new Value();
-		assert(new_order.SerializeToString(new_order_value));
-		storage->PutObject(new_order_key, new_order_value);
-		//storage->WriteToBuffer(new_order_key, new_order.SerializeAsString());
-    //}
-    //else
-    //	return FAILURE;
 
     //storage->ApplyChange();
 	return SUCCESS;
