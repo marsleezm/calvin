@@ -38,6 +38,8 @@ class MessageProto;
 class DeterministicScheduler;
 class ConfigReader;
 
+#define THROUGHPUT_SIZE 500
+
 #ifdef LATENCY_TEST
 extern double sequencer_recv[SAMPLES];
 // extern double paxos_begin[SAMPLES];
@@ -54,7 +56,7 @@ class Client {
  public:
   virtual ~Client() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
-  virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
+  //virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
 };
 
 class Sequencer {
@@ -75,6 +77,8 @@ class Sequencer {
   void SetScheduler(DeterministicScheduler* scheduler){
 	  scheduler_ = scheduler;
   }
+
+  void output();
 
  public:
   static int64_t num_lc_txns_;
@@ -170,5 +174,8 @@ class Sequencer {
 
   // Statistics
   int num_fetched_this_round;
+
+  double throughput[THROUGHPUT_SIZE];
+  double abort[THROUGHPUT_SIZE];
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

@@ -106,6 +106,9 @@ Spin(2);
     channel.append(IntToString(i));
     thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
+    for (int j = 0; j<LATENCY_SIZE; ++j)
+    	latency[i][j] = 0;
+
     cpu_set_t cpuset;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -176,6 +179,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   double last_blocked = 0;
   bool if_blocked = false;
   int out_counter1 = 0;
+  int sample_count = 0, latency_count = 0;
+  int64* latency_array = scheduler->latency[thread];
 
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
@@ -205,6 +210,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 				  active_g_tids.erase(to_sc_txn.first);
 				  active_l_tids.erase(to_sc_txn.second);
+				  AddLatency(sample_count, latency_count, latency_array, mgr->get_txn());
 				  delete mgr;
 				  my_to_sc_txns->pop();
 				  // Go to the next loop, try to commit as many as possible.
@@ -225,7 +231,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  AGGRLOG(-1, " To suspending txn is " << to_wait_txn.first);
 			  StorageManager* manager = active_l_tids[to_wait_txn.first];
 			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
-				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm) == false)
+				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm, sample_count, latency_count, latency_array) == false)
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->num_restarted_, manager));
 				  --scheduler->num_suspend[thread];
 				  AGGRLOG(to_wait_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
@@ -253,7 +259,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  scheduler->num_suspend[thread] -= manager->is_suspended_;
 				  ++Sequencer::num_aborted_;
 				  manager->Abort();
-				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm) == false){
+				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm, sample_count, latency_count, latency_array) == false){
 					  AGGRLOG(to_abort_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_abort_txn.first, manager->num_restarted_, manager));
 				  }
@@ -291,7 +297,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  // Handle read result is correct, e.g. I can continue execution
 				  int result = manager->HandleReadResult(message);
 				  if(result == SUCCESS){
-					  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm) == false){
+					  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm, sample_count, latency_count, latency_array) == false){
 						  AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
 						  retry_txns.push(MyTuple<int64, int, StorageManager*>(manager->get_txn()->local_txn_id(), manager->num_restarted_, manager));
 					  }
@@ -380,7 +386,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  retry_txns.pop();
 		  }
 		  else{
-			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, active_l_tids, pending_confirm) == true){
+			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, active_l_tids, pending_confirm, sample_count, latency_count, latency_array) == true){
 				  retry_txns.pop();
 			  }
 			  else{
@@ -409,7 +415,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager = active_g_tids[txn->txn_id()];
 				  manager->SetupTxn(txn);
 			  }
-			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm) == false){
+			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm, sample_count, latency_count, latency_array) == false){
 				  AGGRLOG(txn->txn_id(), " got aborted, pushing "<<manager->num_restarted_);
 				  retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->num_restarted_, manager));
 			  }
@@ -451,7 +457,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		unordered_map<int64_t, StorageManager*>& active_g_tids, unordered_map<int64_t, StorageManager*>& active_l_tids,
-		priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm){
+		priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm,
+		int& sample_count, int& latency_count, int64* latency_array){
 	TxnProto* txn = manager->get_txn();
 	// No need to resume if the txn is still suspended
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way
@@ -461,6 +468,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			//Sequencer::max_commit_ts = txn->txn_id();
 			++Sequencer::num_lc_txns_;
 			application_->ExecuteReadOnly(manager);
+			AddLatency(sample_count, latency_count, latency_array, txn);
 			delete manager;
 			return true;
 		}
@@ -528,6 +536,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 						manager->SendLocalReads(true);
 						//to_confirm.clear();
 					}
+					AddLatency(sample_count, latency_count, latency_array, txn);
 					delete manager;
 					return true;
 				}

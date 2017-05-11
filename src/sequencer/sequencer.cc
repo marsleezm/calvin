@@ -78,6 +78,11 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	  txns_queue_ = new AtomicQueue<TxnProto*>();
   }
 
+  for(int i = 0; i < THROUGHPUT_SIZE; ++i){
+      throughput[i] = -1;
+      abort[i] = -1;
+  }
+
   cpu_set_t cpuset;
   if (mode == NORMAL_QUEUE){
 
@@ -570,4 +575,26 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
     delete message;
     return NULL;
   }
+}
+
+void Sequencer::output(){
+    ofstream myfile;
+    myfile.open ("output.txt");
+    int count =0;
+    int64 latency = 0;
+    myfile << "THROUGHPUT" << '\n';
+    while(abort[count] != -1 && count < THROUGHPUT_SIZE){
+        myfile << throughput[count] << ", "<< abort[count] << '\n';
+        ++count;
+    }
+    myfile << "LATENCY" << '\n';
+
+    for(int i = 0; i<NUM_THREADS; ++i){
+    	count = 0;
+		while((latency = scheduler_->latency[i][count]) != 0 && count < LATENCY_SIZE){
+			myfile << latency << '\n';
+			++count;
+		}
+    }
+    myfile.close();
 }

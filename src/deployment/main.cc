@@ -36,6 +36,7 @@ using namespace std;
 //pthread_mutex_t mutex_for_item;
 
 double dependent_percent;
+int multi_txn_num_parts;
 
 // Microbenchmark load generation client.
 class MClient : public Client {
@@ -46,57 +47,30 @@ class MClient : public Client {
   }
   virtual ~MClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
-	srand(seed);
-
-	if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
-	  // Multipartition txn.
-	  int other1;
-	  int other2;
-	  do {
-		other1 = rand() % config_->all_nodes.size();
-	  } while (other1 == config_->this_node_id);
-
-	  do {
-		other2 = rand() % config_->all_nodes.size();
-	  } while (other2 == config_->this_node_id || other2 == other1);
-
-	  if (abs(rand())%10000 < 100*dependent_percent)
-		  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
-	  else
-		  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
-
-	  (*txn)->set_multipartition(true);
-	} else {
-	  // Single-partition txn.
-	  if (abs(rand())%10000 < 100*dependent_percent)
-		  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
-	  else
-		  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
-
-	  (*txn)->set_multipartition(false);
-	}
-	(*txn)->set_seed(seed);
-	//LOG((*txn)->txn_id(), " the seed is "<<(*txn)->seed());
-  }
-
-  virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) {
 	  srand(seed);
+
 	  if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
 		  // Multipartition txn.
-		  int other1;
-		  int other2;
-		  do {
-			other1 = rand() % config_->all_nodes.size();
-		  } while (other1 == config_->this_node_id);
+		  int parts[multi_txn_num_parts];
+		  parts[0] = config_->this_node_id;
+		  int counter = 1;
+		  while (counter != multi_txn_num_parts){
+			  int new_part = abs(rand()) %  config_->all_nodes.size(), i = 0;
+			  for(i =0; i< counter; ++i){
+				  if(parts[i] == new_part){
+					  break;
+				  }
+			  }
+			  if (i == counter){
+				  parts[i] = new_part;
+				  ++counter;
+			  }
+		  }
 
-		  do {
-			other2 = rand() % config_->all_nodes.size();
-		  } while (other2 == config_->this_node_id || other2 == other1);
-
-		  if (rand() %10000 < 100*dependent_percent)
-			  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
+		  if (abs(rand())%10000 < 100*dependent_percent)
+			  *txn = microbenchmark.MicroTxnDependentMP(txn_id, parts, multi_txn_num_parts);
 		  else
-			  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
+			  *txn = microbenchmark.MicroTxnMP(txn_id, parts, multi_txn_num_parts);
 
 		  (*txn)->set_multipartition(true);
 	  } else {
@@ -108,8 +82,42 @@ class MClient : public Client {
 
 		  (*txn)->set_multipartition(false);
 	  }
-		(*txn)->set_seed(seed);
+		//LOG((*txn)->txn_id(), " the time is "<<GetUTime());
+	  (*txn)->set_seed(seed);
+	  //LOG((*txn)->txn_id(), " the seed is "<<(*txn)->seed());
   }
+
+//  virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) {
+//	  srand(seed);
+//	  if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
+//		  // Multipartition txn.
+//		  int other1;
+//		  int other2;
+//		  do {
+//			other1 = rand() % config_->all_nodes.size();
+//		  } while (other1 == config_->this_node_id);
+//
+//		  do {
+//			other2 = rand() % config_->all_nodes.size();
+//		  } while (other2 == config_->this_node_id || other2 == other1);
+//
+//		  if (rand() %10000 < 100*dependent_percent)
+//			  *txn = microbenchmark.MicroTxnDependentMP(txn_id, config_->this_node_id, other1, other2);
+//		  else
+//			  *txn = microbenchmark.MicroTxnMP(txn_id, config_->this_node_id, other1, other2);
+//
+//		  (*txn)->set_multipartition(true);
+//	  } else {
+//		  // Single-partition txn.
+//		  if (abs(rand())%10000 < 100*dependent_percent)
+//			  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
+//		  else
+//			  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
+//
+//		  (*txn)->set_multipartition(false);
+//	  }
+//		(*txn)->set_seed(seed);
+//  }
 
  private:
   Microbenchmark microbenchmark;
@@ -149,36 +157,36 @@ class TClient : public Client {
     (*txn)->set_seed(seed);
   }
 
-  virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) {
-    TPCC tpcc;
-    srand(seed);
-    *txn = new TxnProto();
-    if (abs(rand())%10000 < percent_mp_)
-        (*txn)->set_multipartition(true);
-	else
-		(*txn)->set_multipartition(false);
-
-   //int random_txn_type = rand() % 100;
-//    tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-    // New order txn
-    // New order txn
-    int random_txn_type = rand() % 100;
-    if (random_txn_type < 45)  {
-      tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-    } else if(random_txn_type < 88) {
-      tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-    } else if(random_txn_type < 92) {
-      tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
-      (*txn)->set_multipartition(false);
-    } else if(random_txn_type < 96){
-      tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
-      (*txn)->set_multipartition(false);
-    } else {
-      tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
-      (*txn)->set_multipartition(false);
-    }
-    (*txn)->set_seed(seed);
-  }
+//  virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) {
+//    TPCC tpcc;
+//    srand(seed);
+//    *txn = new TxnProto();
+//    if (abs(rand())%10000 < percent_mp_)
+//        (*txn)->set_multipartition(true);
+//	else
+//		(*txn)->set_multipartition(false);
+//
+//   //int random_txn_type = rand() % 100;
+////    tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+//    // New order txn
+//    // New order txn
+//    int random_txn_type = rand() % 100;
+//    if (random_txn_type < 45)  {
+//      tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+//    } else if(random_txn_type < 88) {
+//      tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+//    } else if(random_txn_type < 92) {
+//      tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+//      (*txn)->set_multipartition(false);
+//    } else if(random_txn_type < 96){
+//      tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
+//      (*txn)->set_multipartition(false);
+//    } else {
+//      tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+//      (*txn)->set_multipartition(false);
+//    }
+//    (*txn)->set_seed(seed);
+//  }
 
  private:
   Configuration* config_;
@@ -209,6 +217,7 @@ int main(int argc, char** argv) {
 
 	ConfigReader::Initialize("myconfig.conf");
 	dependent_percent = stof(ConfigReader::Value("dependent_percent").c_str());
+	multi_txn_num_parts = atoi(ConfigReader::Value("multi_txn_num_parts").c_str());
 
 	//freopen("output.txt","w",stdout);
 
@@ -277,6 +286,7 @@ int main(int argc, char** argv) {
 
 	Spin(atoi(ConfigReader::Value("duration").c_str()));
 	DeterministicScheduler::terminate();
+	sequencer.output();
 	delete scheduler;
 	delete batch_connection;
 	return 0;

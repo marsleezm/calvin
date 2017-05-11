@@ -28,6 +28,9 @@
 #include "backend/storage_manager.h"
 #include "common/config_reader.h"
 
+#define LATENCY_SIZE 1000
+#define SAMPLE_RATE 500
+
 using std::deque;
 
 namespace zmq {
@@ -74,9 +77,22 @@ class DeterministicScheduler : public Scheduler {
 	  active_txns.erase(txn_id);
   }
 
+  inline static void AddLatency(int& sample_count, int& latency_count, int64* array, TxnProto* txn){
+      if (sample_count == SAMPLE_RATE)
+      {
+          if(latency_count == LATENCY_SIZE)
+              latency_count = 0;
+          array[latency_count] = GetUTime() - txn->start_time();
+          ++latency_count;
+          sample_count = 0;
+      }
+      ++sample_count;
+  }
+
   bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
-		  priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm);
+		  priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm,
+		  int& sample_count, int& latency_count, int64* latency_array);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
@@ -134,5 +150,7 @@ class DeterministicScheduler : public Scheduler {
   int sc_block[num_threads];
   int pend_block[num_threads];
   int suspend_block[num_threads];
+
+  int64 latency[num_threads][LATENCY_SIZE];
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_
