@@ -524,13 +524,13 @@ void Sequencer::output(DeterministicScheduler* scheduler){
     int64 latency = 0;
     double abort = 0;
     myfile << "THROUGHPUT" << '\n';
-    while((abort = scheduler->abort[count]) != -1){
+    while((abort = scheduler->abort[count]) != -1 && count < THROUGHPUT_SIZE){
         myfile << scheduler->throughput[count] << ", "<< abort << '\n';
         ++count;
     }
     myfile << "LATENCY" << '\n';
     count = 0;
-    while((latency = scheduler->latency[count]) != 0){
+    while((latency = scheduler->latency[count]) != 0 && count < LATENCY_SIZE*NUM_THREADS){
         myfile << latency << '\n';
         ++count;
     }
