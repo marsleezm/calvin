@@ -68,6 +68,7 @@ class Sequencer {
   ~Sequencer();
 
   AtomicQueue<TxnProto*>* GetTxnsQueue() { return txns_queue_;}
+    output();
 
  private:
   // Sequencer's main loops:

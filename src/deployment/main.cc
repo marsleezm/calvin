@@ -249,6 +249,7 @@ int main(int argc, char** argv) {
   }
 
   Spin(atoi(ConfigReader::Value("duration").c_str()));
+  sequencer.output();
   delete scheduler;
   return 0;
 }

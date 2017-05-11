@@ -514,5 +514,19 @@ void Sequencer::RunLoader(){
   Spin(1);
 }
 
-
-
+void Sequencer::output(){
+    ofstream myfile;
+    myfile.open ("output.txt");
+    int count =0;
+    int64 latency = 0;
+    double abort = 0;
+    myfile << "THROUGHPUT" << '\n';
+    while((abort = scheduler->abort[count]) != -1){
+        myfile << scheduler->throughput[count] << ", "<< abort << '\n'; 
+    }
+    myfile << "LATENCY" << '\n';
+    while((latency = scheduler->latency[count]) != 0){
+        myfile << latency << '\n'; 
+    }
+    myfile.close();
+}

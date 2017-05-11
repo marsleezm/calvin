@@ -80,6 +80,11 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     txns_queue = new AtomicQueue<TxnProto*>();
     done_queue = new AtomicQueue<TxnProto*>();
 
+    for(int i = 0; i < THROUGHPUT_SIZE; ++i){
+        throughput[i] = -1;
+        abort[i] = -1;
+    }
+
     for (int i = 0; i < NUM_THREADS; i++) {
     	message_queues[i] = new AtomicQueue<MessageProto>();
     }
@@ -109,6 +114,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     	string channel("scheduler");
     	channel.append(IntToString(i));
     	thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
+        for (int j = 0; j<LATENCY_SIZE; ++j)
+            latency[i][j] = 0;
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
@@ -292,6 +299,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  if(recon_txns.size()){
 
 		  TxnProto* txn = recon_txns.front();
+          if (txn->start_time() == 0)
+            txn->set_start_time(GetUTime());
 		  //LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
 		  recon_txns.pop();
 		  ReconStorageManager* manager;
@@ -439,6 +448,15 @@ int abort_number = 0;
     		// WTF is this magic code doing???
     		if(done_txn->writers_size() == 0 || done_txn->writers(0) == scheduler->configuration_->this_node_id) {
     			txns++;
+                if (sample_count == SAMPLE_RATE)
+                {
+                    if(latency_count == LATENCY_SIZE*NUM_THREADS)
+                        latency_count = 0;
+                    latency[latency_count] = GetUTime() - done_txn->start_time();
+                    ++latency_count;
+                    sample_count = 0;
+                }
+                ++sample_count;
     		}
     		delete done_txn;
     	}
@@ -500,6 +518,8 @@ int abort_number = 0;
                 << pending_txns << " pending \n"
 				<< std::flush;
       // Reset txn count.
+      throughput[test] = (static_cast<double>(txns) / total_time);
+      abort[test] = abort_number/total_time;
       time = GetTime();
       txns = 0;
       abort_number = 0;
