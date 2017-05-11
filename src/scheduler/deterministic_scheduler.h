@@ -123,11 +123,10 @@ class DeterministicScheduler : public Scheduler {
   
   int queue_mode_;
   int abort_batch_size;
+  bool deconstructor_invoked_ = false;
 
-    public:
+ 	 public:
         int64 latency[LATENCY_SIZE*NUM_THREADS];
-        int latency_count;
-        int sample_count;
         double throughput[THROUGHPUT_SIZE];
         double abort[THROUGHPUT_SIZE];
 

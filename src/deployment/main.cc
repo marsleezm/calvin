@@ -248,8 +248,10 @@ int main(int argc, char** argv) {
 									 client, queue_mode);
   }
 
+  std::cout<<"Duration is "<<atoi(ConfigReader::Value("duration").c_str())<<std::endl;
   Spin(atoi(ConfigReader::Value("duration").c_str()));
-  sequencer.output();
+  std::cout<<"Finished duration"<<std::endl;
+  sequencer.output(scheduler);
   delete scheduler;
   return 0;
 }

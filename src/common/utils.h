@@ -100,6 +100,12 @@ static inline double GetTime() {
   return tv.tv_sec + tv.tv_usec/1e6;
 }
 
+static inline int64 GetUTime() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec*1e6 + tv.tv_usec;
+}
+
 // Busy-wait for 'duration' seconds.
 static inline void Spin(double duration) {
   usleep(1000000 * duration);
