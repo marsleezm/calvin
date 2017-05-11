@@ -21,8 +21,8 @@
 
 //#define MAX_BATCH_SIZE 56
 
-#define SAMPLES 100000
-#define SAMPLE_RATE 999
+//#define SAMPLES 100000
+//#define SAMPLE_RATE 999
 //#define VERBOSE_SEQUENCER
 
 //#define LATENCY_TEST
