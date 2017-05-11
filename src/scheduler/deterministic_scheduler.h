@@ -47,6 +47,9 @@ class Client;
 #define TO_SEND true
 #define TO_READ false
 
+#define LATENCY_SIZE 1000
+#define SAMPLE_RATE 500
+
 // #define PREFETCHING
 
 class DeterministicScheduler : public Scheduler {
@@ -72,6 +75,18 @@ class DeterministicScheduler : public Scheduler {
 	  --Sequencer::num_sc_txns_;
 	  delete active_txns[txn_id];
 	  active_txns.erase(txn_id);
+  }
+
+  inline static void AddLatency(int& sample_count, int& latency_count, int64* array, TxnProto* txn){
+      if (sample_count == SAMPLE_RATE)
+      {
+          if(latency_count == LATENCY_SIZE)
+              latency_count = 0;
+          array[latency_count] = GetUTime() - txn->start_time();
+          ++latency_count;
+          sample_count = 0;
+      }
+      ++sample_count;
   }
 
 //  inline TxnProto* GetTxn(bool& got_it, int thread){
@@ -101,7 +116,8 @@ class DeterministicScheduler : public Scheduler {
 //    }
 
   bool ExecuteTxn(StorageManager* manager, int thread,
-		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns);
+		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
+		  int& sample_count, int& latency_count, int64* latency_array);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
@@ -159,5 +175,7 @@ class DeterministicScheduler : public Scheduler {
   int sc_block[num_threads];
   int pend_block[num_threads];
   int suspend_block[num_threads];
+
+  int64 latency[NUM_THREADS][LATENCY_SIZE];
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

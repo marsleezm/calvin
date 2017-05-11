@@ -95,8 +95,8 @@ TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
 }
 
 // Create a non-dependent multi-partition transaction
-TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int part1, int part2, int part3) {
-	assert(part1 != part2 || nparts == 1);
+TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
+	// assert(part1 != part2 || nparts == 1);
 	// Create the new transaction object
 	TxnProto* txn = new TxnProto();
 
@@ -104,19 +104,17 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int part1, int part2, int par
 	txn->set_txn_id(txn_id);
 	txn->set_txn_type(MICROTXN_MP);
 
-	txn->add_readers(part1);
-	txn->add_readers(part2);
-	txn->add_readers(part3);
-	txn->add_writers(part1);
-	txn->add_writers(part2);
-	txn->add_writers(part3);
+	for(int i = 0; i < num_parts; ++i){
+		txn->add_readers(parts[i]);
+		txn->add_writers(parts[i]);
+	}
 
 	return txn;
 }
 
 // Create a non-dependent multi-partition transaction
-TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int part1, int part2, int part3) {
-	assert(part1 != part2 || nparts == 1);
+TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts) {
+	//assert(part1 != part2 || nparts == 1);
 	// Create the new transaction object
 	TxnProto* txn = new TxnProto();
 
@@ -124,12 +122,11 @@ TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int part1, int part2
 	txn->set_txn_id(txn_id);
 	txn->set_txn_type(MICROTXN_DEP_MP);
 
-	txn->add_readers(part1);
-	txn->add_readers(part2);
-	txn->add_readers(part3);
-	txn->add_writers(part1);
-	txn->add_writers(part2);
-	txn->add_writers(part3);
+	for(int i = 0; i < num_parts; ++i){
+		txn->add_readers(parts[i]);
+		txn->add_writers(parts[i]);
+	}
+
 
 	return txn;
 }
@@ -180,67 +177,59 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		break;
 		case MICROTXN_MP:
 		{
-			int other_keys_per_part = kRWSetSize/3;
+			int avg_keys_per_part = kRWSetSize/txn->readers_size();
+			int keys_first_part = kRWSetSize - avg_keys_per_part * (txn->readers_size()-1);
+
 			GetRandomKeys(&keys,
-					kRWSetSize-2*other_keys_per_part,
+					  keys_first_part,
 		              nparts * index_records,
 		              nparts * kDBSize,
 		              txn->readers(0), rand);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
 
-			GetRandomKeys(&keys,
-					other_keys_per_part,
-		              nparts * index_records,
-		              nparts * kDBSize,
-					  txn->readers(1), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-				txn->add_read_write_set(IntToString(*it));
 
-			GetRandomKeys(&keys,
-					other_keys_per_part,
-		              nparts * index_records,
-		              nparts * kDBSize,
-					  txn->readers(2), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-				txn->add_read_write_set(IntToString(*it));
+			for(int i = 1; i<txn->readers_size()-1; ++i){
+				GetRandomKeys(&keys,
+							  avg_keys_per_part,
+				              nparts * index_records,
+				              nparts * kDBSize,
+							  txn->readers(i), rand);
+				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+					txn->add_read_write_set(IntToString(*it));
+				}
+			}
+
 		}
 		break;
+
+		// TODO: Now we assume that the number of index keys are always the same as non-index keys in the rw set
 		case MICROTXN_DEP_MP:
 		{
 			set<int> keys;
+			int avg_index_per_part = indexAccessNum/txn->readers_size();
+			int index_first_part = indexAccessNum- avg_index_per_part*(txn->readers_size()-1);
+
 			GetRandomKeys(&keys,
-		                indexAccessNum,
+						index_first_part,
 		                nparts * 0,
 		                nparts * index_records,
 						txn->readers(0), rand);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
 
-			int other_keys_per_part = (kRWSetSize-indexAccessNum*2)/3;
-			GetRandomKeys(&keys,
-					kRWSetSize-indexAccessNum*2-2*other_keys_per_part,
-					  nparts * index_records,
-					  nparts * kDBSize,
-					  txn->readers(0), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-				txn->add_read_write_set(IntToString(*it));
 
-			GetRandomKeys(&keys,
-					other_keys_per_part,
-					  nparts * index_records,
-					  nparts * kDBSize,
-					  txn->readers(1), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-				txn->add_read_write_set(IntToString(*it));
-
-			GetRandomKeys(&keys,
-					other_keys_per_part,
-					  nparts * index_records,
-					  nparts * kDBSize,
-					  txn->readers(2), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-				txn->add_read_write_set(IntToString(*it));
+			for(int i = 1; i<txn->readers_size()-1; ++i){
+				GetRandomKeys(&keys,
+							  avg_index_per_part,
+				              nparts * 0,
+							  nparts * index_records,
+							  txn->readers(i), rand);
+				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+					txn->add_read_write_set(IntToString(*it));
+					//std::cout<<txn_id<<" adding "<<IntToString(*it)<<" for "<<parts[i]<<std::endl;
+				}
+			}
 		}
 		break;
 		default:
@@ -314,6 +303,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 		}
 		//LOG(txn->txn_id(), " trying to read non-indexed");
 		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++) {
+			assert(1 == 2);
 			if(storage->ShouldRead()){
 				Value* index_val = storage->ReadLock(txn->read_write_set(i+indexAccessNum), read_state, false);
 				if(read_state == NORMAL)

@@ -39,9 +39,9 @@ class Microbenchmark : public Application {
 
   TxnProto* InitializeTxn();
   TxnProto* MicroTxnSP(int64 txn_id, int part);
-  TxnProto* MicroTxnMP(int64 txn_id, int part1, int part2, int part3);
+  TxnProto* MicroTxnMP(int64 txn_id, int* parts, int num_parts);
   TxnProto* MicroTxnDependentSP(int64 txn_id, int part);
-  TxnProto* MicroTxnDependentMP(int64 txn_id, int part1, int part2, int part3);
+  TxnProto* MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts);
 
   int nparts;
   int hot_records = atoi(ConfigReader::Value("index_size").c_str());

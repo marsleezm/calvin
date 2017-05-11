@@ -13,6 +13,7 @@
 #include <queue>
 #include <set>
 #include <utility>
+#include <fstream>
 
 #include "backend/storage.h"
 #include "common/configuration.h"
@@ -76,6 +77,11 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	  txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
   else{
 	  txns_queue_ = new AtomicQueue<TxnProto*>();
+  }
+
+  for(int i = 0; i < THROUGHPUT_SIZE; ++i){
+      throughput[i] = -1;
+      abort[i] = -1;
   }
 
   cpu_set_t cpuset;
@@ -405,7 +411,11 @@ void Sequencer::RunReader() {
       			<< num_sc_txns_ << " spec-committed, "
       			//<< test<< " for drop speed , "
       			//<< executing_txns << " executing, "
-      			<< num_pend_txns_ << " pending, time is "<<second++<<"\n" << std::flush;
+      			<< num_pend_txns_ << " pending, time is "<<second<<"\n" << std::flush;
+      throughput[second] = (Sequencer::num_lc_txns_-last_committed) / (now_time- time);
+      abort[second] = (Sequencer::num_aborted_-last_aborted) / (now_time- time);
+
+      ++second;
 	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
 		  for(int i = 0; i<NUM_THREADS; ++i){
                 if (scheduler_->to_sc_txns_[i]->size())
@@ -487,6 +497,7 @@ void* Sequencer::FetchMessage() {
 
   //TxnProto* done_txn;
   if (txns_queue_->Size() < 1000){
+	  ASSERT(queue_mode == NORMAL_QUEUE);
 	  if (queue_mode == NORMAL_QUEUE){
 		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
 		  	  // Have we run out of txns in our batch? Let's get some new ones.
@@ -503,27 +514,27 @@ void* Sequencer::FetchMessage() {
 		  		  ++fetched_batch_num_;
 		  	  }
 	  }
-	  else if (queue_mode == FROM_SEQ_SINGLE){
-		  for (int i = 0; i < 1000; i++)
-			  {
-				  TxnProto* txn;
-				  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-				  txn->set_local_txn_id(fetched_txn_num_++);
-				  txns_queue_->Push(txn);
-			  }
-	  }
-	  else if (queue_mode == FROM_SEQ_DIST){
-		  int i = 0;
-		  while (i < 1000)
-		  {
-			  TxnProto* txn;
-			  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-			  txn->set_local_txn_id(fetched_txn_num_);
-			  txns_queue_[(fetched_txn_num_/BUFFER_TXNS_NUM)%num_threads].Push(txn);
-			  ++fetched_txn_num_;
-			  ++i;
-		  }
-	  }
+//	  else if (queue_mode == FROM_SEQ_SINGLE){
+//		  for (int i = 0; i < 1000; i++)
+//			  {
+//				  TxnProto* txn;
+//				  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
+//				  txn->set_local_txn_id(fetched_txn_num_++);
+//				  txns_queue_->Push(txn);
+//			  }
+//	  }
+//	  else if (queue_mode == FROM_SEQ_DIST){
+//		  int i = 0;
+//		  while (i < 1000)
+//		  {
+//			  TxnProto* txn;
+//			  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
+//			  txn->set_local_txn_id(fetched_txn_num_);
+//			  txns_queue_[(fetched_txn_num_/BUFFER_TXNS_NUM)%num_threads].Push(txn);
+//			  ++fetched_txn_num_;
+//			  ++i;
+//		  }
+//	  }
   }
   return NULL;
 
@@ -563,4 +574,26 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
     delete message;
     return NULL;
   }
+}
+
+void Sequencer::output(){
+    ofstream myfile;
+    myfile.open ("output.txt");
+    int count =0;
+    int64 latency = 0;
+    myfile << "THROUGHPUT" << '\n';
+    while(abort[count] != -1 && count < THROUGHPUT_SIZE){
+        myfile << throughput[count] << ", "<< abort[count] << '\n';
+        ++count;
+    }
+    myfile << "LATENCY" << '\n';
+
+    for(int i = 0; i<NUM_THREADS; ++i){
+    	count = 0;
+		while((latency = scheduler_->latency[i][count]) != 0 && count < LATENCY_SIZE){
+			myfile << latency << '\n';
+			++count;
+		}
+    }
+    myfile.close();
 }

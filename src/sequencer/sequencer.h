@@ -22,7 +22,8 @@
 //#define MAX_BATCH_SIZE 56
 
 #define SAMPLES 100000
-#define SAMPLE_RATE 999
+//#define SAMPLE_RATE 999
+#define THROUGHPUT_SIZE 500
 //#define VERBOSE_SEQUENCER
 
 //#define LATENCY_TEST
@@ -54,7 +55,7 @@ class Client {
  public:
   virtual ~Client() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
-  virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
+  //virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
 };
 
 class Sequencer {
@@ -66,6 +67,8 @@ class Sequencer {
 
   // Halts the main loops.
   ~Sequencer();
+
+  void output();
 
   // Get the transaction queue
   inline AtomicQueue<TxnProto*>* GetTxnsQueue(){
@@ -170,5 +173,8 @@ class Sequencer {
 
   // Statistics
   int num_fetched_this_round;
+
+  double throughput[THROUGHPUT_SIZE];
+  double abort[THROUGHPUT_SIZE];
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
