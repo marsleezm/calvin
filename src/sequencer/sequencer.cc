@@ -265,14 +265,6 @@ void Sequencer::RunWriter() {
 					google::protobuf::RepeatedField<int>::const_iterator  it;
 					for (it = txn.readers().begin(); it != txn.readers().end(); ++it){
 						recon_msgs[*it].add_data(txn_data);
-						if(recon_msgs[*it].data_size() >= recon_batch_size){
-							pthread_mutex_lock(&mutex_);
-							connection_->SmartSend(recon_msgs[*it]);
-							pthread_mutex_unlock(&mutex_);
-							recon_msgs[*it].set_batch_number(recon_msgs[*it].batch_number()+configuration_->all_nodes.size());
-							//LOG(0, " new RESTART batch number is "<<recon_msgs[*it].batch_number());
-							recon_msgs[*it].clear_data();
-						}
 					}
 					qit = recon_txn_queue.erase(qit);
         		}
@@ -293,14 +285,6 @@ void Sequencer::RunWriter() {
 						google::protobuf::RepeatedField<int>::const_iterator  it;
 						for (it = txn.readers().begin(); it != txn.readers().end(); ++it){
 							recon_msgs[*it].add_data(txn_data);
-							if(recon_msgs[*it].data_size() >= recon_batch_size){
-								pthread_mutex_lock(&mutex_);
-								connection_->SmartSend(recon_msgs[*it]);
-								pthread_mutex_unlock(&mutex_);
-								recon_msgs[*it].set_batch_number(recon_msgs[*it].batch_number()+configuration_->all_nodes.size());
-								//LOG(0, " new RESTART batch number is "<<recon_msgs[*it].batch_number());
-								recon_msgs[*it].clear_data();
-							}
 						}
                 	}
                 	else {
@@ -322,13 +306,6 @@ void Sequencer::RunWriter() {
 		            for (it = txn->readers().begin(); it != txn->readers().end(); ++it){
 		            	//LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
 		            	recon_msgs[*it].add_data(txn_data);
-						if(recon_msgs[*it].data_size() >= recon_batch_size){
-							pthread_mutex_lock(&mutex_);
-							connection_->SmartSend(recon_msgs[*it]);
-							pthread_mutex_unlock(&mutex_);
-							recon_msgs[*it].set_batch_number(recon_msgs[*it].batch_number()+configuration_->all_nodes.size());
-							recon_msgs[*it].clear_data();
-						}
 		            }
 		            delete txn;
 				}
@@ -355,9 +332,20 @@ void Sequencer::RunWriter() {
               }
           }
         }
-
-
    }
+
+    for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
+         it != configuration_->all_nodes.end(); ++it) {
+    	int node_id = it->first;
+		if(recon_msgs[node_id].data_size() >= recon_batch_size){
+			pthread_mutex_lock(&mutex_);
+			connection_->SmartSend(recon_msgs[node_id]);
+			pthread_mutex_unlock(&mutex_);
+		}
+		recon_msgs[node_id].set_batch_number(batch_number+configuration_->all_nodes.size());
+		recon_msgs[node_id].clear_data();
+    }
+
     //LOG(0, " serializing batch #"<<batch.batch_number()<<" with size "<<batch.data_size());
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
