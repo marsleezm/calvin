@@ -448,40 +448,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		}
     }
 
-	// We write the order to storage
-    int result = storage->LockObject(order_key, val_copy);
-	if(result == LOCK_FAILED)
-		return ABORT;
-	else if (result == LOCKED){
-		Order order;
-		order.set_id(order_key);
-		order.set_warehouse_id(warehouse_key);
-		order.set_district_id(district_key);
-		order.set_customer_id(customer_key);
-
-		// Set some of the auxiliary data
-		order.set_entry_date(system_time);
-		order.set_carrier_id(-1);
-		order.set_order_line_count(order_line_count);
-		order.set_all_items_local(!txn->multipartition());
-		assert(order.SerializeToString(val_copy));
-	}
-
-    char new_order_key[128];
-    snprintf(new_order_key, sizeof(new_order_key),
-             "%sno%d", district_key.c_str(), order_number);
-
-	// Finally, we write the order line to storage
-    result = storage->LockObject(new_order_key, val_copy);
-	if(result == LOCK_FAILED)
-		return ABORT;
-	else if (result == LOCKED){
-		NewOrder new_order;
-		new_order.set_id(new_order_key);
-		new_order.set_warehouse_id(warehouse_key);
-		new_order.set_district_id(district_key);
-		assert(new_order.SerializeToString(val_copy));
-	}
 
 	for (int i = 0; i < order_line_count; i++) {
 		// For each order line we parse out the three args
@@ -552,6 +518,41 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		//   storage->PutObject(stock_key, stock_value);
 		// Next, we create a new order line object with std attributes
 
+	}
+
+	// We write the order to storage
+    int result = storage->LockObject(order_key, val_copy);
+	if(result == LOCK_FAILED)
+		return ABORT;
+	else if (result == LOCKED){
+		Order order;
+		order.set_id(order_key);
+		order.set_warehouse_id(warehouse_key);
+		order.set_district_id(district_key);
+		order.set_customer_id(customer_key);
+
+		// Set some of the auxiliary data
+		order.set_entry_date(system_time);
+		order.set_carrier_id(-1);
+		order.set_order_line_count(order_line_count);
+		order.set_all_items_local(!txn->multipartition());
+		assert(order.SerializeToString(val_copy));
+	}
+
+    char new_order_key[128];
+    snprintf(new_order_key, sizeof(new_order_key),
+             "%sno%d", district_key.c_str(), order_number);
+
+	// Finally, we write the order line to storage
+    result = storage->LockObject(new_order_key, val_copy);
+	if(result == LOCK_FAILED)
+		return ABORT;
+	else if (result == LOCKED){
+		NewOrder new_order;
+		new_order.set_id(new_order_key);
+		new_order.set_warehouse_id(warehouse_key);
+		new_order.set_district_id(district_key);
+		assert(new_order.SerializeToString(val_copy));
 	}
 
 	return SUCCESS;
