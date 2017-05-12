@@ -13,6 +13,7 @@
 #include <queue>
 #include <set>
 #include <utility>
+#include <fstream>
 
 #include "backend/storage.h"
 #include "common/configuration.h"
@@ -21,7 +22,6 @@
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
 #include "scheduler/deterministic_scheduler.h"
-#include <fstream>
 #ifdef PAXOS
 # include "paxos/paxos.h"
 #endif
@@ -55,6 +55,11 @@ void* Sequencer::RunSequencerWriter(void *arg) {
   return NULL;
 }
 
+void* Sequencer::RunSequencerPaxos(void *arg) {
+  reinterpret_cast<Sequencer*>(arg)->RunPaxos();
+  return NULL;
+}
+
 void* Sequencer::RunSequencerReader(void *arg) {
   reinterpret_cast<Sequencer*>(arg)->RunReader();
   return NULL;
@@ -78,6 +83,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
   else{
 	  txns_queue_ = new AtomicQueue<TxnProto*>();
   }
+  paxos_queues = new AtomicQueue<string>();
 
   for(int i = 0; i < THROUGHPUT_SIZE; ++i){
       throughput[i] = -1;
@@ -100,6 +106,9 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 		std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
 		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
+			  reinterpret_cast<void*>(this));
+
+		pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
 			  reinterpret_cast<void*>(this));
 
 		CPU_ZERO(&cpuset);
@@ -135,7 +144,7 @@ Sequencer::~Sequencer() {
 	//	  pthread_join(reader_thread_, NULL);
 	//  }
 	//delete txns_queue_;
-
+	delete paxos_queues;
 	std::cout<<" Sequencer done"<<std::endl;
 }
 
@@ -284,12 +293,44 @@ void Sequencer::RunWriter() {
 #ifdef PAXOS
     paxos.SubmitBatch(batch_string);
 #else
-    pthread_mutex_lock(&mutex_);
-    batch_queue_.push(batch_string);
-    pthread_mutex_unlock(&mutex_);
+    paxos_queues->Push(batch_string);
+//    pthread_mutex_lock(&mutex_);
+//    batch_queue_.push(batch_string);
+//    pthread_mutex_unlock(&mutex_);
 #endif
   }
 
+  Spin(1);
+}
+
+void Sequencer::RunPaxos() {
+  pthread_setname_np(pthread_self(), "paxos");
+
+  queue<pair<int64, string>> paxos_msg;
+  int64 paxos_duration = atoi(ConfigReader::Value("paxos_delay").c_str())*1000;
+
+  while (!deconstructor_invoked_) {
+	  string result;
+	  int64 now_time = GetUTime();
+	  if(paxos_queues->Pop(&result)){
+		  //std::cout<<"Got mesasge from the queue, now time is "<<now_time<<", adding to queue with time "
+		//		  <<now_time+paxos_duration<<std::endl;
+		  paxos_msg.push(make_pair(now_time+paxos_duration, result));
+	  }
+	  while(paxos_msg.size()){
+		  if(paxos_msg.front().first <= now_time){
+			  //std::cout<<"Popping from queue, because now is "<<now_time<<", msg time is  "
+			//		  <<paxos_msg.front().first<<std::endl;
+			  pthread_mutex_lock(&mutex_);
+			  batch_queue_.push(paxos_msg.front().second);
+			  pthread_mutex_unlock(&mutex_);
+			  paxos_msg.pop();
+		  }
+		  else
+			  break;
+	  }
+	  Spin(0.001);
+  }
   Spin(1);
 }
 
@@ -411,25 +452,25 @@ void Sequencer::RunReader() {
       			<< num_sc_txns_ << " spec-committed, "
       			//<< test<< " for drop speed , "
       			//<< executing_txns << " executing, "
-      			<< num_pend_txns_ << " pending, time is "<<second++<<"\n" << std::flush;
+      			<< num_pend_txns_ << " pending, time is "<<second<<"\n" << std::flush;
+      throughput[second] = (Sequencer::num_lc_txns_-last_committed) / (now_time- time);
+      abort[second] = (Sequencer::num_aborted_-last_aborted) / (now_time- time);
+
+      ++second;
 	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
 		  for(int i = 0; i<NUM_THREADS; ++i){
-			  if(scheduler_->to_sc_txns_[i]->size())
-				  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-				  	  <<", num committed txn is "<<Sequencer::num_lc_txns_
-					  <<", waiting queue is"<<std::endl;
-			  else
-				  std::cout<< " doing nothing, top is empty"
-				  	  <<", num committed txn is "<<Sequencer::num_lc_txns_
-					  <<", waiting queue is"<<std::endl;
-//			  for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
-//				  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
-//				  std::cout<<t.first<<",";
-//			  }
-			  std::cout<<"\n";
+                if (scheduler_->to_sc_txns_[i]->size())
+			        std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
+				    <<", num committed txn is "<<Sequencer::num_lc_txns_
+				    <<", waiting queue is"<<std::endl;
+                else
+                    std::cout<< " doing nothing, no top,  num committed txn is "<<Sequencer::num_lc_txns_
+                    <<", waiting queue is"<<std::endl;
+
+			  if(scheduler_->pending_txns_[i]->size())
+				  std::cout<<"Pend txn size is "<<scheduler_->pending_txns_[i]->top().second<<"\n";
 		  }
 	  }
-
 
       // Reset txn count.
       time = now_time;
@@ -468,13 +509,9 @@ void Sequencer::RunLoader(){
 			<< num_pend_txns_ << " pending\n" << std::flush;
 	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
 		  for(int i = 0; i<num_threads; ++i){
-			  if (scheduler_->to_sc_txns_[i]->size())
-				  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
+			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
 				  <<", num committed txn is "<<Sequencer::num_lc_txns_
 				  <<", waiting queue is"<<std::endl;
-			  else
-				  std::cout<< " doing nothing, top is empty, num committed txn is "<<Sequencer::num_lc_txns_
-					  <<", waiting queue is"<<std::endl;
 			  //for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
 			//	  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
 			//	  std::cout<<t.first<<",";
@@ -499,7 +536,7 @@ void* Sequencer::FetchMessage() {
   //int pending_txns = 0;
 
   //TxnProto* done_txn;
-  if (txns_queue_->Size() < 1000){
+  if (txns_queue_->Size() < 2000){
 	  ASSERT(queue_mode == NORMAL_QUEUE);
 	  if (queue_mode == NORMAL_QUEUE){
 		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
@@ -583,7 +620,7 @@ void Sequencer::output(){
     ofstream myfile;
     myfile.open ("output.txt");
     int count =0;
-    int64 latency = 0;
+    pair<int64, int64> latency;
     myfile << "THROUGHPUT" << '\n';
     while(abort[count] != -1 && count < THROUGHPUT_SIZE){
         myfile << throughput[count] << ", "<< abort[count] << '\n';
@@ -593,8 +630,8 @@ void Sequencer::output(){
 
     for(int i = 0; i<NUM_THREADS; ++i){
     	count = 0;
-		while((latency = scheduler_->latency[i][count]) != 0 && count < LATENCY_SIZE){
-			myfile << latency << '\n';
+		while(scheduler_->latency[i][count].first != 0 && count < LATENCY_SIZE){
+			myfile << scheduler_->latency[i][count].first<<", "<<scheduler_->latency[i][count].second << '\n';
 			++count;
 		}
     }

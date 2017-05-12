@@ -21,8 +21,9 @@
 
 //#define MAX_BATCH_SIZE 56
 
-//#define SAMPLES 100000
+#define SAMPLES 100000
 //#define SAMPLE_RATE 999
+#define THROUGHPUT_SIZE 500
 //#define VERBOSE_SEQUENCER
 
 //#define LATENCY_TEST
@@ -37,8 +38,6 @@ class TxnProto;
 class MessageProto;
 class DeterministicScheduler;
 class ConfigReader;
-
-#define THROUGHPUT_SIZE 500
 
 #ifdef LATENCY_TEST
 extern double sequencer_recv[SAMPLES];
@@ -69,6 +68,8 @@ class Sequencer {
   // Halts the main loops.
   ~Sequencer();
 
+  void output();
+
   // Get the transaction queue
   inline AtomicQueue<TxnProto*>* GetTxnsQueue(){
 	  return txns_queue_;
@@ -77,8 +78,6 @@ class Sequencer {
   void SetScheduler(DeterministicScheduler* scheduler){
 	  scheduler_ = scheduler;
   }
-
-  void output();
 
  public:
   static int64_t num_lc_txns_;
@@ -102,12 +101,14 @@ class Sequencer {
   //
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
+  void RunPaxos();
   void RunReader();
   void RunLoader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
+  static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
   static void* RunSequencerLoader(void *arg);
 
@@ -141,6 +142,7 @@ class Sequencer {
 
   // Separate pthread contexts in which to run the sequencer's main loops.
   pthread_t writer_thread_;
+  pthread_t paxos_thread_;
   pthread_t reader_thread_;
 
   // False until the deconstructor is called. As soon as it is set to true, the
@@ -162,6 +164,7 @@ class Sequencer {
 
   // The queue of fetched transactions
   AtomicQueue<TxnProto*>* txns_queue_;
+  AtomicQueue<string>* paxos_queues;
 
   int num_queues_;
 
