@@ -111,7 +111,6 @@ class Sequencer {
   // the Sequencer's constructor.
   static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerWriter(void *arg);
-  static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
   static void* RunSequencerLoader(void *arg);
 
