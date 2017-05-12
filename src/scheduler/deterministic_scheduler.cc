@@ -107,7 +107,7 @@ Spin(2);
     thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
     for (int j = 0; j<LATENCY_SIZE; ++j)
-    	latency[i][j] = 0;
+    	latency[i][j] = make_pair(0, 0);
 
     cpu_set_t cpuset;
     pthread_attr_t attr;
@@ -180,7 +180,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   bool if_blocked = false;
   int out_counter1 = 0;
   int sample_count = 0, latency_count = 0;
-  int64* latency_array = scheduler->latency[thread];
+  pair<int64, int64>* latency_array = scheduler->latency[thread];
 
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
@@ -406,6 +406,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		  if (got_it == true) {
 			  // Create manager.
+			  txn->set_start_time(GetUTime());
 			  StorageManager* manager;
 			  if (active_g_tids.count(txn->txn_id()) == 0)
 				  manager = new StorageManager(scheduler->configuration_,
@@ -458,7 +459,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		unordered_map<int64_t, StorageManager*>& active_g_tids, unordered_map<int64_t, StorageManager*>& active_l_tids,
 		priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm,
-		int& sample_count, int& latency_count, int64* latency_array){
+		int& sample_count, int& latency_count, pair<int64, int64>* latency_array){
 	TxnProto* txn = manager->get_txn();
 	// No need to resume if the txn is still suspended
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way

@@ -264,9 +264,26 @@ void Sequencer::RunPaxos() {
   unordered_map<int64, MessageProto*> pending_received_skeen;
   int64 proposed_for_batch = 0;
 
+  queue<pair<int64, MessageProto*>> paxos_msg;
+  int64 paxos_duration = atoi(ConfigReader::Value("paxos_delay").c_str())*1000;
+
   while (!deconstructor_invoked_) {
 	  // I need to run a multicast protocol to propose this txn to other partitions
 	  // Propose global
+
+	  int64 now_time = GetUTime();
+	  while(paxos_msg.size()){
+		  if(paxos_msg.front().first <= now_time){
+			  //std::cout<<"Popping from queue, because now is "<<now_time<<", msg time is  "
+			//		  <<paxos_msg.front().first<<std::endl;
+			  paxos_connection_->Send(*paxos_msg.front().second);
+			  delete paxos_msg.front().second;
+			  paxos_msg.pop();
+		  }
+		  else
+			  break;
+	  }
+
 	  MessageProto* single_part_msg;
 	  if(my_single_part_msg_.Pop(&single_part_msg)){
 		  int64 to_propose_batch = single_part_msg->batch_number();
@@ -305,8 +322,9 @@ void Sequencer::RunPaxos() {
 			  msg->set_destination_node(msg->source_node());
 			  msg->set_destination_channel("scheduler_");
 			  msg->set_type(MessageProto::TXN_BATCH);
-			  paxos_connection_->Send(*msg);
-			  delete msg;
+			  paxos_msg.push(make_pair(now_time+paxos_duration, msg));
+//			  paxos_connection_->Send(*msg);
+//			  delete msg;
 		  }
 		  else if (msg_type == MessageProto::SKEEN_REQ){
 			  int64 to_propose_batch = max(max_batch, proposed_batch+1);
@@ -772,7 +790,7 @@ void Sequencer::output(){
     ofstream myfile;
     myfile.open ("output.txt");
     int count =0;
-    int64 latency = 0;
+    pair<int64, int64> latency;
     myfile << "THROUGHPUT" << '\n';
     while(abort[count] != -1 && count < THROUGHPUT_SIZE){
         myfile << throughput[count] << ", "<< abort[count] << '\n';
@@ -782,8 +800,8 @@ void Sequencer::output(){
 
     for(int i = 0; i<NUM_THREADS; ++i){
     	count = 0;
-		while((latency = scheduler_->latency[i][count]) != 0 && count < LATENCY_SIZE){
-			myfile << latency << '\n';
+		while(scheduler_->latency[i][count].first != 0 && count < LATENCY_SIZE){
+			myfile << scheduler_->latency[i][count].first<<", "<<scheduler_->latency[i][count].second << '\n';
 			++count;
 		}
     }
