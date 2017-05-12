@@ -111,7 +111,7 @@ Spin(2);
     thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
     for (int j = 0; j<LATENCY_SIZE; ++j)
-    	latency[i][j] = 0;
+    	latency[i][j] = make_pair(0, 0);
 
     cpu_set_t cpuset;
     pthread_attr_t attr;
@@ -179,7 +179,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   bool if_blocked = false;
   int last_printed = 0, out_counter1 = 0, last_sc = -1;
   int sample_count = 0, latency_count = 0;
-  int64* latency_array = scheduler->latency[thread];
+  pair<int64, int64>* latency_array = scheduler->latency[thread];
 
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
@@ -474,7 +474,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		unordered_map<int64_t, StorageManager*>& active_g_tids, unordered_map<int64_t, StorageManager*>& active_l_tids,
-		int& sample_count, int& latency_count, int64* latency_array){
+		int& sample_count, int& latency_count, pair<int64, int64>* latency_array){
 	TxnProto* txn = manager->get_txn();
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way
 	if(manager->ReadOnly()){

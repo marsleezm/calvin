@@ -48,7 +48,7 @@ class Client;
 #define TO_READ false
 
 #define LATENCY_SIZE 1000
-#define SAMPLE_RATE 500
+#define SAMPLE_RATE 1000
 
 // #define PREFETCHING
 
@@ -77,12 +77,19 @@ class DeterministicScheduler : public Scheduler {
 	  active_txns.erase(txn_id);
   }
 
-  inline static void AddLatency(int& sample_count, int& latency_count, int64* array, TxnProto* txn){
+  inline static void AddLatency(int& sample_count, int& latency_count, pair<int64, int64>* array, TxnProto* txn){
       if (sample_count == SAMPLE_RATE)
       {
-          if(latency_count == LATENCY_SIZE)
-              latency_count = 0;
-          array[latency_count] = GetUTime() - txn->start_time();
+//          if(latency_count == LATENCY_SIZE)
+//              latency_count = 0;
+//          int64 current_time = GetUTime();
+//          array[latency_count] = make_pair(current_time - txn->start_time(), current_time - txn->seed());
+//          ++latency_count;
+//          sample_count = 0;
+          if(latency_count < LATENCY_SIZE){
+              int64 current_time = GetUTime();
+              array[latency_count] = make_pair(current_time - txn->start_time(), current_time - txn->seed());
+          }
           ++latency_count;
           sample_count = 0;
       }
@@ -117,7 +124,7 @@ class DeterministicScheduler : public Scheduler {
 
   bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
-		  int& sample_count, int& latency_count, int64* latency_array);
+		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
@@ -176,6 +183,6 @@ class DeterministicScheduler : public Scheduler {
   int pend_block[num_threads];
   int suspend_block[num_threads];
 
-  int64 latency[NUM_THREADS][LATENCY_SIZE];
+  pair<int64, int64> latency[NUM_THREADS][LATENCY_SIZE];
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_
