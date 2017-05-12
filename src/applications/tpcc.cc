@@ -49,8 +49,6 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
  		   config->LookupPartition(remote_warehouse_id) !=
  			 remote_node);
 
-     txn->add_readers(remote_node);
-     txn->add_writers(remote_node);
   }
 
   // Create an arg list
@@ -108,6 +106,8 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
         if(mp){
      		snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
      				 "w%d", remote_warehouse_id);
+     	    txn->add_readers(remote_node);
+     	    txn->add_writers(remote_node);
         }
         else {
         	snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
@@ -190,6 +190,9 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 			remote_customer_id = rand() % CUSTOMERS_PER_DISTRICT;
 			snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d",
 			   remote_warehouse_id, remote_district_id, remote_customer_id);
+
+		     txn->add_readers(remote_node);
+		     txn->add_writers(remote_node);
 		}
 
 		// We only do secondary keying ~60% of the time

@@ -113,14 +113,14 @@ class TClient : public Client {
     } else if(random_txn_type < 88) {
       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
     } else if(random_txn_type < 92) {
-      tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
-      (*txn)->set_multipartition(false);
+    	(*txn)->set_multipartition(false);
+    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
     } else if(random_txn_type < 96){
-      tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
-      (*txn)->set_multipartition(false);
+    	(*txn)->set_multipartition(false);
+		tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
     } else {
-      tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
-      (*txn)->set_multipartition(false);
+    	(*txn)->set_multipartition(false);
+    	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
     }
     (*txn)->set_seed(seed);
   }
