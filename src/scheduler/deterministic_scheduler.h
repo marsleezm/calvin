@@ -26,6 +26,7 @@
 
 using std::deque;
 using std::set;
+using std::pair;
 
 namespace zmq {
 class socket_t;
@@ -126,7 +127,7 @@ class DeterministicScheduler : public Scheduler {
   bool deconstructor_invoked_ = false;
 
  	 public:
-        int64 latency[LATENCY_SIZE*NUM_THREADS];
+        pair<int64, int64> latency[LATENCY_SIZE*NUM_THREADS];
         double throughput[THROUGHPUT_SIZE];
         double abort[THROUGHPUT_SIZE];
 

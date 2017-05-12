@@ -85,12 +85,14 @@ class Sequencer {
   //
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
+  void RunPaxos();
   void RunReader();
   void RunLoader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
+  static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
   static void* RunSequencerLoader(void *arg);
 
@@ -135,6 +137,7 @@ class Sequencer {
 
   // Separate pthread contexts in which to run the sequencer's main loops.
   pthread_t writer_thread_;
+  pthread_t paxos_thread_;
   pthread_t reader_thread_;
 
   // False until the deconstructor is called. As soon as it is set to true, the
@@ -147,6 +150,7 @@ class Sequencer {
 
   AtomicQueue<MessageProto>* message_queues;
   AtomicQueue<MessageProto>* restart_queues;
+  AtomicQueue<string>* paxos_queues;
 
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
   int dependent_percent = atoi(ConfigReader::Value("dependent_percent").c_str());
