@@ -47,7 +47,7 @@ class Client;
 #define TO_SEND true
 #define TO_READ false
 
-#define LATENCY_SIZE 1000
+#define LATENCY_SIZE 2000
 #define SAMPLE_RATE 1000
 
 // #define PREFETCHING
@@ -80,18 +80,18 @@ class DeterministicScheduler : public Scheduler {
   inline static void AddLatency(int& sample_count, int& latency_count, pair<int64, int64>* array, TxnProto* txn){
       if (sample_count == SAMPLE_RATE)
       {
-//          if(latency_count == LATENCY_SIZE)
-//              latency_count = 0;
-//          int64 current_time = GetUTime();
-//          array[latency_count] = make_pair(current_time - txn->start_time(), current_time - txn->seed());
-//          ++latency_count;
-//          sample_count = 0;
-          if(latency_count < LATENCY_SIZE){
-              int64 current_time = GetUTime();
-              array[latency_count] = make_pair(current_time - txn->start_time(), current_time - txn->seed());
-          }
+          if(latency_count == LATENCY_SIZE)
+              latency_count = 0;
+          int64 current_time = GetUTime();
+          array[latency_count] = make_pair(current_time - txn->start_time(), current_time - txn->seed());
           ++latency_count;
           sample_count = 0;
+//          if(latency_count < LATENCY_SIZE){
+//              int64 current_time = GetUTime();
+//              array[latency_count] = make_pair(current_time - txn->start_time(), current_time - txn->seed());
+//          }
+//          ++latency_count;
+//          sample_count = 0;
       }
       ++sample_count;
   }
