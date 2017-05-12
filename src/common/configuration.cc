@@ -30,6 +30,10 @@ int Configuration::LookupPartition(const Key& key) const {
     return StringToInt(key) % static_cast<int>(all_nodes.size());
 }
 
+int Configuration::LookupPartition(const int& key) const {
+  return key % static_cast<int>(all_nodes.size());
+}
+
 bool Configuration::WriteToFile(const string& filename) const {
   FILE* fp = fopen(filename.c_str(), "w");
   if (fp == NULL)
