@@ -125,9 +125,18 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		{
 			int part = txn->writers(0);
 
-			set<int> keys;
+			// Add one hot key to read/write set.
 			GetRandomKeys(&keys,
-						kRWSetSize,
+						indexAccessNum,
+						nparts * 0,
+						nparts * index_records,
+						part, rand);
+
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+				txn->add_read_write_set(IntToString(*it));
+
+			GetRandomKeys(&keys,
+						kRWSetSize-indexAccessNum,
 						nparts * index_records,
 						nparts * kDBSize,
 						part, rand);
@@ -162,25 +171,46 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		break;
 		case MICROTXN_MP:
 		{
-			int avg_keys_per_part = kRWSetSize/txn->readers_size();
-			int keys_first_part = kRWSetSize - avg_keys_per_part * (txn->readers_size()-1);
+			int avg_index_per_part = indexAccessNum/txn->readers_size();
+			int index_first_part = indexAccessNum- avg_index_per_part*(txn->readers_size()-1);
+
+			int avg_key_per_part = (kRWSetSize - indexAccessNum)/txn->readers_size(),
+					key_first_part = (kRWSetSize - indexAccessNum)- avg_key_per_part*(txn->readers_size()-1);
 
 			GetRandomKeys(&keys,
-					  keys_first_part,
-		              nparts * index_records,
-		              nparts * kDBSize,
-		              txn->readers(0), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+						index_first_part,
+						nparts * 0,
+						nparts * index_records,
+						txn->readers(0), rand);
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 				txn->add_read_write_set(IntToString(*it));
+			}
 
+			GetRandomKeys(&keys,
+					key_first_part,
+						nparts * index_records,
+						nparts * kDBSize,
+						txn->readers(0), rand);
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+				txn->add_read_write_set(IntToString(*it));
+			}
 
 			for(int i = 1; i<txn->readers_size()-1; ++i){
 				GetRandomKeys(&keys,
-							  avg_keys_per_part,
-				              nparts * index_records,
-				              nparts * kDBSize,
+							  avg_index_per_part,
+							  nparts * 0,
+							  nparts * index_records,
+							  txn->readers(i), rand);
+				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+					txn->add_read_write_set(IntToString(*it));
+
+				GetRandomKeys(&keys,
+							  avg_key_per_part,
+							  nparts * index_records,
+							  nparts * kDBSize,
 							  txn->readers(i), rand);
 				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+					//std::cout<<"Adding key "<<*it<<std::endl;
 					txn->add_read_write_set(IntToString(*it));
 				}
 			}

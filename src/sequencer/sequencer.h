@@ -21,8 +21,6 @@
 
 //#define MAX_BATCH_SIZE 56
 
-#define NUM_PENDING_BATCH 128
-
 #define SAMPLES 100000
 //#define SAMPLE_RATE 999
 #define THROUGHPUT_SIZE 500
@@ -111,6 +109,7 @@ class Sequencer {
   // the Sequencer's constructor.
   static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerWriter(void *arg);
+  static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
   static void* RunSequencerLoader(void *arg);
 
@@ -171,6 +170,7 @@ class Sequencer {
 
   // The queue of fetched transactions
   AtomicQueue<TxnProto*>* txns_queue_;
+  AtomicQueue<string>* paxos_queues;
 
   int num_queues_;
 

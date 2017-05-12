@@ -405,6 +405,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  //LOCKLOG(txn->txn_id(), " before starting txn ");
 
 		  if (got_it == true) {
+			  txn->set_start_time(GetUTime());
 			  // Create manager.
 			  txn->set_start_time(GetUTime());
 			  StorageManager* manager;
