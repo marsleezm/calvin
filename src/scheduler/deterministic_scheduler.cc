@@ -115,7 +115,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     	channel.append(IntToString(i));
     	thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
         for (int j = 0; j<LATENCY_SIZE*NUM_THREADS; ++j)
-            latency[j] = 0;
+            latency[j] = make_pair(0, 0);
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
@@ -455,7 +455,8 @@ int abort_number = 0;
                 {
                     if(latency_count == LATENCY_SIZE*NUM_THREADS)
                         latency_count = 0;
-                    scheduler->latency[latency_count] = GetUTime() - done_txn->start_time();
+                    int64 now_time = GetUTime();
+                    scheduler->latency[latency_count] = make_pair(now_time - done_txn->start_time(), now_time- done_txn->seed());
                     ++latency_count;
                     sample_count = 0;
                 }
