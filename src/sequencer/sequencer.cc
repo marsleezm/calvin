@@ -416,10 +416,10 @@ void Sequencer::RunPaxos() {
   Spin(1);
 }
 
-void Sequencer::propose_global(int64& proposed_batch, map<int, int>& num_pending, queue<MessageProto*>& pending_paxos_props,
-		unordered_map<int, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>>& multi_part_txns){
+void Sequencer::propose_global(int64& proposed_batch, map<int64, int>& num_pending, queue<MessageProto*>& pending_paxos_props,
+		unordered_map<int64, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>>& multi_part_txns){
 	while(true){
-		int next_batch = proposed_batch+1;
+		int64 next_batch = proposed_batch+1;
 		if (num_pending[next_batch] == 0 && pending_paxos_props.size()
 				&& pending_paxos_props.front()->batch_number() == next_batch){
 			MessageProto* propose_msg = pending_paxos_props.front();

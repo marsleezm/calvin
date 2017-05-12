@@ -115,8 +115,8 @@ class Sequencer {
   static void* RunSequencerLoader(void *arg);
 
   void* FetchMessage();
-  void propose_global(int64& proposed_batch, map<int, int>& num_pending, queue<MessageProto*>& pending_paxos_props,
-			unordered_map<int, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>>& multi_part_txns);
+  void propose_global(int64& proposed_batch, map<int64, int>& num_pending, queue<MessageProto*>& pending_paxos_props,
+			unordered_map<int64, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>>& multi_part_txns);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   //void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
@@ -185,7 +185,7 @@ class Sequencer {
   int num_fetched_this_round;
 
   AtomicQueue<MessageProto*> my_single_part_msg_;
-  MyAtomicMap<int, MyFour<int64, int64, vector<int>, MessageProto*>> pending_sent_skeen;
+  MyAtomicMap<int64, MyFour<int64, int64, vector<int>, MessageProto*>> pending_sent_skeen;
  
   double throughput[THROUGHPUT_SIZE];
   double abort[THROUGHPUT_SIZE];
