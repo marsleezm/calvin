@@ -15,7 +15,7 @@
 
 #include <deque>
 #define LATENCY_SIZE 2000
-#define SAMPLE_RATE 800
+#define SAMPLE_RATE 200
 #define THROUGHPUT_SIZE 500
 
 #include "scheduler/scheduler.h"
