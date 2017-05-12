@@ -149,13 +149,7 @@ Sequencer::~Sequencer() {
 	//	  pthread_join(reader_thread_, NULL);
 	//  }
 	//delete txns_queue_;
-<<<<<<< HEAD
-
-	//std::cout<<" Sequencer done"<<std::endl;
-=======
 	delete paxos_queues;
-	std::cout<<" Sequencer done"<<std::endl;
->>>>>>> spec_calvin_locking
 }
 
 //void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
