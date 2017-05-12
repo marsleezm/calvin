@@ -185,7 +185,7 @@ class Sequencer {
   int num_fetched_this_round;
 
   AtomicQueue<MessageProto*> my_single_part_msg_;
-  MyAtomicMap<int, MyFour<int, int64, vector<int>, MessageProto*>> pending_sent_skeen;
+  MyAtomicMap<int, MyFour<int64, int64, vector<int>, MessageProto*>> pending_sent_skeen;
  
   double throughput[THROUGHPUT_SIZE];
   double abort[THROUGHPUT_SIZE];
