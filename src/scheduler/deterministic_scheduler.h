@@ -14,8 +14,8 @@
 #include <pthread.h>
 
 #include <deque>
-#define LATENCY_SIZE 1000
-#define SAMPLE_RATE 500
+#define LATENCY_SIZE 2000
+#define SAMPLE_RATE 800
 #define THROUGHPUT_SIZE 500
 
 #include "scheduler/scheduler.h"
