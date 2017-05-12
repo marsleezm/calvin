@@ -124,7 +124,6 @@ class TClient : public Client {
       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
     } else if(random_txn_type < 92) {
     	(*txn)->set_multipartition(false);
-<<<<<<< HEAD
     	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
     } else if(random_txn_type < 96){
     	(*txn)->set_multipartition(false);
@@ -133,15 +132,6 @@ class TClient : public Client {
     } else {
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
-=======
-      tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
-    } else if(random_txn_type < 96){
-    	(*txn)->set_multipartition(false);
-      tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
-    } else {
-    	(*txn)->set_multipartition(false);
-      tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
->>>>>>> master_general_recon
     }
   }
 
