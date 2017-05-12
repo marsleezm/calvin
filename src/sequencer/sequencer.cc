@@ -256,13 +256,13 @@ void Sequencer::RunPaxos() {
   int64 proposed_batch = -1;
   // The maximal of batches I have already proposed. This should usually be higher my proposed_batch
   int64 max_batch = 0;
-  map<int, int> num_pending;
+  map<int64, int> num_pending;
 
-  unordered_map<int, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>> multi_part_txns;
+  unordered_map<int64, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>> multi_part_txns;
   queue<MessageProto*> pending_paxos_props;
 
   unordered_map<int64, MessageProto*> pending_received_skeen;
-  int proposed_for_batch = 0;
+  int64 proposed_for_batch = 0;
 
   while (!deconstructor_invoked_) {
 	  // I need to run a multicast protocol to propose this txn to other partitions
@@ -343,8 +343,8 @@ void Sequencer::RunPaxos() {
 		  }
 		  else if (msg_type == MessageProto::SKEEN_PROPOSE){
 			  int64 msg_id = msg->msg_id();
-			  int index = msg->batch_number();
-			  MyFour<int, int64, vector<int>, MessageProto*> entry = pending_sent_skeen.Lookup(index);
+			  int64 index = msg->batch_number();
+			  MyFour<int64, int64, vector<int>, MessageProto*> entry = pending_sent_skeen.Lookup(index);
 			  //SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", he proposed "<<msg->propose_batch()<<", remaining is "<<entry.first);
 			  entry.second = max(msg->propose_batch(), entry.second);
 			  //pending_skeen_msg[msg_id].third->set_batch_number(new_batch);
@@ -416,10 +416,10 @@ void Sequencer::RunPaxos() {
   Spin(1);
 }
 
-void Sequencer::propose_global(int64& proposed_batch, map<int, int>& num_pending, queue<MessageProto*>& pending_paxos_props,
-		unordered_map<int, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>>& multi_part_txns){
+void Sequencer::propose_global(int64& proposed_batch, map<int64, int>& num_pending, queue<MessageProto*>& pending_paxos_props,
+		unordered_map<int64, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>>& multi_part_txns){
 	while(true){
-		int next_batch = proposed_batch+1;
+		int64 next_batch = proposed_batch+1;
 		if (num_pending[next_batch] == 0 && pending_paxos_props.size()
 				&& pending_paxos_props.front()->batch_number() == next_batch){
 			MessageProto* propose_msg = pending_paxos_props.front();
@@ -550,7 +550,7 @@ void Sequencer::RunReader() {
     	std::copy(involved_parts.begin(), involved_parts.end(), output.begin());
     	//SEQLOG(-1, "multi-part txn's size is "<<involved_parts.size());
     	multi_part_msg->set_msg_id(msg_id);
-    	pending_sent_skeen.Put(batch_number, MyFour<int, int64, vector<int>, MessageProto*>
+    	pending_sent_skeen.Put(batch_number, MyFour<int64, int64, vector<int>, MessageProto*>
     		(involved_parts.size(), 0, output, multi_part_msg));
     }
     else
