@@ -116,7 +116,6 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
                                     "%s", warehouse_key);
         }
 
-
         // Iterate through each order line
         for (int i = 0; i < order_line_count; i++) {
         	// Set the item id (Invalid orders have the last item be -1)
@@ -130,6 +129,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
         	char item_key[128];
         	snprintf(item_key, sizeof(item_key), "i%d", item);
 
+        	// Create an order line warehouse key (default is local)
 			// Finally, we set the stock key to the read and write set
 			Key stock_key = string(remote_warehouse_key) + "s" + item_key;
 			txn->add_read_write_set(stock_key);
@@ -685,9 +685,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		//}
 		//else
 		//	return FAILURE;
-
 	}
-
     //storage->ApplyChange();
 	return SUCCESS;
 }
