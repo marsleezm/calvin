@@ -431,7 +431,6 @@ void Sequencer::RunReader() {
 		  }
 	  }
 
-
       // Reset txn count.
       time = now_time;
 	  last_committed = Sequencer::num_lc_txns_;
