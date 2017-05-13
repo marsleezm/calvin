@@ -288,7 +288,8 @@ void Sequencer::RunPaxos() {
 			  SEQLOG(-1, " proposing to global "<<to_propose_batch<<", proposed batch is "<<proposed_batch);
 			  if (multi_part_txns.count(to_propose_batch) != 0){
 				  priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg> msgs = multi_part_txns[to_propose_batch];
-				  for(uint i = 0; i < msgs.size(); ++i){
+				  SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", msg size is "<<msgs.size());
+				  while(msg.size()){
 					  MessageProto* msg = msgs.top();
 					  SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", adding message "<<msg->msg_id());
 					  msgs.pop();
