@@ -179,6 +179,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   bool if_blocked = false;
   int last_printed = 0, out_counter1 = 0, last_sc = -1;
   int sample_count = 0, latency_count = 0;
+  int cnt = 0;
   pair<int64, int64>* latency_array = scheduler->latency[thread];
 
   // TODO! May need to add some logic to pending transactions to see if can commit
@@ -217,10 +218,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  else if (to_sc_txn.second < Sequencer::num_lc_txns_)
 			  my_to_sc_txns->pop();
 		  else{
-			 if(last_sc != to_sc_txn.first){
+			 if(last_sc != to_sc_txn.first || cnt == 13554432){
 				 LOG(-1, ", can not do anything, my sc is first is "<<to_sc_txn.first<<", second is "<<to_sc_txn.second<<", num lc is "<<Sequencer::num_lc_txns_);
 				 last_sc = to_sc_txn.first;
+				 cnt = 0;
 			 }
+			 ++cnt;
 		  }
 	  }
 
