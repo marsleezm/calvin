@@ -708,7 +708,7 @@ void* Sequencer::FetchMessage() {
 				  txn->ParseFromString(batch_message->data(i));
                   string writers = "";
                   for(int j = 0; j<txn->writers_size(); ++j)
-                     writers += txn->writers(j);
+                     writers += IntToString(txn->writers(j));
 				  SEQLOG(-1, " batch "<<batch_message->batch_number()<<" has txn of id "<<txn->txn_id()<<" with local "<<fetched_txn_num_<<", writers are "<<writers);
 				  txn->set_local_txn_id(fetched_txn_num_++);
 				  txns_queue_->Push(txn);
