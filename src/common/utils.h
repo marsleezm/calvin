@@ -836,18 +836,18 @@ class ComparePair
 public:
     bool operator() (std::pair<int64_t, bool> left, std::pair<int64_t, bool> right)
     {
-    	return (left.first > right.first);
+    	return (left.second > right.second);
     }
 };
 
-class CompareTuple
-{
-public:
-    bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
-    {
-    	return (left.first > right.first);
-    }
-};
+//class CompareTuple
+//{
+//public:
+//    bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
+//    {
+//    	return (left.first > right.first);
+//    }
+//};
 
 class CompareFour
 {
