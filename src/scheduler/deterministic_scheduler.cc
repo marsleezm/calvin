@@ -218,12 +218,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  else if (to_sc_txn.second < Sequencer::num_lc_txns_)
 			  my_to_sc_txns->pop();
 		  else{
-			 if(last_sc != to_sc_txn.first || cnt == 13554432){
+			 if(last_sc != to_sc_txn.first){
 				 LOG(-1, ", can not do anything, my sc is first is "<<to_sc_txn.first<<", second is "<<to_sc_txn.second<<", num lc is "<<Sequencer::num_lc_txns_);
 				 last_sc = to_sc_txn.first;
-				 cnt = 0;
 			 }
-			 ++cnt;
 		  }
 	  }
 
