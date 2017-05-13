@@ -87,7 +87,6 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* pa
   else{
 	  txns_queue_ = new AtomicQueue<TxnProto*>();
   }
-  paxos_queues = new AtomicQueue<string>();
 
   for(int i = 0; i < THROUGHPUT_SIZE; ++i){
       throughput[i] = -1;
@@ -112,11 +111,8 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* pa
 		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 			  reinterpret_cast<void*>(this));
 
-<<<<<<< HEAD
 		//std::cout << "Paxos thread starts at core 1"<<std::endl;
 
-=======
->>>>>>> spec_calvin_locking_aggr_read
 		pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
 			  reinterpret_cast<void*>(this));
 
@@ -153,13 +149,8 @@ Sequencer::~Sequencer() {
 	//	  pthread_join(reader_thread_, NULL);
 	//  }
 	//delete txns_queue_;
-<<<<<<< HEAD
 
 	//std::cout<<" Sequencer done"<<std::endl;
-=======
-	delete paxos_queues;
-	std::cout<<" Sequencer done"<<std::endl;
->>>>>>> spec_calvin_locking_aggr_read
 }
 
 //void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
@@ -248,17 +239,15 @@ void Sequencer::RunWriter() {
 #ifdef PAXOS
     paxos.SubmitBatch(batch_string);
 #else
-    paxos_queues->Push(batch_string);
-//    pthread_mutex_lock(&mutex_);
-//    batch_queue_.push(batch_string);
-//    pthread_mutex_unlock(&mutex_);
+    pthread_mutex_lock(&mutex_);
+    batch_queue_.push(batch_string);
+    pthread_mutex_unlock(&mutex_);
 #endif
   }
 
   Spin(1);
 }
 
-<<<<<<< HEAD
 
 void Sequencer::RunPaxos() {
   pthread_setname_np(pthread_self(), "paxos");
@@ -283,40 +272,17 @@ void Sequencer::RunPaxos() {
 	  // Propose global
 
 	  int64 now_time = GetUTime();
-=======
-void Sequencer::RunPaxos() {
-  pthread_setname_np(pthread_self(), "paxos");
-
-  queue<pair<int64, string>> paxos_msg;
-  int64 paxos_duration = atoi(ConfigReader::Value("paxos_delay").c_str())*1000;
-
-  while (!deconstructor_invoked_) {
-	  string result;
-	  int64 now_time = GetUTime();
-	  if(paxos_queues->Pop(&result)){
-		  //std::cout<<"Got mesasge from the queue, now time is "<<now_time<<", adding to queue with time "
-		//		  <<now_time+paxos_duration<<std::endl;
-		  paxos_msg.push(make_pair(now_time+paxos_duration, result));
-	  }
->>>>>>> spec_calvin_locking_aggr_read
 	  while(paxos_msg.size()){
 		  if(paxos_msg.front().first <= now_time){
 			  //std::cout<<"Popping from queue, because now is "<<now_time<<", msg time is  "
 			//		  <<paxos_msg.front().first<<std::endl;
-<<<<<<< HEAD
 			  paxos_connection_->Send(*paxos_msg.front().second);
 			  delete paxos_msg.front().second;
-=======
-			  pthread_mutex_lock(&mutex_);
-			  batch_queue_.push(paxos_msg.front().second);
-			  pthread_mutex_unlock(&mutex_);
->>>>>>> spec_calvin_locking_aggr_read
 			  paxos_msg.pop();
 		  }
 		  else
 			  break;
 	  }
-<<<<<<< HEAD
 
 	  MessageProto* single_part_msg;
 	  if(my_single_part_msg_.Pop(&single_part_msg)){
@@ -499,13 +465,7 @@ void Sequencer::propose_global(int64& proposed_batch, map<int64, int>& num_pendi
 	}
 }
 
-=======
-	  Spin(0.001);
-  }
-  Spin(1);
-}
 
->>>>>>> spec_calvin_locking_aggr_read
 // Send txns to all involved partitions
 void Sequencer::RunReader() {
   Spin(1);
