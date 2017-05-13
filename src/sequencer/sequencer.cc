@@ -87,7 +87,6 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* pa
   else{
 	  txns_queue_ = new AtomicQueue<TxnProto*>();
   }
-  paxos_queues = new AtomicQueue<string>();
 
   for(int i = 0; i < THROUGHPUT_SIZE; ++i){
       throughput[i] = -1;
@@ -149,7 +148,6 @@ Sequencer::~Sequencer() {
 	//	  pthread_join(reader_thread_, NULL);
 	//  }
 	//delete txns_queue_;
-	delete paxos_queues;
 }
 
 //void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
@@ -238,10 +236,9 @@ void Sequencer::RunWriter() {
 #ifdef PAXOS
     paxos.SubmitBatch(batch_string);
 #else
-    paxos_queues->Push(batch_string);
-//    pthread_mutex_lock(&mutex_);
-//    batch_queue_.push(batch_string);
-//    pthread_mutex_unlock(&mutex_);
+    pthread_mutex_lock(&mutex_);
+    batch_queue_.push(batch_string);
+    pthread_mutex_unlock(&mutex_);
 #endif
   }
 

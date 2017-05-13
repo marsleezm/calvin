@@ -171,7 +171,6 @@ class Sequencer {
 
   // The queue of fetched transactions
   AtomicQueue<TxnProto*>* txns_queue_;
-  AtomicQueue<string>* paxos_queues;
 
   int num_queues_;
 
