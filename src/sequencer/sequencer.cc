@@ -290,7 +290,7 @@ void Sequencer::RunPaxos() {
 				  priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg> msgs = multi_part_txns[to_propose_batch];
 				  for(uint i = 0; i < msgs.size(); ++i){
 					  MessageProto* msg = msgs.top();
-					  //SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", adding message "<<msg->msg_id());
+					  SEQLOG(-1, " Proposing to global "<<to_propose_batch<<", adding message "<<msg->msg_id());
 					  msgs.pop();
 					  for(int j = 0; j < msg->data_size(); ++j)
 						  single_part_msg->add_data(msg->data(j));
@@ -342,7 +342,7 @@ void Sequencer::RunPaxos() {
 			  // Add data to msg;
 			  msg->set_propose_batch(to_propose_batch);
 			  pending_received_skeen[msg->msg_id()] = msg;
-			  //SEQLOG(-1, " replying skeen request: "<<msg->msg_id()<<", proposing "<<to_propose_batch);
+			  SEQLOG(-1, " replying skeen request: "<<msg->msg_id()<<", proposing "<<to_propose_batch);
 
 			  MessageProto reply;
 			  reply.set_destination_channel("paxos");
@@ -359,7 +359,7 @@ void Sequencer::RunPaxos() {
 			  int64 msg_id = msg->msg_id();
 			  int64 index = msg->batch_number();
 			  MyFour<int64, int64, vector<int>, MessageProto*> entry = pending_sent_skeen.Lookup(index);
-			  //SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", he proposed "<<msg->propose_batch()<<", remaining is "<<entry.first);
+			  SEQLOG(-1, " Got skeen propose: "<<msg->msg_id()<<", he proposed "<<msg->propose_batch()<<", remaining is "<<entry.first);
 			  entry.second = max(msg->propose_batch(), entry.second);
 			  //pending_skeen_msg[msg_id].third->set_batch_number(new_batch);
 			  if (entry.first == 1)
@@ -443,7 +443,7 @@ void Sequencer::propose_global(int64& proposed_batch, map<int64, int>& num_pendi
 				for(uint i = 0; i < msgs.size(); ++i){
 					MessageProto* msg = msgs.top();
 					msgs.pop();
-					//SEQLOG(-1, " Proposing to global "<<next_batch<<", adding message "<<msg->msg_id());
+					SEQLOG(-1, " Proposing to global "<<next_batch<<", adding message "<<msg->msg_id());
 					for(int j = 0; j < msg->data_size(); ++j)
 						propose_msg->add_data(msg->data(j));
 					delete msg;
@@ -706,7 +706,10 @@ void* Sequencer::FetchMessage() {
 			  {
 				  TxnProto* txn = new TxnProto();
 				  txn->ParseFromString(batch_message->data(i));
-				  SEQLOG(-1, " batch "<<batch_message->batch_number()<<" has txn of id "<<txn->txn_id()<<" with local "<<fetched_txn_num_<<", writers are "<<txn->writers().c_str());
+                  string writers = "";
+                  for(int j = 0; j<txn->writers_size(); ++j)
+                     writers += txn->writers(i);
+				  SEQLOG(-1, " batch "<<batch_message->batch_number()<<" has txn of id "<<txn->txn_id()<<" with local "<<fetched_txn_num_<<", writers are "<<writers);
 				  txn->set_local_txn_id(fetched_txn_num_++);
 				  txns_queue_->Push(txn);
 				  ++num_fetched_this_round;
