@@ -873,9 +873,9 @@ public:
 class ComparePair
 {
 public:
-    bool operator() (std::pair<int64_t, bool> left, std::pair<int64_t, bool> right)
+    bool operator() (std::pair<int64_t, int64_t> left, std::pair<int64_t, int64_t> right)
     {
-    	return (left.first > right.first);
+    	return (left.second > right.second);
     }
 };
 
