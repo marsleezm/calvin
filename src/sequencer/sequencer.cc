@@ -548,7 +548,7 @@ void Sequencer::RunLoader(){
 
 void Sequencer::output(DeterministicScheduler* scheduler){
     ofstream myfile;
-    myfile.open ("output.txt");
+    myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
     double abort = 0;
     myfile << "THROUGHPUT" << '\n';
