@@ -618,7 +618,7 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
 
 void Sequencer::output(){
     ofstream myfile;
-    myfile.open ("output.txt");
+    myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
     pair<int64, int64> latency;
     myfile << "THROUGHPUT" << '\n';
