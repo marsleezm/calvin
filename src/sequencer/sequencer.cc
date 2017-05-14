@@ -807,11 +807,13 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
 
 void Sequencer::output(){
     ofstream myfile;
+    std::cout<<"I am node "<<configuration_->this_node_id<<", trying to write "<<std::endl;
     myfile.open ("output.txt");
     int count =0;
     pair<int64, int64> latency;
     myfile << "THROUGHPUT" << '\n';
     while(abort[count] != -1 && count < THROUGHPUT_SIZE){
+        std::cout<<"I am node "<<configuration_->this_node_id<<", trying to write "<<throughput[count]<<std::endl;
         myfile << throughput[count] << ", "<< abort[count] << '\n';
         ++count;
     }
@@ -820,6 +822,7 @@ void Sequencer::output(){
     for(int i = 0; i<NUM_THREADS; ++i){
     	count = 0;
 		while(scheduler_->latency[i][count].first != 0 && count < LATENCY_SIZE){
+            std::cout<<"I am node "<<configuration_->this_node_id<<", trying to write "<<scheduler_->latency[i][count].first<<std::endl;
 			myfile << scheduler_->latency[i][count].first<<", "<<scheduler_->latency[i][count].second << '\n';
 			++count;
 		}
