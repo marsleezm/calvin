@@ -373,16 +373,16 @@ void Sequencer::RunReader() {
 #else
     bool got_batch = false;
     do {
-    	//FetchMessage();
-      pthread_mutex_lock(&mutex_);
-      if (batch_queue_.size()) {
-        batch_string = batch_queue_.front();
-        batch_queue_.pop();
-        got_batch = true;
-      }
-      pthread_mutex_unlock(&mutex_);
-      if (!got_batch)
-        Spin(0.001);
+    	FetchMessage();
+    	pthread_mutex_lock(&mutex_);
+    	if (batch_queue_.size()) {
+    		batch_string = batch_queue_.front();
+    		batch_queue_.pop();
+    		got_batch = true;
+    	}
+    	pthread_mutex_unlock(&mutex_);
+    	if (!got_batch)
+    		Spin(0.001);
     } while (!got_batch);
 #endif
     MessageProto* batch_message = new MessageProto();
