@@ -373,6 +373,7 @@ void Sequencer::RunReader() {
 #else
     bool got_batch = false;
     do {
+      FetchMessage();
     	//FetchMessage();
       pthread_mutex_lock(&mutex_);
       if (batch_queue_.size()) {
@@ -385,8 +386,6 @@ void Sequencer::RunReader() {
         Spin(0.001);
     } while (!got_batch);
 #endif
-
-    FetchMessage();
 
     MessageProto* batch_message = new MessageProto();
     batch_message->ParseFromString(batch_string);
@@ -414,8 +413,6 @@ void Sequencer::RunReader() {
       txn_count++;
     }
 
-    FetchMessage();
-
     // Send this epoch's requests to all schedulers.
     for (map<int, MessageProto>::iterator it = batches.begin();
          it != batches.end(); ++it) {
@@ -431,8 +428,7 @@ void Sequencer::RunReader() {
     batch_number += configuration_->all_nodes.size();
     batch_count++;
 
-
-
+    FetchMessage();
 
 #ifdef LATENCY_TEST
     if (watched_txn != -1) {
@@ -559,27 +555,6 @@ void* Sequencer::FetchMessage() {
 		  		  ++fetched_batch_num_;
 		  	  }
 	  }
-//	  else if (queue_mode == FROM_SEQ_SINGLE){
-//		  for (int i = 0; i < 1000; i++)
-//			  {
-//				  TxnProto* txn;
-//				  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-//				  txn->set_local_txn_id(fetched_txn_num_++);
-//				  txns_queue_->Push(txn);
-//			  }
-//	  }
-//	  else if (queue_mode == FROM_SEQ_DIST){
-//		  int i = 0;
-//		  while (i < 1000)
-//		  {
-//			  TxnProto* txn;
-//			  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-//			  txn->set_local_txn_id(fetched_txn_num_);
-//			  txns_queue_[(fetched_txn_num_/BUFFER_TXNS_NUM)%num_threads].Push(txn);
-//			  ++fetched_txn_num_;
-//			  ++i;
-//		  }
-//	  }
   }
   return NULL;
 
