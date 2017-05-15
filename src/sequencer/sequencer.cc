@@ -342,7 +342,7 @@ void Sequencer::RunReader() {
 #endif
   pthread_setname_np(pthread_self(), "reader");
 
-  FetchMessage();
+  //FetchMessage();
   double time = GetTime(), now_time;
   int64_t last_committed;
   // Set up batch messages for each system node.
@@ -385,6 +385,9 @@ void Sequencer::RunReader() {
         Spin(0.001);
     } while (!got_batch);
 #endif
+
+    FetchMessage();
+
     MessageProto* batch_message = new MessageProto();
     batch_message->ParseFromString(batch_string);
     for (int i = 0; i < batch_message->data_size(); i++) {
@@ -411,6 +414,8 @@ void Sequencer::RunReader() {
       txn_count++;
     }
 
+    FetchMessage();
+
     // Send this epoch's requests to all schedulers.
     for (map<int, MessageProto>::iterator it = batches.begin();
          it != batches.end(); ++it) {
@@ -426,7 +431,7 @@ void Sequencer::RunReader() {
     batch_number += configuration_->all_nodes.size();
     batch_count++;
 
-    FetchMessage();
+
 
 
 #ifdef LATENCY_TEST
