@@ -284,10 +284,10 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 		return SUCCESS;
 	}
 	else{
-		//LOG(txn->txn_id(), " transactions is not dependent!");
+		LOG(txn->txn_id(), " transactions is not dependent!");
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			Value* val = storage->ReadObject(txn->read_write_set(i));
-			//std::cout<<txn->txn_id()<<" trying to read "<<txn->read_write_set(i)<<std::endl;
+			LOG(txn->txn_id()," trying to read "<<txn->read_write_set(i));
 			*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 			//*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 		}

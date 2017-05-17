@@ -76,7 +76,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
 
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
-	message_queues = new AtomicQueue<MessageProto>**[num_threads];
+	message_queues = new AtomicQueue<MessageProto>*[num_threads];
 	threads_ = new pthread_t[num_threads];
 	thread_connections_ = new Connection*[num_threads];
 	latency = new pair<int64, int64>[LATENCY_SIZE*num_threads];
@@ -128,8 +128,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 		pthread_attr_init(&attr);
 		CPU_ZERO(&cpuset);
 		//if (i == 0 || i == 1)
-		CPU_SET(i+3, &cpuset);
-		std::cout << "Worker thread #"<<i<<" starts at core "<<i<<std::endl;
+		CPU_SET(i+4, &cpuset);
+		std::cout << "Worker thread #"<<i<<" starts at core "<<i+4<<std::endl;
 		//else
 		//CPU_SET(i+2, &cpuset);
 		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
@@ -457,7 +457,7 @@ int abort_number = 0;
     			txns++;
                 if (sample_count == SAMPLE_RATE)
                 {
-                    if(latency_count == LATENCY_SIZE*num_threads)
+                    if(latency_count == LATENCY_SIZE*scheduler->num_threads)
                         latency_count = 0;
                     int64 now_time = GetUTime();
                     scheduler->latency[latency_count] = make_pair(now_time - done_txn->start_time(), now_time- done_txn->seed());
@@ -494,7 +494,7 @@ int abort_number = 0;
           if (txn->start_time() == 0)
         	  txn->set_start_time(GetUTime());
           batch_offset++;
-          LOG(txn->txn_id(), " is being locked, batch is "<<batch_message->batch_number());
+          //LOG(txn->txn_id(), " is being locked, batch is "<<batch_message->batch_number());
           scheduler->lock_manager_->Lock(txn);
           pending_txns++;
           //locked.insert((int)txn->txn_id());
