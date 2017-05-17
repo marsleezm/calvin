@@ -34,8 +34,6 @@ using tr1::unordered_map;
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 100
 
-#define NUM_THREADS 5
-
 #define ASSERTS_ON true
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)

@@ -80,14 +80,28 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 											   )
     : configuration_(conf), batch_connection_(batch_connection), storage_(storage),
 	   txns_queue_(txns_queue), client_(client), application_(application), queue_mode(mode) {
-  //lock_manager_ = new DeterministicLockManager(configuration_);
-	//to_sc_txns_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t> >[NUM_THREADS];
-	//pending_txns_ = new priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>[NUM_THREADS];
-
-	//pending_reads_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>[NUM_THREADS];
+	//lock_manager_ = new DeterministicLockManager(configuration_);
 	//to_sc_txns_ = new pair<int64_t, int32_t>[TO_SC_NUM];
 	//pending_txns_ = new pair<int64_t, int32_t>[PEND_NUM];
+
+	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
+	message_queues = new AtomicQueue<MessageProto>*[num_threads];
+
+	num_suspend = new int[num_threads];
+	block_time = new double[num_threads];
+	sc_block = new int[num_threads];
+	pend_block = new int[num_threads];
+	suspend_block = new int[num_threads];
+
+	latency = new pair<int64, int64>*[num_threads];
+
+	to_sc_txns_ = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >*[num_threads];
+	pending_txns_ = new priority_queue<MyFour<int64_t, int64_t, int, bool>,  vector<MyFour<int64_t, int64_t, int, bool>>, CompareFour>*[num_threads];
+	threads_ = new pthread_t[num_threads];
+	thread_connections_ = new Connection*[num_threads];
+
 	for (int i = 0; i < num_threads; i++) {
+		latency[i] = new pair<int64, int64>[LATENCY_SIZE];
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
 		pending_txns_[i] = new priority_queue<MyFour<int64_t, int64_t, int, bool>,  vector<MyFour<int64_t, int64_t, int, bool> >,
@@ -175,16 +189,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
 
-  double last_blocked = 0;
-  bool if_blocked = false;
-  int last_printed = 0, out_counter1 = 0, last_sc = -1;
+  //double last_blocked = 0;
+  //bool if_blocked = false;
+  int last_printed = 0, last_sc = -1;
   int sample_count = 0, latency_count = 0;
   pair<int64, int64>* latency_array = scheduler->latency[thread];
 
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
 		  if (to_sc_txn.second == Sequencer::num_lc_txns_){
 			  mgr = active_l_tids[to_sc_txn.second];
@@ -225,7 +238,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 
 	  if(!waiting_queue.Empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyTuple<int64_t, int, ValuePair> to_wait_txn;
 		  waiting_queue.Pop(&to_wait_txn);
 		  LOG(-1, " In to-wait, the first one is "<< to_wait_txn.first);
@@ -253,7 +265,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // Try to re-execute pending transactions
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyFour<int64_t, int64_t, int, bool> pend_txn;
 		  int max_restarted = 0;
 
@@ -313,7 +324,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	 }
 
 	  if (!abort_queue.Empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
 		  LOG(to_abort_txn.first, " is tested to be restarted, num lc is "<<Sequencer::num_lc_txns_);
@@ -332,7 +342,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // Received remote read
 	 else if (scheduler->message_queues[thread]->Pop(&message)) {
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  ASSERT(message.type() == MessageProto::READ_RESULT);
 		  int txn_id = atoi(message.destination_channel().c_str());
 		  StorageManager* manager = active_g_tids[txn_id];
@@ -389,7 +398,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	 else if(retry_txns.size()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  LOCKLOG(retry_txns.front().first, " before retrying txn ");
 		  if(retry_txns.front().first < Sequencer::num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->num_restarted_)
 			  retry_txns.pop();
@@ -404,7 +412,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // Try to start a new transaction
 	  else if (my_to_sc_txns->size() <= max_sc && my_pend_txns->size() <= max_pend && scheduler->num_suspend[thread]<=max_suspend) {
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
@@ -440,22 +447,22 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
 //	  }
 	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
-	  else{
-		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, my_pend_txns->size() > max_pend,
-		  				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
-		  if(out_counter1 & 33554432){
-			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
-					  ", num suspend is "<<scheduler->num_suspend[thread]);
-			  if(my_to_sc_txns->size())
-				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
-			  if(my_pend_txns->size())
-				  LOG(-1, my_pend_txns->top().first<<", lc is  "<<my_pend_txns->top().second<<", third is "<<my_pend_txns->top().third);
-			  out_counter1 = 0;
-		  }
-		  ++out_counter1;
-		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
-		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
-	  }
+//	  else{
+//		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, my_pend_txns->size() > max_pend,
+//		  				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+//		  if(out_counter1 & 33554432){
+//			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
+//					  ", num suspend is "<<scheduler->num_suspend[thread]);
+//			  if(my_to_sc_txns->size())
+//				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
+//			  if(my_pend_txns->size())
+//				  LOG(-1, my_pend_txns->top().first<<", lc is  "<<my_pend_txns->top().second<<", third is "<<my_pend_txns->top().third);
+//			  out_counter1 = 0;
+//		  }
+//		  ++out_counter1;
+//		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
+//		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
+//	  }
   }
   return NULL;
 }
@@ -567,7 +574,22 @@ DeterministicScheduler::~DeterministicScheduler() {
 		delete to_sc_txns_[i];
 		delete pending_txns_[i];
 		delete thread_connections_[i];
+		delete[] latency[i];
 	}
+
+	delete[] num_suspend;
+	delete[] block_time;
+	delete[] sc_block;
+	delete[] pend_block;
+	delete[] suspend_block;
+
+	delete[] latency[num_threads];
+
+	delete[] to_sc_txns_;
+	delete[] pending_txns_;
+	delete[] threads_;
+	delete[] thread_connections_;
+
 	std::cout<<" Scheduler done, total block time is "<<total_block/1e6<<std::endl;
 	std::cout<<" SC block is "<<total_sc_block<<", pend block is "<<total_pend_block
 			<<", suspend block is "<<total_suspend_block<<std::endl;

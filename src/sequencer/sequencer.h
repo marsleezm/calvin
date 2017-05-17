@@ -170,7 +170,7 @@ class Sequencer {
 
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
   //float dependent_percent = stof(ConfigReader::Value("General", "dependent_percent").c_str());
-  int num_threads = NUM_THREADS;
+  int num_threads;
 
   // Queue mode
   int queue_mode;

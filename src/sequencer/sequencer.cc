@@ -76,22 +76,23 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
       batch_connection_(batch_connection), client_(client), storage_(storage),
 	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0), queue_mode(mode),
 	  num_fetched_this_round(0) {
-  pthread_mutex_init(&mutex_, NULL);
-  // Start Sequencer main loops running in background thread.
-  if (queue_mode == FROM_SEQ_DIST)
-	  txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
-  else{
-	  txns_queue_ = new AtomicQueue<TxnProto*>();
-  }
-  paxos_queues = new AtomicQueue<string>();
+	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
+	pthread_mutex_init(&mutex_, NULL);
+	// Start Sequencer main loops running in background thread.
+	if (queue_mode == FROM_SEQ_DIST)
+		txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
+	else{
+		txns_queue_ = new AtomicQueue<TxnProto*>();
+	}
+	paxos_queues = new AtomicQueue<string>();
 
-  for(int i = 0; i < THROUGHPUT_SIZE; ++i){
-      throughput[i] = -1;
-      abort[i] = -1;
-  }
+	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
+		throughput[i] = -1;
+		abort[i] = -1;
+	}
 
-  cpu_set_t cpuset;
-  if (mode == NORMAL_QUEUE){
+	cpu_set_t cpuset;
+	if (mode == NORMAL_QUEUE){
 
 		pthread_attr_t attr_writer;
 		pthread_attr_init(&attr_writer);
@@ -459,7 +460,7 @@ void Sequencer::RunReader() {
 
       ++second;
 	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
-		  for(int i = 0; i<NUM_THREADS; ++i){
+		  for(int i = 0; i<num_threads; ++i){
                 if (scheduler_->to_sc_txns_[i]->size())
 			        std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
 				    <<", num committed txn is "<<Sequencer::num_lc_txns_
@@ -608,7 +609,7 @@ void Sequencer::output(){
     }
     myfile << "LATENCY" << '\n';
 
-    for(int i = 0; i<NUM_THREADS; ++i){
+    for(int i = 0; i<atoi(ConfigReader::Value("num_threads").c_str()); ++i){
     	count = 0;
 		while(scheduler_->latency[i][count].first != 0 && count < LATENCY_SIZE){
 			myfile << scheduler_->latency[i][count].first<<", "<<scheduler_->latency[i][count].second << '\n';
