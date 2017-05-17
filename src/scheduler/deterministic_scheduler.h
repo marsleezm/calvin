@@ -79,8 +79,8 @@ class DeterministicScheduler : public Scheduler {
   Configuration* configuration_;
 
   // Thread contexts and their associated Connection objects.
-  pthread_t threads_[NUM_THREADS];
-  Connection* thread_connections_[NUM_THREADS];
+  pthread_t* threads_;
+  Connection** thread_connections_;
 
   pthread_t lock_manager_thread_;
   // Connection for receiving txn batches from sequencer.
@@ -120,16 +120,17 @@ class DeterministicScheduler : public Scheduler {
   AtomicQueue<MessageProto>* recon_queue_;
   Connection* recon_connection;
 
-  AtomicQueue<MessageProto>* message_queues[NUM_THREADS];
+  AtomicQueue<MessageProto>** message_queues;
   
   int queue_mode_;
   int abort_batch_size;
   bool deconstructor_invoked_ = false;
+  int num_threads;
 
- 	 public:
-        pair<int64, int64> latency[LATENCY_SIZE*NUM_THREADS];
-        double throughput[THROUGHPUT_SIZE];
-        double abort[THROUGHPUT_SIZE];
+  public:
+  	  pair<int64, int64>* latency;
+      double throughput[THROUGHPUT_SIZE];
+      double abort[THROUGHPUT_SIZE];
 
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

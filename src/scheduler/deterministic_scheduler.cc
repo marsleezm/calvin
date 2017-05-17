@@ -74,6 +74,13 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	abort_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str())
 			*atoi(ConfigReader::Value("dependent_percent").c_str())/200;
 
+
+	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
+	message_queues = new AtomicQueue<MessageProto>**[num_threads];
+	threads_ = new pthread_t[num_threads];
+	thread_connections_ = new Connection*[num_threads];
+	latency = new pair<int64, int64>[LATENCY_SIZE*num_threads];
+
 	pthread_mutex_init(&recon_mutex_, NULL);
     lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
 
@@ -85,7 +92,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
         abort[i] = -1;
     }
 
-    for (int i = 0; i < NUM_THREADS; i++) {
+    for (int i = 0; i < num_threads; i++) {
     	message_queues[i] = new AtomicQueue<MessageProto>();
     }
     recon_queue_ = new AtomicQueue<MessageProto>();
@@ -110,11 +117,11 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     //  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
     // Start all worker threads.
-    for (int i = 0; i < NUM_THREADS; i++) {
+    for (int i = 0; i < num_threads; i++) {
     	string channel("scheduler");
     	channel.append(IntToString(i));
     	thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
-        for (int j = 0; j<LATENCY_SIZE*NUM_THREADS; ++j)
+        for (int j = 0; j<LATENCY_SIZE*num_threads; ++j)
         	latency[j] = make_pair(0, 0);
 
 		pthread_attr_t attr;
@@ -450,7 +457,7 @@ int abort_number = 0;
     			txns++;
                 if (sample_count == SAMPLE_RATE)
                 {
-                    if(latency_count == LATENCY_SIZE*NUM_THREADS)
+                    if(latency_count == LATENCY_SIZE*num_threads)
                         latency_count = 0;
                     int64 now_time = GetUTime();
                     scheduler->latency[latency_count] = make_pair(now_time - done_txn->start_time(), now_time- done_txn->seed());

@@ -40,7 +40,6 @@ using std::tr1::unordered_map;
 #define  SUSPENDED  4
 
 // Loading parameters
-#define NUM_THREADS 4
 //#define MAX_BATCH_SIZE 100
 //#define RECON_BATCH_SIZE 50
 //#define ABORT_MSG_SIZE 50
