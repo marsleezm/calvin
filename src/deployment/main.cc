@@ -195,12 +195,13 @@ int main(int argc, char** argv) {
 	}
 
 	Connection* batch_connection = multiplexer.NewConnection("scheduler_");
+	Connection* sequencer_connection = multiplexer.NewConnection("sequencer");
   	// Initialize sequencer component and start sequencer thread running.
 
 	assert(argv[2][1] == 'n');
 	int queue_mode = NORMAL_QUEUE;
 
-	Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), batch_connection,
+	Sequencer sequencer(&config, sequencer_connection, batch_connection,
 		  	  client, storage, queue_mode);
 
 	DeterministicScheduler* scheduler;
@@ -225,6 +226,7 @@ int main(int argc, char** argv) {
 	sequencer.output();
 	delete scheduler;
 	delete batch_connection;
+	delete sequencer_connection;
 	return 0;
 }
 
