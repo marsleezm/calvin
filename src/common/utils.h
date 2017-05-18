@@ -34,7 +34,7 @@ using tr1::unordered_map;
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 100
 
-#define ASSERTS_ON true
+#define ASSERTS_ON false
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)
 #define BUFFER_TXNS_NUM 20

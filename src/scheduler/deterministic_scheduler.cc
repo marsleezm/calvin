@@ -176,6 +176,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	  = scheduler->pending_txns_[thread];
   AtomicQueue<pair<int64_t, int>> abort_queue;
   AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;
+  AtomicQueue<TxnProto*>* txns_queue;
+  if(scheduler->queue_mode == NORMAL_QUEUE){
+	  txns_queue = scheduler->txns_queue_;
+  }
+  else{
+	  txns_queue = &scheduler->txns_queue_[thread];
+  }
 
   // Begin main loop.
   MessageProto message;
@@ -415,7 +422,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
-		  got_it = scheduler->txns_queue_->Pop(&txn);
+		  got_it = txns_queue->Pop(&txn);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
 		  //LOCKLOG(txn->txn_id(), " before starting txn ");
 

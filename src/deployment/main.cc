@@ -197,8 +197,14 @@ int main(int argc, char** argv) {
 	Connection* batch_connection = multiplexer.NewConnection("scheduler_");
   	// Initialize sequencer component and start sequencer thread running.
 
-	assert(argv[2][1] == 'n');
-	int queue_mode = NORMAL_QUEUE;
+	int queue_mode = -1;
+	if(argv[2][1] == 'n'){
+		queue_mode = NORMAL_QUEUE;
+	}
+	else if (argv[2][1] == 'd'){
+		std::cout<<"From seq dist queue"<<std::endl;
+		queue_mode = FROM_SEQ_DIST;
+	}
 
 	Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), batch_connection,
 		  	  client, storage, queue_mode);

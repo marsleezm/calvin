@@ -103,14 +103,12 @@ class Sequencer {
   void RunWriter();
   void RunPaxos();
   void RunReader();
-  void RunLoader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
-  static void* RunSequencerLoader(void *arg);
 
   void* FetchMessage();
 
@@ -171,6 +169,7 @@ class Sequencer {
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
   //float dependent_percent = stof(ConfigReader::Value("General", "dependent_percent").c_str());
   int num_threads;
+  int txn_queue_pad;
 
   // Queue mode
   int queue_mode;

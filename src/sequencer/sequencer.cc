@@ -65,11 +65,6 @@ void* Sequencer::RunSequencerReader(void *arg) {
   return NULL;
 }
 
-void* Sequencer::RunSequencerLoader(void *arg) {
-  reinterpret_cast<Sequencer*>(arg)->RunLoader();
-  return NULL;
-}
-
 Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* batch_connection,
                      Client* client, LockedVersionedStorage* storage, int mode)
     : epoch_duration_(0.01), configuration_(conf), connection_(connection),
@@ -77,6 +72,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0), queue_mode(mode),
 	  num_fetched_this_round(0) {
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
+	txn_queue_pad = atoi(ConfigReader::Value("txn_queue_pad").c_str());
 	pthread_mutex_init(&mutex_, NULL);
 	// Start Sequencer main loops running in background thread.
 	if (queue_mode == FROM_SEQ_DIST)
@@ -92,47 +88,34 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	}
 
 	cpu_set_t cpuset;
-	if (mode == NORMAL_QUEUE){
 
-		pthread_attr_t attr_writer;
-		pthread_attr_init(&attr_writer);
-		//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	pthread_attr_t attr_writer;
+	pthread_attr_init(&attr_writer);
+	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-		CPU_ZERO(&cpuset);
-		//CPU_SET(4, &cpuset);
-		//CPU_SET(5, &cpuset);
-		CPU_SET(1, &cpuset);
-		//CPU_SET(7, &cpuset);
-		pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
-		std::cout << "Sequencer writer starts at core 1"<<std::endl;
+	CPU_ZERO(&cpuset);
+	//CPU_SET(4, &cpuset);
+	//CPU_SET(5, &cpuset);
+	CPU_SET(1, &cpuset);
+	//CPU_SET(7, &cpuset);
+	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
+	std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
-		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
-			  reinterpret_cast<void*>(this));
+	pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
+		  reinterpret_cast<void*>(this));
 
-		pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
-			  reinterpret_cast<void*>(this));
+	pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
+		  reinterpret_cast<void*>(this));
 
-		CPU_ZERO(&cpuset);
-		CPU_SET(2, &cpuset);
-		std::cout << "Sequencer reader starts at core 2"<<std::endl;
-		pthread_attr_t attr_reader;
-		pthread_attr_init(&attr_reader);
-		pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
+	CPU_ZERO(&cpuset);
+	CPU_SET(2, &cpuset);
+	std::cout << "Sequencer reader starts at core 2"<<std::endl;
+	pthread_attr_t attr_reader;
+	pthread_attr_init(&attr_reader);
+	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
 
-		  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
-		      reinterpret_cast<void*>(this));
-  }
-  else{
-		CPU_ZERO(&cpuset);
-		CPU_SET(1, &cpuset);
-		std::cout << "Sequencer reader starts at core 1"<<std::endl;
-		pthread_attr_t simple_loader;
-		pthread_attr_init(&simple_loader);
-		pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
-
-		pthread_create(&reader_thread_, &simple_loader, RunSequencerLoader,
-		      reinterpret_cast<void*>(this));
-  }
+	  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
+		  reinterpret_cast<void*>(this));
 }
 
 Sequencer::~Sequencer() {
@@ -144,7 +127,13 @@ Sequencer::~Sequencer() {
 	//else{
 	//	  pthread_join(reader_thread_, NULL);
 	//  }
-	//delete txns_queue_;
+
+	if (queue_mode == NORMAL_QUEUE){
+		delete txns_queue_;
+	}
+	else if (queue_mode == FROM_SEQ_DIST){
+		delete[] txns_queue_;
+	}
 	delete paxos_queues;
 	std::cout<<" Sequencer done"<<std::endl;
 }
@@ -488,49 +477,6 @@ void Sequencer::RunReader() {
   Spin(1);
 }
 
-void Sequencer::RunLoader(){
-  Spin(1);
-  double time = GetTime(), now_time;
-  int last_committed = 0, last_aborted = 0;
-
-  while (!deconstructor_invoked_) {
-
-	FetchMessage();
-
-	// Report output.
-	now_time = GetTime();
-	if (now_time > time + 1) {
-	  std::cout << "Completed " <<
-		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
-			<< " txns/sec, "
-			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
-			<< " txns/sec aborted, "
-			<< num_sc_txns_ << " spec-committed, "
-			//<< test<< " for drop speed , "
-			//<< executing_txns << " executing, "
-			<< num_pend_txns_ << " pending\n" << std::flush;
-	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
-		  for(int i = 0; i<num_threads; ++i){
-			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-				  <<", num committed txn is "<<Sequencer::num_lc_txns_
-				  <<", waiting queue is"<<std::endl;
-			  //for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
-			//	  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
-			//	  std::cout<<t.first<<",";
-			 // }
-			  std::cout<<"\n";
-		  }
-	  }
-
-	  // Reset txn count.
-	  time = now_time;
-	  last_committed = Sequencer::num_lc_txns_;
-	  last_aborted = Sequencer::num_aborted_;
-	}
-  }
-  Spin(1);
-}
-
 void* Sequencer::FetchMessage() {
   MessageProto* batch_message = NULL;
   //double time = GetTime();
@@ -538,23 +484,52 @@ void* Sequencer::FetchMessage() {
   //int pending_txns = 0;
 
   //TxnProto* done_txn;
-  if (txns_queue_->Size() < 2000){
-	  ASSERT(queue_mode == NORMAL_QUEUE);
-	  if (queue_mode == NORMAL_QUEUE){
+  // Have we run out of txns in our batch? Let's get some new ones.
+
+  if (queue_mode == NORMAL_QUEUE){
+	  //std::cout<<"Normal queue "<<std::endl;
+	  if (txns_queue_->Size() < 2000){
 		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
-		  	  // Have we run out of txns in our batch? Let's get some new ones.
-		  	  if (batch_message != NULL) {
-		  		  for (int i = 0; i < batch_message->data_size(); i++)
-		  		  {
-		  			  TxnProto* txn = new TxnProto();
-		  			  txn->ParseFromString(batch_message->data(i));
-		  			  txn->set_local_txn_id(fetched_txn_num_++);
-		  			  txns_queue_->Push(txn);
-		  			  ++num_fetched_this_round;
-		  		  }
-		  		  delete batch_message;
-		  		  ++fetched_batch_num_;
-		  	  }
+
+		  if (batch_message != NULL) {
+			  for (int i = 0; i < batch_message->data_size(); i++)
+			  {
+				  TxnProto* txn = new TxnProto();
+				  txn->ParseFromString(batch_message->data(i));
+				  txn->set_local_txn_id(fetched_txn_num_++);
+				  txns_queue_->Push(txn);
+				  ++num_fetched_this_round;
+			  }
+			  delete batch_message;
+			  ++fetched_batch_num_;
+		  }
+	  }
+  }
+  else if (queue_mode == FROM_SEQ_DIST){
+	  if (txns_queue_[0].Size() < 2000){
+		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
+		  // Have we run out of txns in our batch? Let's get some new ones.
+		  if (batch_message != NULL) {
+			  int thread = 0;
+			  int batch_count = 0;
+			  for (int i = 0; i < batch_message->data_size(); i++)
+			  {
+				  TxnProto* txn = new TxnProto();
+				  txn->ParseFromString(batch_message->data(i));
+				  txn->set_local_txn_id(fetched_txn_num_++);
+				  txns_queue_[thread].Push(txn);
+				  ++batch_count;
+				  if(batch_count == txn_queue_pad){
+					  thread = (thread+1)%num_threads;
+					  batch_count = 0;
+				  }
+				  ++num_fetched_this_round;
+			  }
+			  delete batch_message;
+			  ++fetched_batch_num_;
+		  }
+		  //else
+		//	  std::cout<<"Dist queue, didn't get batch "<<std::endl;
 	  }
   }
   return NULL;
@@ -576,25 +551,25 @@ void* Sequencer::FetchMessage() {
 }
 
 MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
-  if (batches_.count(batch_id) > 0) {
-    // Requested batch has already been received.
-    MessageProto* batch = batches_[batch_id];
-    batches_.erase(batch_id);
-    return batch;
-  } else {
-    MessageProto* message = new MessageProto();
-    while (connection->GetMessage(message)) {
-      ASSERT(message->type() == MessageProto::TXN_BATCH);
-      if (message->batch_number() == batch_id) {
-        return message;
-      } else {
-        batches_[message->batch_number()] = message;
-        message = new MessageProto();
-      }
-    }
-    delete message;
-    return NULL;
-  }
+	if (batches_.count(batch_id) > 0) {
+		// Requested batch has already been received.
+		MessageProto* batch = batches_[batch_id];
+		batches_.erase(batch_id);
+		return batch;
+	} else {
+		MessageProto* message = new MessageProto();
+		while (connection->GetMessage(message)) {
+			ASSERT(message->type() == MessageProto::TXN_BATCH);
+			if (message->batch_number() == batch_id) {
+				return message;
+			} else {
+				batches_[message->batch_number()] = message;
+				message = new MessageProto();
+			}
+		}
+		delete message;
+		return NULL;
+	}
 }
 
 void Sequencer::output(){
