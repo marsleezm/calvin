@@ -228,8 +228,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  AddLatency(sample_count, latency_count, latency_array, mgr->get_txn());
 				  delete mgr;
 				  my_to_sc_txns->pop();
-                  if (my_to_sc_txns->size())
-                      LOG(my_to_sc_txns->top().first, " is the first after popping up "<<to_sc_txn.first);
+                  //if (my_to_sc_txns->size()){
+                  //    LOG(my_to_sc_txns->top().first, " is the first after popping up "<<to_sc_txn.first);
+                  //}
 				  // Go to the next loop, try to commit as many as possible.
 				  continue;
 			  }
