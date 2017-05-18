@@ -139,6 +139,7 @@ Sequencer::~Sequencer() {
 	//if(queue_mode == NORMAL_QUEUE){
 	pthread_join(writer_thread_, NULL);
 	pthread_join(reader_thread_, NULL);
+	pthread_join(paxos_thread_, NULL);
 	//}
 	//else{
 	//	  pthread_join(reader_thread_, NULL);
@@ -383,7 +384,7 @@ void Sequencer::RunReader() {
     	pthread_mutex_unlock(&mutex_);
     	if (!got_batch)
     		Spin(0.001);
-    } while (!got_batch);
+    } while (!deconstructor_invoked_ && !got_batch);
 #endif
     MessageProto* batch_message = new MessageProto();
     batch_message->ParseFromString(batch_string);
@@ -602,7 +603,7 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
     return batch;
   } else {
     MessageProto* message = new MessageProto();
-    while (connection->GetMessage(message)) {
+    while (!deconstructor_invoked_ && connection->GetMessage(message)) {
       ASSERT(message->type() == MessageProto::TXN_BATCH);
       if (message->batch_number() == batch_id) {
         return message;
