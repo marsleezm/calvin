@@ -77,7 +77,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 if(queue_mode == DIRECT_QUEUE){
 	CPU_ZERO(&cpuset);
 	CPU_SET(1, &cpuset);
-	std::cout << "Sequencer reader starts at core 7"<<std::endl;
+	std::cout << "Sequencer reader starts at core 1"<<std::endl;
 	pthread_attr_t simple_loader;
 	pthread_attr_init(&simple_loader);
 	pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
@@ -103,7 +103,7 @@ else{
 	CPU_SET(1, &cpuset);
 	//CPU_SET(7, &cpuset);
 	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
-	std::cout << "Sequencer writer starts at core 6"<<std::endl;
+	std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
 	pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 		 reinterpret_cast<void*>(this));
@@ -119,7 +119,7 @@ else{
 	pthread_attr_t attr_reader;
 	pthread_attr_init(&attr_reader);
 	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
-	std::cout << "Sequencer reader starts at core 7"<<std::endl;
+	std::cout << "Sequencer reader starts at core 2"<<std::endl;
 
 	  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
