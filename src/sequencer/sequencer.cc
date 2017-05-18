@@ -44,9 +44,6 @@ double worker_end[SAMPLES];
 double scheduler_unlock[SAMPLES];
 #endif
 
-
-#define MAX_BATCH_PROPOSE 5
-
 int64_t Sequencer::num_lc_txns_=0;
 //int64_t Sequencer::max_commit_ts=-1;
 //int64_t Sequencer::num_c_txns_=0;
@@ -69,10 +66,6 @@ void* Sequencer::RunSequencerReader(void *arg) {
   return NULL;
 }
 
-void* Sequencer::RunSequencerLoader(void *arg) {
-  reinterpret_cast<Sequencer*>(arg)->RunLoader();
-  return NULL;
-}
 
 Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* paxos_connection, Connection* batch_connection,
                      Client* client, LockedVersionedStorage* storage, int mode)
@@ -80,63 +73,52 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* pa
       batch_connection_(batch_connection), client_(client), storage_(storage),
 	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0), queue_mode(mode),
 	  num_fetched_this_round(0) {
-  pthread_mutex_init(&mutex_, NULL);
-  // Start Sequencer main loops running in background thread.
-  if (queue_mode == FROM_SEQ_DIST)
-	  txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
-  else{
-	  txns_queue_ = new AtomicQueue<TxnProto*>();
-  }
+	pthread_mutex_init(&mutex_, NULL);
+	// Start Sequencer main loops running in background thread.
+	max_batch_propose = conf->all_nodes.size();
+	if (queue_mode == FROM_SEQ_DIST)
+		txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
+	else{
+		txns_queue_ = new AtomicQueue<TxnProto*>();
+	}
 
-  for(int i = 0; i < THROUGHPUT_SIZE; ++i){
-      throughput[i] = -1;
-      abort[i] = -1;
-  }
+	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
+		throughput[i] = -1;
+		abort[i] = -1;
+	}
 
-  cpu_set_t cpuset;
-  if (mode == NORMAL_QUEUE){
+	cpu_set_t cpuset;
+	assert(mode == NORMAL_QUEUE);
 
-		pthread_attr_t attr_writer;
-		pthread_attr_init(&attr_writer);
-		//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	pthread_attr_t attr_writer;
+	pthread_attr_init(&attr_writer);
+	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-		CPU_ZERO(&cpuset);
-		//CPU_SET(4, &cpuset);
-		//CPU_SET(5, &cpuset);
-		CPU_SET(1, &cpuset);
-		//CPU_SET(7, &cpuset);
-		pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
-		//std::cout << "Sequencer writer starts at core 1"<<std::endl;
+	CPU_ZERO(&cpuset);
+	//CPU_SET(4, &cpuset);
+	//CPU_SET(5, &cpuset);
+	CPU_SET(1, &cpuset);
+	//CPU_SET(7, &cpuset);
+	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
+	//std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
-		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
-			  reinterpret_cast<void*>(this));
+	pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
+		  reinterpret_cast<void*>(this));
 
-		//std::cout << "Paxos thread starts at core 1"<<std::endl;
+	//std::cout << "Paxos thread starts at core 1"<<std::endl;
 
-		pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
-			  reinterpret_cast<void*>(this));
+	pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
+		  reinterpret_cast<void*>(this));
 
-		CPU_ZERO(&cpuset);
-		CPU_SET(2, &cpuset);
-		//std::cout << "Sequencer reader starts at core 2"<<std::endl;
-		pthread_attr_t attr_reader;
-		pthread_attr_init(&attr_reader);
-		pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
+	CPU_ZERO(&cpuset);
+	CPU_SET(2, &cpuset);
+	//std::cout << "Sequencer reader starts at core 2"<<std::endl;
+	pthread_attr_t attr_reader;
+	pthread_attr_init(&attr_reader);
+	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
 
-		  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
-		      reinterpret_cast<void*>(this));
-  }
-  else{
-		CPU_ZERO(&cpuset);
-		CPU_SET(1, &cpuset);
-		//std::cout << "Sequencer reader starts at core 1"<<std::endl;
-		pthread_attr_t simple_loader;
-		pthread_attr_init(&simple_loader);
-		pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
-
-		pthread_create(&reader_thread_, &simple_loader, RunSequencerLoader,
-		      reinterpret_cast<void*>(this));
-  }
+	  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
+		  reinterpret_cast<void*>(this));
 }
 
 Sequencer::~Sequencer() {
@@ -330,7 +312,7 @@ void Sequencer::RunPaxos() {
 			  int64 to_propose_batch = max(max_batch, proposed_batch+1);
 			  // Increase random_batch with 50% probability, to avoid the case that messages keep being aggregated in this batch
 			  if(max_batch == to_propose_batch){
-				  if (proposed_for_batch+1 == MAX_BATCH_PROPOSE){
+				  if (proposed_for_batch+1 == max_batch_propose){
 					  proposed_for_batch = 0;
 					  max_batch = max_batch + 1;
 				  }
@@ -621,7 +603,6 @@ void Sequencer::RunReader() {
       ++second;
 	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
 		  for(int i = 0; i<NUM_THREADS; ++i){
-<<<<<<< HEAD
 			  int sc_first = -1, pend_first = -1;
 			  if (scheduler_->to_sc_txns_[i]->size())
 				  sc_first = scheduler_->to_sc_txns_[i]->top().first;
@@ -630,18 +611,6 @@ void Sequencer::RunReader() {
 			  std::cout<< " doing nothing, top is "<<sc_first
 				  <<", num committed txn is "<<Sequencer::num_lc_txns_
 				  <<", the first one is "<<pend_first<<std::endl;
-=======
-                if (scheduler_->to_sc_txns_[i]->size())
-			        std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-				    <<", num committed txn is "<<Sequencer::num_lc_txns_
-				    <<", waiting queue is"<<std::endl;
-                else
-                    std::cout<< " doing nothing, no top,  num committed txn is "<<Sequencer::num_lc_txns_
-                    <<", waiting queue is"<<std::endl;
-
-			  if(scheduler_->pending_txns_[i]->size())
-				  std::cout<<"Pend txn size is "<<scheduler_->pending_txns_[i]->top().second<<"\n";
->>>>>>> spec_calvin_locking_aggr_read
 		  }
 	  }
 
@@ -655,59 +624,6 @@ void Sequencer::RunReader() {
       num_fetched_this_round = 0;
       last_committed = Sequencer::num_lc_txns_;
     }
-  }
-  Spin(1);
-}
-
-void Sequencer::RunLoader(){
-  Spin(1);
-  double time = GetTime(), now_time;
-  int last_committed = 0, last_aborted = 0;
-
-  while (!deconstructor_invoked_) {
-
-	FetchMessage();
-
-	// Report output.
-	now_time = GetTime();
-	if (now_time > time + 1) {
-	  std::cout << "Completed " <<
-		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
-			<< " txns/sec, "
-			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
-			<< " txns/sec aborted, "
-			<< num_sc_txns_ << " spec-committed, "
-			//<< test<< " for drop speed , "
-			//<< executing_txns << " executing, "
-			<< num_pend_txns_ << " pending\n" << std::flush;
-	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
-		  for(int i = 0; i<num_threads; ++i){
-<<<<<<< HEAD
-			  if(scheduler_->to_sc_txns_[i]->size())
-			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-				  <<", num committed txn is "<<Sequencer::num_lc_txns_
-				  <<", waiting queue is"<<std::endl;
-			  else
-				  std::cout<< " doing nothing, there is no top, num committed txn is "<<Sequencer::num_lc_txns_
-					  <<", waiting queue is"<<std::endl;
-=======
-			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-				  <<", num committed txn is "<<Sequencer::num_lc_txns_
-				  <<", waiting queue is"<<std::endl;
->>>>>>> spec_calvin_locking_aggr_read
-			  //for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
-			//	  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
-			//	  //std::cout<<t.first<<",";
-			 // }
-			  //std::cout<<"\n";
-		  }
-	  }
-
-	  // Reset txn count.
-	  time = now_time;
-	  last_committed = Sequencer::num_lc_txns_;
-	  last_aborted = Sequencer::num_aborted_;
-	}
   }
   Spin(1);
 }

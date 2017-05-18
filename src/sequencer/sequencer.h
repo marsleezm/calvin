@@ -103,15 +103,12 @@ class Sequencer {
   void RunWriter();
   void RunPaxos();
   void RunReader();
-  void RunLoader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
-  static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
-  static void* RunSequencerLoader(void *arg);
 
   void* FetchMessage();
   void propose_global(int64& proposed_batch, map<int64, int>& num_pending, queue<MessageProto*>& pending_paxos_props,
@@ -182,6 +179,8 @@ class Sequencer {
 
   // Statistics
   int num_fetched_this_round;
+
+  int max_batch_propose;
 
   AtomicQueue<MessageProto*> my_single_part_msg_;
   MyAtomicMap<int, MyFour<int64, int64, vector<int>, MessageProto*>> pending_sent_skeen;

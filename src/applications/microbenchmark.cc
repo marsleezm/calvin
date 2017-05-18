@@ -195,7 +195,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 				txn->add_read_write_set(IntToString(*it));
 			}
 
-			for(int i = 1; i<txn->readers_size()-1; ++i){
+			for(int i = 1; i<txn->readers_size(); ++i){
 				GetRandomKeys(&keys,
 							  avg_index_per_part,
 							  nparts * 0,
@@ -231,7 +231,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 				txn->add_read_write_set(IntToString(*it));
 
 
-			for(int i = 1; i<txn->readers_size()-1; ++i){
+			for(int i = 1; i<txn->readers_size(); ++i){
 				GetRandomKeys(&keys,
 							  avg_index_per_part,
 				              nparts * 0,
@@ -341,7 +341,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			if(storage->ShouldRead()){
 				Value* val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL)
-					*val = IntToString(StringToInt(*val) +  txn->seed()% 100 -50);
+					*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 				else
 					return reinterpret_cast<int64>(val);
 			}
