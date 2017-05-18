@@ -149,7 +149,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						part, rand);
 
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				LOG(txn->txn_id(), " adding "<<IntToString(*it));
+				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				txn->add_read_write_set(IntToString(*it));
 			}
 
@@ -160,7 +160,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						part, rand);
 
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				LOG(txn->txn_id(), " adding "<<IntToString(*it));
+				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				txn->add_read_write_set(IntToString(*it));
 			}
 
@@ -178,7 +178,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 							part, rand);
 
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				LOG(txn->txn_id(), " adding "<<IntToString(*it));
+				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				txn->add_read_write_set(IntToString(*it));
 			}
 
@@ -190,7 +190,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 
 
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				LOG(txn->txn_id(), " adding "<<IntToString(*it));
+				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				txn->add_read_write_set(IntToString(*it));
 			}
 		}
@@ -210,7 +210,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						nparts * index_records,
 						txn->readers(0), rand);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				LOG(txn->txn_id(), " adding "<<IntToString(*it));
+				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				txn->add_read_write_set(IntToString(*it));
 			}
 
@@ -220,7 +220,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						nparts * kDBSize,
 						txn->readers(0), rand);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				LOG(txn->txn_id(), " adding "<<IntToString(*it));
+				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				txn->add_read_write_set(IntToString(*it));
 			}
 
@@ -231,7 +231,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 							  nparts * index_records,
 							  txn->readers(i), rand);
 				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-					LOG(txn->txn_id(), " adding "<<IntToString(*it));
+					//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 					txn->add_read_write_set(IntToString(*it));
 				}
 
@@ -241,7 +241,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 							  nparts * kDBSize,
 							  txn->readers(i), rand);
 				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-					LOG(txn->txn_id(), " adding "<<IntToString(*it));
+					//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 					txn->add_read_write_set(IntToString(*it));
 				}
 			}
@@ -262,7 +262,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		                nparts * index_records,
 						txn->readers(0), rand);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				LOG(txn->txn_id(), " adding "<<IntToString(*it));
+				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				txn->add_read_write_set(IntToString(*it));
 			}
 
@@ -274,7 +274,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 							  txn->readers(i), rand);
 				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 					txn->add_read_write_set(IntToString(*it));
-					LOG(txn->txn_id(), " adding "<<IntToString(*it));
+					//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				}
 			}
 		}
@@ -330,22 +330,22 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 					//if(StringToInt(indexed_key) < 0 )
 					//	std::cout<<" indexed is wrong! "<<indexed_key<<std::endl;
 					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
-					LOG(txn->txn_id(), " indexed_key is "<<indexed_key);
-					LOG(txn->txn_id(), " writing "<<txn->read_write_set(i)<<" as "<<*index_val);
+					//LOG(txn->txn_id(), " indexed_key is "<<indexed_key);
+					//LOG(txn->txn_id(), " writing "<<txn->read_write_set(i)<<" as "<<*index_val);
 				}
 				else
 					return reinterpret_cast<int64>(index_val);
 			}
 			else{
 				indexed_key = tpcc_args->indexed_keys(i);
-				LOG(txn->txn_id(), " skipped, indexed_key is "<<indexed_key);
+				//LOG(txn->txn_id(), " skipped, indexed_key is "<<indexed_key);
 			}
 
 			if(storage->ShouldRead()){
 				next_val = storage->ReadLock(indexed_key, read_state, false);
 				if(read_state == NORMAL){
 					*next_val = IntToString(StringToInt(*next_val) +  txn->seed()% 100 -50);
-					LOG(txn->txn_id(), " writing "<<indexed_key<<" as "<<*next_val);
+					//LOG(txn->txn_id(), " writing "<<indexed_key<<" as "<<*next_val);
 				}
 				else
 					return reinterpret_cast<int64>(next_val);
@@ -358,7 +358,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 				Value* index_val = storage->ReadLock(txn->read_write_set(i+indexAccessNum), read_state, false);
 				if(read_state == NORMAL){
 					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
-					LOG(txn->txn_id(), " writing "<<txn->read_write_set(i+indexAccessNum)<<" as "<<*index_val);
+					//LOG(txn->txn_id(), " writing "<<txn->read_write_set(i+indexAccessNum)<<" as "<<*index_val);
 				}
 				else
 					return reinterpret_cast<int64>(index_val);
@@ -383,7 +383,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 				Value* val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL){
 					*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
-					LOG(txn->txn_id(), " writing "<<txn->read_write_set(i)<<" as "<<*val);
+					//LOG(txn->txn_id(), " writing "<<txn->read_write_set(i)<<" as "<<*val);
 				}
 				else
 					return reinterpret_cast<int64>(val);
