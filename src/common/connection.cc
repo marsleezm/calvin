@@ -59,6 +59,7 @@ CPU_SET(0, &cpuset);
 //CPU_SET(6, &cpuset);
 //CPU_SET(7, &cpuset);
 pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
+    std::cout << "Sequencer reader starts at core 0"<<std::endl;
 
 
   // Start Multiplexer main loop running in background thread.
