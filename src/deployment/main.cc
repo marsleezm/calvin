@@ -230,18 +230,19 @@ int main(int argc, char** argv) {
   // Initialize sequencer component and start sequencer thread running.
   Sequencer sequencer(&config, &multiplexer, client,
                       storage, queue_mode);
+  Connection* scheduler_connection = multiplexer.NewConnection("scheduler_");
 
   DeterministicScheduler* scheduler;
   // Run scheduler in main thread.
   if (argv[2][0] == 't') {
 	  scheduler = new DeterministicScheduler(&config,
-	                                       multiplexer.NewConnection("scheduler_"),
+			  	  	  	  	  	  	  	  scheduler_connection,
 	                                       storage,
 	                                       new TPCC(), sequencer.GetTxnsQueue(), client, queue_mode);
   }
   else{
 	  scheduler = new DeterministicScheduler(&config,
-                                     multiplexer.NewConnection("scheduler_"),
+			  	  	  	  	  	  	  scheduler_connection,
                                      storage,
                                      new Microbenchmark(config.all_nodes.size(), config.this_node_id),
 									 sequencer.GetTxnsQueue(),
@@ -253,6 +254,7 @@ int main(int argc, char** argv) {
   std::cout<<"Finished duration"<<std::endl;
   sequencer.output(scheduler);
   delete scheduler;
+  delete scheduler_connection;
   return 0;
 }
 

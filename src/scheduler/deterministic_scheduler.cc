@@ -370,11 +370,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 DeterministicScheduler::~DeterministicScheduler() {
 	deconstructor_invoked_ = true;
+	for(int i = 0; i<num_threads; ++i){
+		pthread_join(threads_[i], NULL);
+		delete thread_connections_[i];
+	}
+	delete recon_connection;
+	pthread_join(lock_manager_thread_, NULL);
 }
 
 // Returns ptr to heap-allocated
 unordered_map<int, MessageProto*> batches;
-MessageProto* GetBatch(int batch_id, Connection* connection) {
+MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicScheduler* scheduler) {
   if (batches.count(batch_id) > 0) {
     // Requested batch has already been received.
     MessageProto* batch = batches[batch_id];
@@ -382,7 +388,7 @@ MessageProto* GetBatch(int batch_id, Connection* connection) {
     return batch;
   } else {
     MessageProto* message = new MessageProto();
-    while (connection->GetMessage(message)) {
+    while (!scheduler->deconstructor_invoked_ && connection->GetMessage(message)) {
       assert(message->type() == MessageProto::TXN_BATCH);
       if (message->batch_number() == batch_id) {
     	  return message;
@@ -474,7 +480,7 @@ int abort_number = 0;
     } else {
       // Have we run out of txns in our batch? Let's get some new ones.
       if (batch_message == NULL) {
-        batch_message = GetBatch(batch_number, scheduler->batch_connection_);
+        batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
         //if (batch_message)
         //	LOG(-1, " got batch message, batch number is "<<batch_message->batch_number()<<", size is "<<batch_message->data_size());
       // Done with current batch, get next.
@@ -482,7 +488,7 @@ int abort_number = 0;
         batch_offset = 0;
         batch_number++;
         delete batch_message;
-        batch_message = GetBatch(batch_number, scheduler->batch_connection_);
+        batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
 
       // Current batch has remaining txns, grab up to 10.
       } else if (executing_txns + pending_txns < 2000) {

@@ -124,13 +124,14 @@ class DeterministicScheduler : public Scheduler {
   
   int queue_mode_;
   int abort_batch_size;
-  bool deconstructor_invoked_ = false;
+
   int num_threads;
 
- 	 public:
-	  	  pair<int64, int64>* latency;
-        double throughput[THROUGHPUT_SIZE];
-        double abort[THROUGHPUT_SIZE];
+  public:
+  	  bool deconstructor_invoked_ = false;
+  	  pair<int64, int64>* latency;
+  	  double throughput[THROUGHPUT_SIZE];
+  	  double abort[THROUGHPUT_SIZE];
 
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

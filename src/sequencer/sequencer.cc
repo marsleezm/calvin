@@ -132,8 +132,9 @@ Sequencer::~Sequencer() {
 	  delete txns_queue_;
   pthread_join(writer_thread_, NULL);
   pthread_join(reader_thread_, NULL);
-  delete message_queues;
+  pthread_join(paxos_thread_, NULL);
   delete paxos_queues;
+  delete connection_;
 }
 
 void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
@@ -446,7 +447,7 @@ void Sequencer::RunReader() {
       pthread_mutex_unlock(&mutex_);
       if (!got_batch)
         Spin(0.001);
-    } while (!got_batch);
+    } while (!deconstructor_invoked_ && !got_batch);
 #endif
     batch_message.ParseFromString(batch_string);
     for (int i = 0; i < batch_message.data_size(); i++) {

@@ -12,8 +12,8 @@
 using zmq::socket_t;
 
 ConnectionMultiplexer::ConnectionMultiplexer(Configuration* config)
-    : configuration_(config), context_(1), new_connection_channel_(NULL),
-      delete_connection_channel_(NULL), deconstructor_invoked_(false) {
+    : configuration_(config), context_(1), restart_queue(NULL), new_connection_channel_(NULL),
+	  delete_connection_channel_(NULL), deconstructor_invoked_(false) {
   // Lookup port. (Pick semi-arbitrary port if node id < 0).
   if (config->this_node_id < 0)
     port_ = config->all_nodes.begin()->second->port;
