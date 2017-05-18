@@ -36,6 +36,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	tpcc_args ->ParseFromString(txn->arg());
 	if (txn->multipartition()){
 		message_ = new MessageProto();
+		message_->set_source_channel(txn_->txn_id());
 		message_->set_destination_channel(IntToString(txn_->txn_id()));
 		message_->set_type(MessageProto::READ_RESULT);
 		message_->set_source_node(configuration_->this_node_id);
@@ -106,6 +107,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 
 	txn_ = txn;
 	message_ = new MessageProto();
+	message_->set_source_channel(txn_->txn_id());
 	message_->set_source_node(configuration_->this_node_id);
 	message_->set_destination_channel(IntToString(txn_->txn_id()));
 	message_->set_type(MessageProto::READ_RESULT);
