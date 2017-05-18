@@ -180,6 +180,7 @@ class Sequencer {
 
   // Queue mode
   int queue_mode;
+  int max_batch_propose;
 
   // Statistics
   int num_fetched_this_round;

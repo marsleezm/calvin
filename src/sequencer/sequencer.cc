@@ -45,8 +45,6 @@ double scheduler_unlock[SAMPLES];
 #endif
 
 
-#define MAX_BATCH_PROPOSE 5
-
 int64_t Sequencer::num_lc_txns_=0;
 //int64_t Sequencer::max_commit_ts=-1;
 //int64_t Sequencer::num_c_txns_=0;
@@ -81,6 +79,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* pa
 	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0), queue_mode(mode),
 	  num_fetched_this_round(0) {
   pthread_mutex_init(&mutex_, NULL);
+  max_batch_propose = conf->all_nodes.size();
   // Start Sequencer main loops running in background thread.
   if (queue_mode == FROM_SEQ_DIST)
 	  txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
@@ -327,7 +326,7 @@ void Sequencer::RunPaxos() {
 			  int64 to_propose_batch = max(max_batch, proposed_batch+1);
 			  // Increase random_batch with 50% probability, to avoid the case that messages keep being aggregated in this batch
 			  if(max_batch == to_propose_batch){
-				  if (proposed_for_batch+1 == MAX_BATCH_PROPOSE){
+				  if (proposed_for_batch+1 == max_batch_propose){
 					  proposed_for_batch = 0;
 					  max_batch = max_batch + 1;
 				  }
