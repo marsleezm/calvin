@@ -12,7 +12,7 @@
 using zmq::socket_t;
 
 ConnectionMultiplexer::ConnectionMultiplexer(Configuration* config)
-    : configuration_(config), context_(1), new_connection_channel_(NULL),
+    : configuration_(config), context_(1), restart_queue(NULL), new_connection_channel_(NULL),
       delete_connection_channel_(NULL), deconstructor_invoked_(false) {
   // Lookup port. (Pick semi-arbitrary port if node id < 0).
   if (config->this_node_id < 0)
@@ -105,6 +105,7 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
        it != link_unlink_queue_.end(); ++it) {
     delete it->second;
   }
+  std::cout<<"ConnectionMultiplexer deleted"<<std::endl;
 }
 
 Connection* ConnectionMultiplexer::NewConnection(const string& channel) {

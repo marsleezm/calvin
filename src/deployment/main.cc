@@ -179,12 +179,6 @@ int main(int argc, char** argv) {
 		  reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()))) :
 		  reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
 
-// #ifdef PAXOS
-//  StartZookeeper(ZOOKEEPER_CONF);
-// #endif
-//pthread_mutex_init(&mutex_, NULL);
-//pthread_mutex_init(&mutex_for_item, NULL);
-//involed_customers = new vector<Key>;
 
   Storage* storage;
   if (!useFetching) {
@@ -225,24 +219,23 @@ int main(int argc, char** argv) {
   } else if(argv[2][1] == 'd'){
 	  queue_mode = DIRECT_QUEUE;
 	  std::cout << "Direct queue by sequencer mode" << std::endl;
-
   }
 
   // Initialize sequencer component and start sequencer thread running.
   Sequencer sequencer(&config, &multiplexer, client,
                       storage, queue_mode);
+  Connection* scheduler_connection = multiplexer.NewConnection("scheduler_");
 
   DeterministicScheduler* scheduler;
-  // Run scheduler in main thread.
   if (argv[2][0] == 't') {
 	  scheduler = new DeterministicScheduler(&config,
-	                                       multiplexer.NewConnection("scheduler_"),
+			  	  	  	  	  	  	  	  scheduler_connection,
 	                                       storage,
 	                                       new TPCC(), sequencer.GetTxnsQueue(), client, queue_mode);
   }
   else{
 	  scheduler = new DeterministicScheduler(&config,
-                                     multiplexer.NewConnection("scheduler_"),
+			  	  	  	  	  	  	 scheduler_connection,
                                      storage,
                                      new Microbenchmark(config.all_nodes.size(), config.this_node_id),
 									 sequencer.GetTxnsQueue(),
@@ -254,6 +247,7 @@ int main(int argc, char** argv) {
   std::cout<<"Finished duration"<<std::endl;
   sequencer.output(scheduler);
   delete scheduler;
+  delete scheduler_connection;
   return 0;
 }
 
