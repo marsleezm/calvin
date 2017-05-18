@@ -40,6 +40,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		message_->set_type(MessageProto::READ_RESULT);
 		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
+		LOG(txn->txn_id(), " his writers are "<<txn->writers(0)<<", "<<txn->writers(1));
 	}
 	else
 		message_ = NULL;
@@ -110,6 +111,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	message_->set_type(MessageProto::READ_RESULT);
 	connection_->LinkChannel(IntToString(txn_->txn_id()));
 	tpcc_args ->ParseFromString(txn->arg());
+	LOG(txn->txn_id(), " his writers are "<<txn->writers(0)<<", "<<txn->writers(1));
 }
 
 void StorageManager::Abort(){
