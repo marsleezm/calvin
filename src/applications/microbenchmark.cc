@@ -165,7 +165,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 	txn->add_readers(parts[0]);
 	txn->add_writers(parts[0]);
 
-	for(int i = 1; i<txn->readers_size()-1; ++i){
+	for(int i = 1; i<num_parts; ++i){
 		GetRandomKeys(&keys,
 					  avg_index_per_part,
 					  nparts * 0,
