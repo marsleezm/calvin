@@ -107,7 +107,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
   
     CPU_ZERO(&cpuset);
     CPU_SET(3, &cpuset);
-    std::cout << "Central locking thread starts at 4"<<std::endl;
+    std::cout << "Central locking thread starts at 3"<<std::endl;
     pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
     pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
                  reinterpret_cast<void*>(this));
@@ -128,7 +128,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 		CPU_ZERO(&cpuset);
 		//if (i == 0 || i == 1)
 		CPU_SET(i+4, &cpuset);
-		std::cout << "Worker thread #"<<i+4<<" starts at core "<<i<<std::endl;
+		std::cout << "Worker thread #"<<i<<" starts at core "<<i+4<<std::endl;
 		//else
 		//CPU_SET(i+2, &cpuset);
 		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
