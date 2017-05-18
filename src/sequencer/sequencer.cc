@@ -142,6 +142,7 @@ Sequencer::~Sequencer() {
 	//if(queue_mode == NORMAL_QUEUE){
 	pthread_join(writer_thread_, NULL);
 	pthread_join(reader_thread_, NULL);
+	pthread_join(paxos_thread_, NULL);
 	//}
 	//else{
 	//	  pthread_join(reader_thread_, NULL);
@@ -512,7 +513,7 @@ void Sequencer::RunReader() {
     	pthread_mutex_unlock(&mutex_);
     	if (!got_batch)
     		Spin(0.001);
-    } while (!got_batch);
+    } while (!deconstructor_invoked_ && !got_batch);
 #endif
     MessageProto batch_message;
     MessageProto* multi_part_msg = new MessageProto(),
@@ -770,7 +771,7 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
 	  return batch;
   } else {
 	  MessageProto* message = new MessageProto();
-	  while (connection->GetMessage(message)) {
+	  while (!deconstructor_invoked_ && connection->GetMessage(message)) {
 		  SEQLOG(-1, "Got message of batch "<<message->batch_number()<<", and I want "<< batch_id);
 		  ASSERT(message->type() == MessageProto::TXN_BATCH);
 		  if (message->batch_number() == batch_id) {

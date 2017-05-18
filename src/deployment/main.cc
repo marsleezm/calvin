@@ -195,13 +195,15 @@ int main(int argc, char** argv) {
 		TPCC().InitializeStorage(storage, &config);
 	}
 
-	Connection* batch_connection = multiplexer.NewConnection("scheduler_");
+	Connection* batch_connection = multiplexer.NewConnection("scheduler_"),
+			*sequencer_connection = multiplexer.NewConnection("sequencer"),
+			*paxos_connection = multiplexer.NewConnection("paxos");
   	// Initialize sequencer component and start sequencer thread running.
 
 	assert(argv[2][1] == 'n');
 	int queue_mode = NORMAL_QUEUE;
 
-	Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), multiplexer.NewConnection("paxos"), batch_connection,
+	Sequencer sequencer(&config, sequencer_connection, paxos_connection, batch_connection,
 		  	  client, storage, queue_mode);
 
 	DeterministicScheduler* scheduler;
@@ -221,16 +223,14 @@ int main(int argc, char** argv) {
 
 	sequencer.SetScheduler(scheduler);
 
-	LOG(-1, " started spinning, time is "<<GetTime());
 	Spin(atoi(ConfigReader::Value("duration").c_str()));
-	LOG(-1, " after spinning, time is "<<GetTime());
 	DeterministicScheduler::terminate();
-
-	LOG(-1, " trying to finish early!!!");
 
 	sequencer.output();
 	delete scheduler;
 	delete batch_connection;
+	delete sequencer_connection;
+	delete paxos_connection;
 	return 0;
 }
 
