@@ -632,7 +632,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 }
 
 void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_object) {
-	LOG(txn_id, " unlock "<<key);
+	//LOG(txn_id, " unlock "<<key);
 	KeyEntry* entry;
 	if(new_object){
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
@@ -647,25 +647,25 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 		entry = objects_[key];
 	}
 
-	LOG(txn_id, " remove "<<key);
+	//LOG(txn_id, " remove "<<key);
 	pthread_mutex_lock(&entry->mutex_);
 
 	DataNode* list = entry->head;
 	while (list) {
 	  if (list->txn_id == txn_id) {
 		  entry->head =	list->next;
-		  LOG(txn_id, " trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
+		  //LOG(txn_id, " trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
 		  delete list;
 		  break;
 	  }
 	  else if(list->txn_id > txn_id){
-		  LOG(txn_id, " not mine, invalid version is "<<list->txn_id<<", value addr is "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
+		  //LOG(txn_id, " not mine, invalid version is "<<list->txn_id<<", value addr is "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
 		  entry->head = list->next;
 		  delete list;
 		  list = entry->head;
 	  }
 	  else{
-		  LOG(txn_id, ": WTF, didn't find my version, this is "<<list->txn_id);
+		  //LOG(txn_id, ": WTF, didn't find my version, this is "<<list->txn_id);
 		  break;
 	  }
 	}
