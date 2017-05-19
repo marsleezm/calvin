@@ -491,12 +491,12 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 								Value* v= new Value(*value);
 								vp.first = IS_COPY;
 								vp.second = v;
-								LOG(txn_id, " unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
+								//LOG(txn_id, " unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
 							}
 							else{
 								vp.first = NOT_COPY;
 								vp.second = value;
-								LOG(txn_id, " unblocked reader "<<it->my_tx_id_<<", giving NOT COPY version "<<reinterpret_cast<int64>(value));
+								//LOG(txn_id, " unblocked reader "<<it->my_tx_id_<<", giving NOT COPY version "<<reinterpret_cast<int64>(value));
 							}
 							it->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(it->my_tx_id_, it->num_aborted_, vp));
 							it = pend_list->erase(it);

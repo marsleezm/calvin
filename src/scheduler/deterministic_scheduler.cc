@@ -293,7 +293,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  ++Sequencer::num_lc_txns_;
 					  //--Sequencer::num_pend_txns_;
 					  //scheduler->num_suspend[thread] -= manager->was_suspended_;
-					  LOG(pend_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(manager));
+					  //LOG(pend_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					  active_g_tids.erase(pend_txn.first);
 					  active_l_tids.erase(pend_txn.second);
 					  AddLatency(sample_count, latency_count, latency_array, manager->get_txn());
@@ -376,7 +376,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  //--Sequencer::num_pend_txns_;
 
 					  active_g_tids.erase(txn_id);
-					  LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
+					  //LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					  active_l_tids.erase(txn->local_txn_id());
 					  AddLatency(sample_count, latency_count, latency_array, txn);
 					  delete manager;

@@ -437,7 +437,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 			// The value has been read already
 			if(read_set_.count(key)){
-				LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
+				//LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
 				//LOG(txn_->txn_id(), "Trying to read local key "<<key<<", addr is "<<reinterpret_cast<int64>(&read_set_[key]));
 				ASSERT(read_set_[key].second != NULL);
 				++exec_counter_;
