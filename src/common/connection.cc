@@ -97,6 +97,7 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
   
   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = remote_result_.begin();
        it != remote_result_.end(); ++it) {
+	  std::cout<<"Deleting "<<it->first<<std::endl;
     delete it->second;
   }
   
