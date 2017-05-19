@@ -591,8 +591,6 @@ DeterministicScheduler::~DeterministicScheduler() {
 	delete[] pend_block;
 	delete[] suspend_block;
 
-	delete[] latency[num_threads];
-
 	delete[] to_sc_txns_;
 	delete[] pending_txns_;
 	delete[] threads_;

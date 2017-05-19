@@ -194,7 +194,8 @@ int main(int argc, char** argv) {
 		TPCC().InitializeStorage(storage, &config);
 	}
 
-	Connection* batch_connection = multiplexer.NewConnection("scheduler_");
+	Connection* batch_connection = multiplexer.NewConnection("scheduler_"),
+			*sequencer_connection = multiplexer.NewConnection("sequencer");
   	// Initialize sequencer component and start sequencer thread running.
 
 	int queue_mode = -1;
@@ -206,7 +207,7 @@ int main(int argc, char** argv) {
 		queue_mode = FROM_SEQ_DIST;
 	}
 
-	Sequencer sequencer(&config, multiplexer.NewConnection("sequencer"), batch_connection,
+	Sequencer sequencer(&config, sequencer_connection, batch_connection,
 		  	  client, storage, queue_mode);
 
 	DeterministicScheduler* scheduler;
@@ -231,6 +232,7 @@ int main(int argc, char** argv) {
 	sequencer.output();
 	delete scheduler;
 	delete batch_connection;
+	delete sequencer_connection;
 	return 0;
 }
 
