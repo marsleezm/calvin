@@ -316,7 +316,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
-		  LOG(to_abort_txn.first, " is tested to be restarted, num lc is "<<Sequencer::num_lc_txns_);
+		  //LOG(to_abort_txn.first, " is tested to be restarted, num lc is "<<Sequencer::num_lc_txns_);
 		  if(to_abort_txn.first >= Sequencer::num_lc_txns_){
 			  StorageManager* manager = active_l_tids[to_abort_txn.first];
 			  LOG(to_abort_txn.first, " is not out-dated, addr is "<<reinterpret_cast<int64>(manager));
