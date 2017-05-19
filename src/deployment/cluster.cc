@@ -61,7 +61,7 @@ bool do_quite;
 
 // TODO(scw): move to deployer class; should avoid non-POD global variable
 // Type: fd -> nodeID
-map<int, int> children_pipes;
+//map<int, int> children_pipes;
 vector<int> children_pids;
 volatile bool end_cluster;
 
@@ -245,7 +245,7 @@ void DeployOne(int nodeID,
     printf("Node %d forking failed\n", nodeID);
   } else {
     children_pids.push_back(pid);
-    children_pipes.insert(std::pair<int, int>(pipefd[0], nodeID));
+    //children_pipes.insert(std::pair<int, int>(pipefd[0], nodeID));
     close(pipefd[1]);
   }
 
@@ -278,61 +278,61 @@ void Deploy(const Configuration& config, const char* exec) {
   signal(SIGTERM, &TerminatingChildren);
   signal(SIGPIPE, &TerminatingChildren);
 
-  int num_fd = children_pipes.size();
-  int max_fd = 0;
-  fd_set readset, fds;
-  FD_ZERO(&fds);
-  for (map<int, int>::const_iterator it = children_pipes.begin();
-       it != children_pipes.end(); ++it) {
-    if (it->first > max_fd)
-      max_fd = it->first;
-    FD_SET(it->first, &fds);
-  }
-  ++max_fd;
-
-  char buf[4096];
-  while (num_fd > 0) {  // while there are still any components alive
-    if (end_cluster) {
-      KillRemote(config, exec, false);
-      end_cluster = false;
-    }
-
-    readset = fds;
-    int actions = select(max_fd, &readset, NULL, NULL, NULL);
-    if (actions == -1) {
-      if (errno == EINTR)
-        continue;
-      break;
-    }
-
-    vector<int> erasing;
-    for (map<int, int>::const_iterator it = children_pipes.begin();
-         it != children_pipes.end(); ++it) {
-      if (FD_ISSET(it->first, &readset)) {
-        int n;
-        if ((n = read(it->first, buf, sizeof(buf))) <= 0) {
-          erasing.push_back(it->first);
-        } else {
-          buf[n] = 0;
-
-          char* save_p;
-          char* p = strtok_r(buf, "\n", &save_p);
-          do {
-            printf("%02d: %s\n", it->second, p);
-            p = strtok_r(NULL, "\n", &save_p);
-          } while (p);
-        }
-      }
-    }
-    if (erasing.size() > 0) {
-      for (vector<int>::const_iterator it = erasing.begin();
-           it != erasing.end(); ++it) {
-        children_pipes.erase(*it);
-        FD_CLR(*it, &fds);
-      }
-      num_fd -= erasing.size();
-    }
-  }
+//  int num_fd = children_pipes.size();
+//  int max_fd = 0;
+//  fd_set readset, fds;
+//  FD_ZERO(&fds);
+//  for (map<int, int>::const_iterator it = children_pipes.begin();
+//       it != children_pipes.end(); ++it) {
+//    if (it->first > max_fd)
+//      max_fd = it->first;
+//    FD_SET(it->first, &fds);
+//  }
+//  ++max_fd;
+//
+//  char buf[4096];
+//  while (num_fd > 0) {  // while there are still any components alive
+//    if (end_cluster) {
+//      KillRemote(config, exec, false);
+//      end_cluster = false;
+//    }
+//
+//    readset = fds;
+//    int actions = select(max_fd, &readset, NULL, NULL, NULL);
+//    if (actions == -1) {
+//      if (errno == EINTR)
+//        continue;
+//      break;
+//    }
+//
+//    vector<int> erasing;
+//    for (map<int, int>::const_iterator it = children_pipes.begin();
+//         it != children_pipes.end(); ++it) {
+//      if (FD_ISSET(it->first, &readset)) {
+//        int n;
+//        if ((n = read(it->first, buf, sizeof(buf))) <= 0) {
+//          erasing.push_back(it->first);
+//        } else {
+//          buf[n] = 0;
+//
+//          char* save_p;
+//          char* p = strtok_r(buf, "\n", &save_p);
+//          do {
+//            printf("%02d: %s\n", it->second, p);
+//            p = strtok_r(NULL, "\n", &save_p);
+//          } while (p);
+//        }
+//      }
+//    }
+//    if (erasing.size() > 0) {
+//      for (vector<int>::const_iterator it = erasing.begin();
+//           it != erasing.end(); ++it) {
+//        children_pipes.erase(*it);
+//        FD_CLR(*it, &fds);
+//      }
+//      num_fd -= erasing.size();
+//    }
+//  }
   // at the end of this while statement, either there was a user interrupt or
   // no components remain alive
 
