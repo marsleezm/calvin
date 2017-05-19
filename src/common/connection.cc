@@ -105,6 +105,7 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
        it != link_unlink_queue_.end(); ++it) {
     delete it->second;
   }
+  std::cout<<" ConnectionMultiplexer finished"<<std::endl;
 }
 
 Connection* ConnectionMultiplexer::NewConnection(const string& channel) {

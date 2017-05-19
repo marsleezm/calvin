@@ -135,6 +135,7 @@ Sequencer::~Sequencer() {
   pthread_join(paxos_thread_, NULL);
   delete paxos_queues;
   delete connection_;
+  std::cout<<" Sequencer finished"<<std::endl;
 }
 
 void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {

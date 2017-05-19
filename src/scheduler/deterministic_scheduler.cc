@@ -376,6 +376,7 @@ DeterministicScheduler::~DeterministicScheduler() {
 	}
 	delete recon_connection;
 	pthread_join(lock_manager_thread_, NULL);
+	std::cout<<" Scheduler finished"<<std::endl;
 }
 
 // Returns ptr to heap-allocated
