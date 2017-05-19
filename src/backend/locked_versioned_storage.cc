@@ -245,7 +245,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 			// Abort anyone that has missed my version
 			else if(it->my_tx_id_ > txn_id){
 				ASSERT( it->read_from_id_ != txn_id);
-				LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
+				//LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
 				bool result = std::atomic_compare_exchange_strong(it->abort_bit_,
 											&it->num_aborted_, it->num_aborted_+1);
 				if (result){
@@ -342,7 +342,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 			}
 			else{
 				//Try to abort this transaction
-				LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
+				//LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
 				bool result = std::atomic_compare_exchange_strong(entry->lock.abort_bit_,
 						&entry->lock.num_aborted_, entry->lock.num_aborted_+1);
 
@@ -366,7 +366,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 				// Abort anyone that has missed my version
 				else if(it->my_tx_id_ > txn_id){
 					ASSERT( it->read_from_id_ != txn_id);
-					LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
+					//LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
 					bool result = std::atomic_compare_exchange_strong(it->abort_bit_,
 												&it->num_aborted_, it->num_aborted_+1);
 					//If the transaction has actually been aborted by me.
@@ -681,7 +681,7 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 	    }
 	    // Abort anyone that has read from me
 	    else if(it->read_from_id_ == txn_id){
-	    	LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
+	    	//LOG(txn_id, " trying to abort "<<it->my_tx_id_<<", org value is "<<it->num_aborted_);
 	    	bool result = std::atomic_compare_exchange_strong(it->abort_bit_,
 	    								&it->num_aborted_, it->num_aborted_+1);
 			//If the transaction has actually been aborted by me.
