@@ -443,7 +443,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else{
 		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, my_pend_txns->size() > max_pend,
 		  				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
-		  if(out_counter1 & 37108864){
+		  if(out_counter1 & 67108864){
 			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
 					  ", num suspend is "<<scheduler->num_suspend[thread]);
 			  if(my_to_sc_txns->size())
