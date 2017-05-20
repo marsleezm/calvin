@@ -258,6 +258,7 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 void ConnectionMultiplexer::Send(const MessageProto& message) {
 
   if (message.type() == MessageProto::READ_RESULT) {
+    LOG(message.txn_id(), " got read result from "<<message.source_node());
     if (remote_result_.count(message.destination_channel()) > 0) {
     	remote_result_[message.destination_channel()]->Push(message);
     } else {

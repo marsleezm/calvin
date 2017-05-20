@@ -316,7 +316,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
-		  //LOG(to_abort_txn.first, " is tested to be restarted, num lc is "<<Sequencer::num_lc_txns_);
+		  LOG(to_abort_txn.first, " is tested to be restarted, num lc is "<<Sequencer::num_lc_txns_);
 		  if(to_abort_txn.first >= Sequencer::num_lc_txns_){
 			  StorageManager* manager = active_l_tids[to_abort_txn.first];
 			  LOG(to_abort_txn.first, " is not out-dated, addr is "<<reinterpret_cast<int64>(manager));
@@ -443,7 +443,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  else{
 		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, my_pend_txns->size() > max_pend,
 		  				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
-		  if(out_counter1 & 33554432){
+		  if(out_counter1 & 13554432){
 			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
 					  ", num suspend is "<<scheduler->num_suspend[thread]);
 			  if(my_to_sc_txns->size())

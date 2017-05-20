@@ -507,7 +507,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 }
 
 void StorageManager::SendLocalReads(){
-	LOG(txn_->txn_id(), " trying to send remote msg, size of writers are "<<txn_->writers_size());
+	//LOG(txn_->txn_id(), " trying to send remote msg, size of writers are "<<txn_->writers_size());
 	++sent_msg_;
 	for (int i = 0; i < txn_->writers_size(); i++) {
 	  if (txn_->writers(i) != configuration_->this_node_id) {
