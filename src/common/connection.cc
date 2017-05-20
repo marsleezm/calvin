@@ -258,11 +258,12 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 void ConnectionMultiplexer::Send(const MessageProto& message) {
 
   if (message.type() == MessageProto::READ_RESULT) {
-    LOG(-1, " got read result for "<<message.destination_channel()<<" from "<<message.source_node());
     if (remote_result_.count(message.destination_channel()) > 0) {
+    	LOG(-1, " put read result for "<<message.destination_channel()<<" into queue, from "<<message.source_node());
     	remote_result_[message.destination_channel()]->Push(message);
     } else {
-      undelivered_messages_[message.destination_channel()].push_back(message);
+    	LOG(-1, " put read result for "<<message.destination_channel()<<" into undelivered, from "<<message.source_node());
+    	undelivered_messages_[message.destination_channel()].push_back(message);
     }
   } else {
 
