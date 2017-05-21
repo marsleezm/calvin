@@ -67,6 +67,7 @@ pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
   // Initialize mutex for future calls to NewConnection.
   pthread_mutex_init(&new_connection_mutex_, NULL);
+  pthread_mutex_init(&remote_result_mutex_, NULL);
   new_connection_channel_ = NULL;
 
   // Just to be safe, wait a bit longer for all other nodes to finish
@@ -132,7 +133,9 @@ Connection* ConnectionMultiplexer::NewConnection(const string& channel) {
 Connection* ConnectionMultiplexer::NewConnection(const string& channel, AtomicQueue<MessageProto>** aa) {
   // Disallow concurrent calls to NewConnection/~Connection.
   pthread_mutex_lock(&new_connection_mutex_);
+  pthread_mutex_lock(&remote_result_mutex_);
   remote_result_[channel] = *aa;
+  pthread_mutex_unlock(&remote_result_mutex_);
   // Register the new connection request.
   new_connection_channel_ = &channel;
 
@@ -231,7 +234,9 @@ void ConnectionMultiplexer::Run() {
      bool got_it = it->second->Pop(&message);
      if (got_it == true) {
        if (message.type() == MessageProto::LINK_CHANNEL) {
+         pthread_mutex_lock(&remote_result_mutex_);
          remote_result_[message.channel_request()] = remote_result_[it->first];
+         pthread_mutex_unlock(&remote_result_mutex_);
          // Forward on any messages sent to this channel before it existed.
          vector<MessageProto>::iterator i;
          for (i = undelivered_messages_[message.channel_request()].begin();
@@ -241,7 +246,9 @@ void ConnectionMultiplexer::Run() {
          }
          undelivered_messages_.erase(message.channel_request());
        } else if (message.type() == MessageProto::UNLINK_CHANNEL) {
+         pthread_mutex_lock(&remote_result_mutex_);
          remote_result_.erase(message.channel_request());
+         pthread_mutex_unlock(&remote_result_mutex_);
        }
      }
    }
@@ -258,11 +265,12 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 void ConnectionMultiplexer::Send(const MessageProto& message) {
 
   if (message.type() == MessageProto::READ_RESULT) {
+     pthread_mutex_lock(&remote_result_mutex_);
     if (remote_result_.count(message.destination_channel()) > 0) {
-    	LOG(-1, " put read result for "<<message.destination_channel()<<" into queue, from "<<message.source_node());
     	remote_result_[message.destination_channel()]->Push(message);
+        pthread_mutex_unlock(&remote_result_mutex_);
     } else {
-    	LOG(-1, " put read result for "<<message.destination_channel()<<" into undelivered, from "<<message.source_node());
+        pthread_mutex_unlock(&remote_result_mutex_);
     	undelivered_messages_[message.destination_channel()].push_back(message);
     }
   } else {
