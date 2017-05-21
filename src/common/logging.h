@@ -13,7 +13,7 @@
 
 struct None { };
 
-static pthread_mutex_t stdout_mutex;
+//static pthread_mutex_t stdout_mutex;
 
 template <typename First,typename Second>
 struct Pair {
@@ -66,12 +66,12 @@ inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data
 //	}
 //	else
 		//if( tx_id == 113364 || tx_id == 113362 || tx_id == 113360){
-		pthread_mutex_lock(&stdout_mutex);
+		//pthread_mutex_lock(&stdout_mutex);
 		std::cout << std::this_thread::get_id() << "--" << line << "): "<<tx_id<<" ";
 		printList(std::cout,data.list);
 		//std::cout << "\n";
 		std::cout<< std::endl;
-		pthread_mutex_unlock(&stdout_mutex);
+		//pthread_mutex_unlock(&stdout_mutex);
 	//}
 	//pthread_mutex_unlock(&stdout_mutex);
 }
