@@ -634,7 +634,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 }
 
 void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_object) {
-	LOG(txn_id, " unlock "<<key);
+	//LOG(txn_id, " unlock "<<key);
 	KeyEntry* entry;
 	if(new_object){
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
@@ -649,7 +649,7 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 		entry = objects_[key];
 	}
 
-	LOG(txn_id, " remove "<<key);
+	//LOG(txn_id, " remove "<<key);
 	pthread_mutex_lock(&entry->mutex_);
 
 	DataNode* list = entry->head;
