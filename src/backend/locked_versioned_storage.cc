@@ -210,7 +210,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 	// Someone before me has locked this version, I should wait
 	if(entry->lock.tx_id_ < txn_id) {
 		entry->pend_list->push_back(PendingReadEntry(txn_id, abort_bit, num_aborted, pend_queue, abort_queue, true));
-		LOG(txn_id, " readlock suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"]");
+		//LOG(txn_id, " readlock suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"]");
 		pthread_mutex_unlock(&(entry->mutex_));
 		// Should return BLOCKED! How to denote that?
 		return ValuePair(SUSPEND, NULL);
@@ -344,7 +344,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 			}
 			else{
 				//Try to abort this transaction
-				LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
+				//LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
 				bool result = std::atomic_compare_exchange_strong(entry->lock.abort_bit_,
 						&entry->lock.num_aborted_, entry->lock.num_aborted_+1);
 
@@ -415,7 +415,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 
 	//LOG(txn_id, " trying to put ["<<key<<"], entry addr is "<<reinterpret_cast<int64>(entry));
 	if (entry->lock.tx_id_ != txn_id){
-		LOG(txn_id, " WTF, I don't have the lock??? Key is "<<key<<", lock holder is "<<entry->lock.tx_id_<<", equal "<<(txn_id == entry->lock.tx_id_));
+		//LOG(txn_id, " WTF, I don't have the lock??? Key is "<<key<<", lock holder is "<<entry->lock.tx_id_<<", equal "<<(txn_id == entry->lock.tx_id_));
 		return false;
 	}
 	else{
