@@ -583,7 +583,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 						//LOG(it->my_tx_id_<<"'s abort bit is "<<*(it->abort_bit_)<<", num aborted is "<<it->num_aborted_);
 						// If this transaction wants the lock
 						if (*(it->abort_bit_) != it->num_aborted_){
-							LOG(txn_id, " should not give "<<it->my_tx_id_<<" lock, because he has already aborted.");
+							//LOG(txn_id, " should not give "<<it->my_tx_id_<<" lock, because he has already aborted.");
 							it = pend_list->erase(it);
 						}
 						else{
@@ -603,7 +603,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 								Value* v= new Value(*value);
 								vp.first = IS_COPY;
 								vp.second = v;
-								LOG(txn_id, " aborted, but unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
+								//LOG(txn_id, " aborted, but unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
 								it->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(it->my_tx_id_, it->num_aborted_, vp));
 								it = pend_list->erase(it);
 							}
