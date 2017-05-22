@@ -228,13 +228,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  waiting_queue.Pop(&to_wait_txn);
 		  AGGRLOG(-1, " In to-suspend, the first one is "<< to_wait_txn.first);
 		  if(to_wait_txn.first >= Sequencer::num_lc_txns_){
-			  AGGRLOG(-1, " To suspending txn is " << to_wait_txn.first);
+			  //AGGRLOG(-1, " To suspending txn is " << to_wait_txn.first);
 			  StorageManager* manager = active_l_tids[to_wait_txn.first];
 			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
 				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm, sample_count, latency_count, latency_array) == false)
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->num_restarted_, manager));
 				  --scheduler->num_suspend[thread];
-				  AGGRLOG(to_wait_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
+				  //AGGRLOG(to_wait_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
 			  }
 			  else{
 				  // The txn is aborted, delete copied value! TODO: Maybe we could leave the value in case we need it
@@ -298,12 +298,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  int result = manager->HandleReadResult(message);
 				  if(result == SUCCESS){
 					  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, pending_confirm, sample_count, latency_count, latency_array) == false){
-						  AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
+						  //AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
 						  retry_txns.push(MyTuple<int64, int, StorageManager*>(manager->get_txn()->local_txn_id(), manager->num_restarted_, manager));
 					  }
 				  }
 				  else if (result == ABORT){
-					  AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
+					  //AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
 					  manager->Abort();
 					  ++Sequencer::num_aborted_;
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(manager->get_txn()->local_txn_id(), manager->num_restarted_, manager));
@@ -311,7 +311,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 	      }
 	      else if(message.type() == MessageProto::READ_CONFIRM){
-	    	  AGGRLOG(StringToInt(message.destination_channel()), "I got read confirm");
+	    	  //AGGRLOG(StringToInt(message.destination_channel()), "I got read confirm");
 	    	  StorageManager* manager =  active_g_tids[atoi(message.destination_channel().c_str())];
 	    	  manager->AddReadConfirm(message.source_node(), message.num_aborted());
 	      }
