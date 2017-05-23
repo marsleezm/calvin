@@ -187,6 +187,7 @@ void Sequencer::RunWriter() {
   multimap<double, TxnProto*> fetching_txns;
 #endif
 
+  std::cout << "Synchronization started.\n" << std::flush;
   // Synchronization loadgen start with other sequencers.
   MessageProto synchronization_message;
   synchronization_message.set_type(MessageProto::EMPTY);
@@ -206,7 +207,7 @@ void Sequencer::RunWriter() {
       synchronization_counter++;
     }
   }
-  std::cout << "Starting sequencer.\n" << std::flush;
+  std::cout << "Synchronization finished.\n" << std::flush;
 
   //unordered_map<string, TxnProto*> pending_txns;
 
