@@ -106,6 +106,7 @@ class ConnectionMultiplexer {
 
   // Protects concurrent calls to NewConnection().
   pthread_mutex_t new_connection_mutex_;
+  pthread_mutex_t remote_results_mutex_;
   
   pthread_mutex_t* send_mutex_;
   

@@ -67,6 +67,8 @@ pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
   // Initialize mutex for future calls to NewConnection.
   pthread_mutex_init(&new_connection_mutex_, NULL);
+  pthread_mutex_init(&remote_results_mutex_, NULL);
+
   new_connection_channel_ = NULL;
 
   // Just to be safe, wait a bit longer for all other nodes to finish
@@ -131,7 +133,9 @@ Connection* ConnectionMultiplexer::NewConnection(const string& channel) {
 Connection* ConnectionMultiplexer::NewConnection(const string& channel, AtomicQueue<MessageProto>** aa) {
   // Disallow concurrent calls to NewConnection/~Connection.
   pthread_mutex_lock(&new_connection_mutex_);
+  pthread_mutex_lock(&remote_results_mutex_);
   remote_result_[channel] = *aa;
+  pthread_mutex_unlock(&remote_results_mutex_);
   // Register the new connection request.
   new_connection_channel_ = &channel;
 
@@ -230,17 +234,21 @@ void ConnectionMultiplexer::Run() {
      bool got_it = it->second->Pop(&message);
      if (got_it == true) {
        if (message.type() == MessageProto::LINK_CHANNEL) {
-         remote_result_[message.channel_request()] = remote_result_[it->first];
-         // Forward on any messages sent to this channel before it existed.
-         vector<MessageProto>::iterator i;
-         for (i = undelivered_messages_[message.channel_request()].begin();
-              i != undelivered_messages_[message.channel_request()].end();
-              ++i) {
-           Send(*i);
-         }
-         undelivered_messages_.erase(message.channel_request());
+    	   pthread_mutex_lock(&remote_results_mutex_);
+    	   remote_result_[message.channel_request()] = remote_result_[it->first];
+    	   pthread_mutex_unlock(&remote_results_mutex_);
+    	   // Forward on any messages sent to this channel before it existed.
+    	   vector<MessageProto>::iterator i;
+    	   for (i = undelivered_messages_[message.channel_request()].begin();
+    			   i != undelivered_messages_[message.channel_request()].end();
+    			   ++i) {
+    		   Send(*i);
+    	   }
+    	   undelivered_messages_.erase(message.channel_request());
        } else if (message.type() == MessageProto::UNLINK_CHANNEL) {
-         remote_result_.erase(message.channel_request());
+    	   pthread_mutex_lock(&remote_results_mutex_);
+    	   remote_result_.erase(message.channel_request());
+    	   pthread_mutex_unlock(&remote_results_mutex_);
        }
      }
    }
@@ -257,10 +265,13 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 void ConnectionMultiplexer::Send(const MessageProto& message) {
 
   if (message.type() == MessageProto::READ_RESULT || message.type() == MessageProto::READ_CONFIRM) {
+	  pthread_mutex_lock(&remote_results_mutex_);
     if (remote_result_.count(message.destination_channel()) > 0) {
     	remote_result_[message.destination_channel()]->Push(message);
+    	pthread_mutex_unlock(&remote_results_mutex_);
     } else {
-      undelivered_messages_[message.destination_channel()].push_back(message);
+    	pthread_mutex_unlock(&remote_results_mutex_);
+    	undelivered_messages_[message.destination_channel()].push_back(message);
     }
   } else {
 
