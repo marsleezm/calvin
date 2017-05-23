@@ -291,7 +291,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 				index_val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL){
 					indexed_key = *index_val;
-					LOG(txn->txn_id(), " indexed_key for "<<txn->read_write_set(i)<<", addr is "<<reinterpret_cast<int64>(index_val)<<", v is "<<indexed_key);
+					//LOG(txn->txn_id(), " indexed_key for "<<txn->read_write_set(i)<<", addr is "<<reinterpret_cast<int64>(index_val)<<", v is "<<indexed_key);
 					tpcc_args->add_indexed_keys(indexed_key);
 					//if(StringToInt(indexed_key) < 0 )
 					//	std::cout<<" indexed is wrong! "<<indexed_key<<std::endl;
@@ -302,7 +302,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			}
 			else{
 				indexed_key = tpcc_args->indexed_keys(i);
-				LOG(txn->txn_id(), " getting key "<<txn->read_write_set(i)<<" which is "<<indexed_key);
+				//LOG(txn->txn_id(), " getting key "<<txn->read_write_set(i)<<" which is "<<indexed_key);
 			}
 
 			if(storage->ShouldRead()){
