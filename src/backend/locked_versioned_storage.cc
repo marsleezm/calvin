@@ -344,7 +344,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 			}
 			else{
 				//Try to abort this transaction
-				LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
+				//LOG(txn_id, " trying to abort "<<entry->lock.tx_id_<<", org value is "<<entry->lock.num_aborted_);
 				bool result = std::atomic_compare_exchange_strong(entry->lock.abort_bit_,
 						&entry->lock.num_aborted_, entry->lock.num_aborted_+1);
 
@@ -415,7 +415,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 
 	//LOG(txn_id, " trying to put ["<<key<<"], entry addr is "<<reinterpret_cast<int64>(entry));
 	if (entry->lock.tx_id_ != txn_id){
-		LOG(txn_id, " WTF, I don't have the lock??? Key is "<<key<<", lock holder is "<<entry->lock.tx_id_<<", equal "<<(txn_id == entry->lock.tx_id_));
+		//LOG(txn_id, " WTF, I don't have the lock??? Key is "<<key<<", lock holder is "<<entry->lock.tx_id_<<", equal "<<(txn_id == entry->lock.tx_id_));
 		return false;
 	}
 	else{
@@ -583,7 +583,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 						//LOG(it->my_tx_id_<<"'s abort bit is "<<*(it->abort_bit_)<<", num aborted is "<<it->num_aborted_);
 						// If this transaction wants the lock
 						if (*(it->abort_bit_) != it->num_aborted_){
-							LOG(txn_id, " should not give "<<it->my_tx_id_<<" lock, because he has already aborted.");
+							//LOG(txn_id, " should not give "<<it->my_tx_id_<<" lock, because he has already aborted.");
 							it = pend_list->erase(it);
 						}
 						else{
@@ -603,7 +603,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 								Value* v= new Value(*value);
 								vp.first = IS_COPY;
 								vp.second = v;
-								LOG(txn_id, " aborted, but unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
+								//LOG(txn_id, " aborted, but unblocked reader "<<it->my_tx_id_<<", giving COPY version "<<reinterpret_cast<int64>(v));
 								it->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(it->my_tx_id_, it->num_aborted_, vp));
 								it = pend_list->erase(it);
 							}
@@ -621,7 +621,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 					ValuePair vp;
 					vp.first = WRITE;
 					vp.second = new Value(*value);
-					//LOG(txn_id, " aborted, but unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
+					LOG(txn_id, " aborted, but unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
 					entry->lock = LockEntry(oldest_tx->my_tx_id_, oldest_tx->abort_bit_, *oldest_tx->abort_bit_, oldest_tx->abort_queue_);
 					//LOG(txn_id, " aborted, but adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
 					oldest_tx->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(oldest_tx->my_tx_id_, oldest_tx->num_aborted_, vp));
@@ -634,7 +634,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 }
 
 void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_object) {
-	LOG(txn_id, " unlock "<<key);
+	//LOG(txn_id, " unlock "<<key);
 	KeyEntry* entry;
 	if(new_object){
 		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
@@ -649,7 +649,7 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 		entry = objects_[key];
 	}
 
-	LOG(txn_id, " remove "<<key);
+	//LOG(txn_id, " remove "<<key);
 	pthread_mutex_lock(&entry->mutex_);
 
 	DataNode* list = entry->head;

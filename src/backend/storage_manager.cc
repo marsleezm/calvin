@@ -222,8 +222,8 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
   else{
 	  // If I am receiving read-results from a node for the first time then I am OK;
 	  // otherwise abort.
-	  if(txn_)
-		  LOG(txn_->txn_id(), " got local message of aborted "<<message.num_aborted()<<" from "<<message.source_node());
+	  //if(txn_)
+	  //	  LOG(txn_->txn_id(), " got local message of aborted "<<message.num_aborted()<<" from "<<message.source_node());
 	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
 		  if(latest_aborted_num[i].first == message.source_node()){
 			  if(message.num_aborted() > latest_aborted_num[i].second) {
@@ -237,8 +237,8 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 						  break;
 					  }
 				  }
-				  if(txn_)
-					  LOG(txn_->txn_id(), "Handle remote to add keys for txn, old aborted is "<<latest_aborted_num[i].second);
+				  //if(txn_)
+				//	  LOG(txn_->txn_id(), "Handle remote to add keys for txn, old aborted is "<<latest_aborted_num[i].second);
 				  if(latest_aborted_num[i].second == -1){
 					  latest_aborted_num[i].second = message.num_aborted();
 					  if(is_suspended_ == false)

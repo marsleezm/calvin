@@ -68,7 +68,6 @@ pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
   // Initialize mutex for future calls to NewConnection.
   pthread_mutex_init(&new_connection_mutex_, NULL);
   pthread_mutex_init(&remote_results_mutex_, NULL);
-
   new_connection_channel_ = NULL;
 
   // Just to be safe, wait a bit longer for all other nodes to finish
@@ -97,9 +96,11 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
     delete it->second;
   }
   
+  string prefix = "scheduler";
   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = remote_result_.begin();
        it != remote_result_.end(); ++it) {
-    delete it->second;
+	  if(!it->first.compare(0, prefix.size(), prefix))
+		  delete it->second;
   }
   
   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();

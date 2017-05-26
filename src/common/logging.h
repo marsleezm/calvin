@@ -67,7 +67,7 @@ inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data
 //	else
 		//if( tx_id == 113364 || tx_id == 113362 || tx_id == 113360){
 		//pthread_mutex_lock(&stdout_mutex);
-		std::cout << std::this_thread::get_id() << "--" << line << "): "<<tx_id;
+		std::cout << std::this_thread::get_id() << "--" << line << "): "<<tx_id<<" ";
 		printList(std::cout,data.list);
 		//std::cout << "\n";
 		std::cout<< std::endl;
@@ -77,7 +77,7 @@ inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data
 }
 
 //#define LOCKLOGGING
-#define ALLLOGGING
+//#define ALLLOGGING
 #define DOASSERT
 
 #ifdef DOASSERT
