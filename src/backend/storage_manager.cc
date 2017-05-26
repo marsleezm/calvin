@@ -89,15 +89,14 @@ void StorageManager::Setup(TxnProto* txn){
 	}
 
 	// Broadcast local reads to (other) writers.
-	string sent_to = "";
 	for (int i = 0; i < txn->writers_size(); i++) {
 	  if (txn->writers(i) != configuration_->this_node_id) {
 		message.set_destination_node(txn->writers(i));
 		connection_->Send1(message);
-		sent_to += IntToString(txn->writers(i)) + " ";
+		LOG(txn->txn_id(), " sending read results to "<<sent_to);
 	  }
 	}
-	LOG(txn->txn_id(), " sending read results to "<<sent_to);
+
   }
 
   // Note whether this node is a writer. If not, no need to do anything further.
@@ -138,11 +137,6 @@ void StorageManager::PrintObjects(){
 
 bool StorageManager::ReadyToExecute() {
 	if(txn_){
-		string s ="";
-		for(int i = 0; i<txn_->readers_size(); ++i)
-			s += IntToString(txn_->readers(i)) + " ";
-		LOG(txn_->txn_id(), " is ready? "<<got_read_set<<", reader size is "<<txn_->readers_size()<<
-				", readers are "<<s<<", type is "<< txn_->txn_type());
 		// Can finish the transaction if I am not the writer or if I am the writer, I have received everything
 		return	got_read_set == txn_->readers_size();
 	}
