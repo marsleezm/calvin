@@ -79,6 +79,10 @@ class Sequencer {
 	  scheduler_ = scheduler;
   }
 
+  void WaitForStart(){
+	  while(!started) ;
+  }
+
  public:
   static int64_t num_lc_txns_;
   //static int64_t num_c_txns_;
@@ -180,5 +184,7 @@ class Sequencer {
 
   double throughput[THROUGHPUT_SIZE];
   double abort[THROUGHPUT_SIZE];
+
+  bool started = false;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
