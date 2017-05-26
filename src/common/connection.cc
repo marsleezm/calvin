@@ -96,10 +96,11 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
     delete it->second;
   }
   
+  string prefix = "scheduler";
   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = remote_result_.begin();
-       it != remote_result_.end(); ++it) {
-	  std::cout<<"Deleting "<<it->first<<std::endl;
-    delete it->second;
+          it != remote_result_.end(); ++it) {
+	  if(!it->first.compare(0, prefix.size(), prefix))
+		  delete it->second;
   }
   
   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();

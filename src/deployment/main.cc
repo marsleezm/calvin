@@ -221,6 +221,7 @@ int main(int argc, char** argv) {
 
 	sequencer.SetScheduler(scheduler);
 
+	sequencer.WaitForStart();
 	Spin(atoi(ConfigReader::Value("duration").c_str()));
 	DeterministicScheduler::terminate();
 	sequencer.output();

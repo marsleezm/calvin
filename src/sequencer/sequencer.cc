@@ -211,6 +211,8 @@ void Sequencer::RunWriter() {
       synchronization_counter++;
     }
   }
+
+  started = true;
   std::cout << "Starting sequencer.\n" << std::flush;
 
   // Set up batch messages for each system node.
