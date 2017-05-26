@@ -186,6 +186,9 @@ void Sequencer::RunWriter() {
   }
   //std::cout << "Starting sequencer.\n" << std::flush;
 
+  started = true;
+  std::cout << "Starting sequencer.\n" << std::flush;
+
   // Set up batch messages for each system node.
   MessageProto batch;
   batch.set_destination_channel("sequencer");
@@ -587,7 +590,6 @@ void Sequencer::RunReader() {
 
     FetchMessage();
 
-
 #ifdef LATENCY_TEST
     if (watched_txn != -1) {
       sequencer_send[watched_txn] = GetTime();
@@ -708,11 +710,7 @@ void* Sequencer::FetchMessage() {
 			  {
 				  TxnProto* txn = new TxnProto();
 				  txn->ParseFromString(batch_message->data(i));
-                  string writers = "";
-                  for(int j = 0; j<txn->writers_size(); ++j)
-                     writers += IntToString(txn->writers(j));
-				  SEQLOG(-1, " batch "<<batch_message->batch_number()<<" has txn of id "<<txn->txn_id()<<" with local "<<fetched_txn_num_<<", writers are "<<writers);
-				  txn->set_local_txn_id(fetched_txn_num_++);
+                  txn->set_local_txn_id(fetched_txn_num_++);
 				  txns_queue_->Push(txn);
 				  ++num_fetched_this_round;
 			  }
@@ -720,27 +718,6 @@ void* Sequencer::FetchMessage() {
 			  ++fetched_batch_num_;
 		  }
 	  }
-//	  else if (queue_mode == FROM_SEQ_SINGLE){
-//		  for (int i = 0; i < 1000; i++)
-//			  {
-//				  TxnProto* txn;
-//				  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-//				  txn->set_local_txn_id(fetched_txn_num_++);
-//				  txns_queue_->Push(txn);
-//			  }
-//	  }
-//	  else if (queue_mode == FROM_SEQ_DIST){
-//		  int i = 0;
-//		  while (i < 1000)
-//		  {
-//			  TxnProto* txn;
-//			  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-//			  txn->set_local_txn_id(fetched_txn_num_);
-//			  txns_queue_[(fetched_txn_num_/BUFFER_TXNS_NUM)%num_threads].Push(txn);
-//			  ++fetched_txn_num_;
-//			  ++i;
-//		  }
-//	  }
   }
   else
 	  SEQLOG(-1, "Txn size is OK, so still waiting");

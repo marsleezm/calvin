@@ -36,10 +36,12 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	tpcc_args ->ParseFromString(txn->arg());
 	if (txn->multipartition()){
 		message_ = new MessageProto();
+		message_->set_source_channel(txn_->txn_id());
 		message_->set_destination_channel(IntToString(txn_->txn_id()));
 		message_->set_type(MessageProto::READ_RESULT);
 		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
+		LOG(txn->txn_id(), " his writers are "<<txn->writers(0)<<", "<<txn->writers(1));
 	}
 	else
 		message_ = NULL;
@@ -105,11 +107,13 @@ void StorageManager::SetupTxn(TxnProto* txn){
 
 	txn_ = txn;
 	message_ = new MessageProto();
+	message_->set_source_channel(txn_->txn_id());
 	message_->set_source_node(configuration_->this_node_id);
 	message_->set_destination_channel(IntToString(txn_->txn_id()));
 	message_->set_type(MessageProto::READ_RESULT);
 	connection_->LinkChannel(IntToString(txn_->txn_id()));
 	tpcc_args ->ParseFromString(txn->arg());
+	LOG(txn->txn_id(), " his writers are "<<txn->writers(0)<<", "<<txn->writers(1));
 }
 
 void StorageManager::Abort(){
@@ -433,7 +437,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		if (configuration_->LookupPartition(key) == configuration_->this_node_id){
 			// The value has been read already
 			if(read_set_.count(key)){
-				LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
+				//LOG(txn_->txn_id(), " read&lock key already in read-set "<<key<<", exec counter is "<<exec_counter_);
 				//LOG(txn_->txn_id(), "Trying to read local key "<<key<<", addr is "<<reinterpret_cast<int64>(&read_set_[key]));
 				ASSERT(read_set_[key].second != NULL);
 				++exec_counter_;
@@ -503,7 +507,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 }
 
 void StorageManager::SendLocalReads(){
-	LOG(txn_->txn_id(), " trying to send remote msg, size of writers are "<<txn_->writers_size());
+	//LOG(txn_->txn_id(), " trying to send remote msg, size of writers are "<<txn_->writers_size());
 	++sent_msg_;
 	for (int i = 0; i < txn_->writers_size(); i++) {
 	  if (txn_->writers(i) != configuration_->this_node_id) {

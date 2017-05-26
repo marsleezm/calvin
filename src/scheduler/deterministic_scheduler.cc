@@ -293,7 +293,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  ++Sequencer::num_lc_txns_;
 					  //--Sequencer::num_pend_txns_;
 					  //scheduler->num_suspend[thread] -= manager->was_suspended_;
-					  LOG(pend_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(manager));
+					  //LOG(pend_txn.second, " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					  active_g_tids.erase(pend_txn.first);
 					  active_l_tids.erase(pend_txn.second);
 					  AddLatency(sample_count, latency_count, latency_array, manager->get_txn());
@@ -305,7 +305,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	 else{
 		 if(my_pend_txns->size() && last_printed != my_pend_txns->top().second){
-			 LOG(-1, " my pend size is "<<my_pend_txns->size()<<", my pend is first is "<<my_pend_txns->top().second);
+			 LOG(-1, " my pend size is "<<my_pend_txns->size()<<", my pend is first is "<<my_pend_txns->top().second<<", num lc is "<<Sequencer::num_lc_txns_);
 			 last_printed = my_pend_txns->top().second;
 		 }
 		 //else
@@ -386,7 +386,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  }
 
 					  active_g_tids.erase(txn_id);
-					  LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
+					  //LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					  active_l_tids.erase(txn->local_txn_id());
 					  AddLatency(sample_count, latency_count, latency_array, txn);
 					  delete manager;
@@ -496,7 +496,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		}
 	}
 	else{
-		LOCKLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id());
+		LOCKLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id()<<"is multipart? "<<txn->multipartition());
 		int result = application_->Execute(manager);
 		if (result == SUSPENDED){
 			//LOCKLOG(txn->txn_id(),  " suspended, addr of manager is "<<reinterpret_cast<int64>(manager));
