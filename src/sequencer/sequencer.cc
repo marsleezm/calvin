@@ -207,6 +207,8 @@ void Sequencer::RunWriter() {
       synchronization_counter++;
     }
   }
+
+  started = true;
   std::cout << "Synchronization finished.\n" << std::flush;
 
   //unordered_map<string, TxnProto*> pending_txns;

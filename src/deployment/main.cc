@@ -242,9 +242,8 @@ int main(int argc, char** argv) {
 									 client, queue_mode);
   }
 
-  std::cout<<"Duration is "<<atoi(ConfigReader::Value("duration").c_str())<<std::endl;
+  sequencer.WaitForStart();
   Spin(atoi(ConfigReader::Value("duration").c_str()));
-  std::cout<<"Finished duration"<<std::endl;
   sequencer.output(scheduler);
   delete scheduler;
   delete scheduler_connection;

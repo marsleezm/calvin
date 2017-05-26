@@ -71,6 +71,8 @@ class Sequencer {
   AtomicQueue<TxnProto*>* GetTxnsQueue() { return txns_queue_;}
   void output(DeterministicScheduler* scheduler);
 
+  void WaitForStart(){ while(!started) ; }
+
  private:
   // Sequencer's main loops:
   //
@@ -160,5 +162,6 @@ class Sequencer {
   int fetched_txn_num_;
 
   AtomicQueue<TxnProto*>* txns_queue_;
+  bool started = false;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
