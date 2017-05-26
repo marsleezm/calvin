@@ -137,11 +137,6 @@ void StorageManager::PrintObjects(){
 
 bool StorageManager::ReadyToExecute() {
 	if(txn_){
-		string s ="";
-		for(int i = 0; i<txn_->readers_size(); ++i)
-			s += IntToString(txn_->readers(i)) + " ";
-		LOG(txn_->txn_id(), " is ready? "<<got_read_set<<", reader size is "<<txn_->readers_size()<<
-				", readers are "<<s<<", type is "<< txn_->txn_type());
 		// Can finish the transaction if I am not the writer or if I am the writer, I have received everything
 		return	got_read_set == txn_->readers_size();
 	}
