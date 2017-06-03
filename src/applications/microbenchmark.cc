@@ -56,7 +56,7 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
 
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
-  txn->set_txn_type(MICROTXN_SP);
+  txn->set_txn_type(MICROTXN_SP | recon_mask);
 
   // Add one hot key to read/write set.
   set<int> keys;
@@ -92,7 +92,7 @@ TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
 
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
-  txn->set_txn_type(MICROTXN_DEP_SP);
+  txn->set_txn_type(MICROTXN_SP | DEPENDENT_MASK | RECON_MASK);
 
   // Insert set of kRWSetSize - 1 random cold keys from specified partition into
   // read/write set.
@@ -130,7 +130,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 
 	// Set the transaction's standard attributes
 	txn->set_txn_id(txn_id);
-	txn->set_txn_type(MICROTXN_MP);
+	txn->set_txn_type(MICROTXN_MP  | recon_mask);
 
 	// Add two hot keys to read/write set---one in each partition.
 	set<int> keys;
@@ -202,7 +202,7 @@ TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_
 
 	// Set the transaction's standard attributes
 	txn->set_txn_id(txn_id);
-	txn->set_txn_type(MICROTXN_DEP_MP);
+	txn->set_txn_type(MICROTXN_MP | DEPENDENT_MASK  | RECON_MASK);
 
 	// Add two hot keys to read/write set---one in each partition.
 	int avg_index_per_part = indexAccessNum/num_parts;
@@ -251,7 +251,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 		//LOG(txn->txn_id(), " transactions is dependent!");
 		for (int i = 0; i < indexAccessNum; i++) {
 			Value* index_val = storage->ReadObject(txn->read_write_set(i)), *next_val;
-			LOG(txn->txn_id(), " getting "<<txn->read_write_set(i)<<", index value is "<<(*index_val));
+			//LOG(txn->txn_id(), " getting "<<txn->read_write_set(i)<<", index value is "<<(*index_val));
 			//std::cout<<txn->txn_id()<<" accessing "<<txn->read_write_set(i)<<", index number is "<<indexAccessNum<<std::endl;
 			if(index_val == 0){
 				LOG(txn->txn_id(), "This is weird, checking what's in the txn's data");
@@ -267,13 +267,13 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 			}
 			if (txn->pred_read_write_set(i).compare(*index_val) == 0){
 				//std::cout<<txn->txn_id()<<" is "<<txn->multipartition()<<", accessing "<<*index_val<<std::endl;
-				LOG(txn->txn_id(), " prediction is correct for "<<*index_val);
+				//LOG(txn->txn_id(), " prediction is correct for "<<*index_val);
 				next_val = storage->ReadObject(*index_val);
 				*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 				*next_val = IntToString(StringToInt(*next_val) +  txn->seed()% 100 -50);
 			}
 			else{
-				LOG(txn->txn_id(), " prediction is wrong for "<<*index_val);
+				//LOG(txn->txn_id(), " prediction is wrong for "<<*index_val);
 				return FAILURE;
 			}
 		}
@@ -284,10 +284,10 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 		return SUCCESS;
 	}
 	else{
-		LOG(txn->txn_id(), " transactions is not dependent!");
+		//LOG(txn->txn_id(), " transactions is not dependent!");
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			Value* val = storage->ReadObject(txn->read_write_set(i));
-			LOG(txn->txn_id()," trying to read "<<txn->read_write_set(i));
+			//std::cout<<txn->txn_id()<<" trying to read "<<txn->read_write_set(i)<<std::endl;
 			*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 			//*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 		}
@@ -298,17 +298,33 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 int Microbenchmark::ReconExecute(TxnProto* txn, ReconStorageManager* storage) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
-	assert(txn->txn_type() & DEPENDENT_MASK);
+
+	assert(txn->txn_type() & RECON_MASK);
 	storage->Init();
 	int read_state;
-	for (int i = 0; i < txn->read_write_set_size(); i++) {
-		//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
-		if(storage->ShouldExec()){
-			Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
-			if(read_state == NORMAL)
-				txn->add_pred_read_write_set(*val);
-			else
-				return SUSPENDED;
+	if(txn->txn_type() & DEPENDENT_MASK){
+		//std::cout<<"Running dependent"<<std::endl;
+		for (int i = 0; i < txn->read_write_set_size(); i++) {
+			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
+			if(storage->ShouldExec()){
+				Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
+				if(read_state == NORMAL)
+					txn->add_pred_read_write_set(*val);
+				else
+					return SUSPENDED;
+			}
+		}
+	}
+	else{
+		//std::cout<<"Running non-dependent"<<std::endl;
+		for (int i = 0; i < txn->read_write_set_size(); i++) {
+			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
+			if(storage->ShouldExec()){
+				Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
+				val += 1;
+				if(read_state != NORMAL)
+					return SUSPENDED;
+			}
 		}
 	}
 	return RECON_SUCCESS;

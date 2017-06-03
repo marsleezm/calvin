@@ -13,6 +13,7 @@
 #include "common/configuration.h"
 #include "proto/tpcc.pb.h"
 #include "proto/tpcc_args.pb.h"
+#include "common/config_reader.h"
 
 #define WAREHOUSES_PER_NODE 12
 #define DISTRICTS_PER_WAREHOUSE 10
@@ -34,12 +35,21 @@ class TPCC : public Application {
   enum TxnType {
     INITIALIZE = 0,
     PAYMENT = 6,
-	NEW_ORDER = 7,
-	//NEW_ORDER = 9,
+	//NEW_ORDER = 7,
+	NEW_ORDER = 9,
     ORDER_STATUS = 11,
     DELIVERY = 12,
     STOCK_LEVEL = 13,
   };
+
+  TPCC() {
+	  if (ConfigReader::Value("all_recon").compare("true") == 0)
+		  recon_mask = RECON_MASK;
+	  else{
+		  assert(ConfigReader::Value("all_recon").compare("false") == 0);
+		  recon_mask = 0;
+	  }
+  }
 
   virtual ~TPCC() {}
 
@@ -119,6 +129,8 @@ class TPCC : public Application {
   // Recon version. Maybe need to delete some old ones
   int NewOrderReconTransaction(ReconStorageManager* storage) const;
 
+  int PaymentReconTransaction(ReconStorageManager* storage) const;
+
   int OrderStatusReconTransaction(ReconStorageManager* storage) const;
 
   int StockLevelReconTransaction(ReconStorageManager* storage) const;
@@ -127,6 +139,7 @@ class TPCC : public Application {
   // The following are implementations of retrieval and writing for local items
   Value* GetItem(Key key) const;
   void SetItem(Key key, Value* value) const;
+  int recon_mask;
 };
 
 #endif  // _DB_APPLICATIONS_TPCC_H_

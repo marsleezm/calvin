@@ -93,7 +93,7 @@ void StorageManager::Setup(TxnProto* txn){
 	  if (txn->writers(i) != configuration_->this_node_id) {
 		message.set_destination_node(txn->writers(i));
 		connection_->Send1(message);
-		LOG(txn->txn_id(), " sending read results to "<<sent_to);
+		LOG(txn->txn_id(), " sending read results to "<<txn->writers(i));
 	  }
 	}
 

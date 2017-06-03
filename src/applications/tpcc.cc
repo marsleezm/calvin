@@ -141,6 +141,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
       // Set the order line count in the args
       tpcc_args->add_order_line_count(order_line_count);
+      txn->set_txn_type(txn_type | recon_mask);
     }
       break;
 
@@ -202,6 +203,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 			txn->add_read_write_set(customer_key);
 		}
 
+		txn->set_txn_type(txn_type | recon_mask);
 		break;
 
      case ORDER_STATUS :
@@ -229,7 +231,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
     	 txn->add_read_set(customer_key);
 
     	 txn->add_readers(config->this_node_id);
-
+    	 txn->set_txn_type(txn_type | RECON_MASK);
     	 break;
      }
 
@@ -249,7 +251,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
     	 tpcc_args->set_threshold(rand()%10 + 10);
     	 txn->add_readers(config->this_node_id);
-
+    	 txn->set_txn_type(txn_type | RECON_MASK);
     	 break;
       }
 
@@ -268,6 +270,8 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
          }
          txn->add_readers(config->this_node_id);
          txn->add_writers(config->this_node_id);
+         txn->set_txn_type(txn_type | RECON_MASK);
+
          break;
       }
 
@@ -289,86 +293,60 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int TPCC::Execute(TxnProto* txn, StorageManager* storage) const {
-  switch (txn->txn_type()) {
-    // Initialize
-    case INITIALIZE:
-      InitializeStorage(storage->GetStorage(), NULL);
-      return SUCCESS;
-      break;
-
-    // New Order
-    case NEW_ORDER:
-      return NewOrderTransaction(storage);
-      break;
-
-    // Payment
-    case PAYMENT:
-      return PaymentTransaction(storage);
-      break;
-
-    case ORDER_STATUS:
-      return OrderStatusTransaction(storage);
-      break;
-
-    case STOCK_LEVEL:
-      return StockLevelTransaction(storage);
-      break;
-
-    case DELIVERY:
-      return DeliveryTransaction(storage);
-      break;
-
-    // Invalid transaction
-    default:
-      return FAILURE;
-      break;
-  }
-
-  return FAILURE;
+	int txn_type = txn->txn_type();
+	if (txn_type == INITIALIZE) {
+		InitializeStorage(storage->GetStorage(), NULL);
+		return SUCCESS;
+	}
+	else if (txn_type == (NEW_ORDER | recon_mask)){
+		return NewOrderTransaction(storage);
+	}
+	else if (txn_type == (PAYMENT | recon_mask)){
+		return PaymentTransaction(storage);
+	}
+	else if (txn_type == (ORDER_STATUS | RECON_MASK)){
+		return OrderStatusTransaction(storage);
+	}
+	else if (txn_type == (STOCK_LEVEL | RECON_MASK)){
+		return StockLevelTransaction(storage);
+	}
+	else if (txn_type == (DELIVERY | RECON_MASK)){
+		return DeliveryTransaction(storage);
+	}
+	else{
+		std::cout<<"WTF, failure in execute??" << std::endl;
+		return FAILURE;
+	}
 }
 
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int TPCC::ReconExecute(TxnProto* txn, ReconStorageManager* storage) const {
-  switch (txn->txn_type()) {
-    // Initialize
-    case INITIALIZE:
-    	LOG(txn->txn_id(), " initializing has no recon phase!!");
-    	InitializeStorage(storage->GetStorage(), NULL);
-    	return SUCCESS;
-    	break;
-
-    // New Order
-    case NEW_ORDER:
-    	std::cout<< txn->txn_id()<<" should not recon!!" << std::endl;
-    	assert(1 == 2);
-    	//return NewOrderReconTransaction(storage);
-    	break;
-
-    // Payment
-    case PAYMENT:
-    	LOG(txn->txn_id(), "This is not possible, payment has no RECON phase!");
-    	break;
-
-    case ORDER_STATUS:
-    	return OrderStatusReconTransaction(storage);
-    	break;
-
-    case STOCK_LEVEL:
+	int txn_type = txn->txn_type();
+	if (txn_type == (NEW_ORDER | recon_mask)){
+		//std::cout<< "Recon for new order" << std::endl;
+		return NewOrderReconTransaction(storage);
+	}
+	else if (txn_type == (PAYMENT | recon_mask)){
+		//std::cout<< "Recon for payment" << std::endl;
+		return PaymentReconTransaction(storage);
+	}
+	else if (txn_type == (ORDER_STATUS | RECON_MASK)){
+		//std::cout<< "Recon for order_status" << std::endl;
+		return OrderStatusReconTransaction(storage);
+	}
+	else if (txn_type == (STOCK_LEVEL | RECON_MASK)){
+		//std::cout<< "Recon for stock level" << std::endl;
     	return StockLevelReconTransaction(storage);
-    	break;
-
-    case DELIVERY:
+	}
+	else if (txn_type == (DELIVERY | RECON_MASK)){
+		//std::cout<< "Recon for delivery" << std::endl;
     	return DeliveryReconTransaction(storage);
-    	break;
-
-    // Invalid transaction
-    default:
+	}
+	else{
+		std::cout<<"WTF, failure in recon exe??" << std::endl;
     	return FAILURE;
-    	break;
-  }
-
-  return FAILURE;
+	}
 }
 
 // The new order function is executed when the application receives a new order
@@ -536,6 +514,91 @@ int TPCC::ReconExecute(TxnProto* txn, ReconStorageManager* storage) const {
 //	return SUCCESS;
 //}
 
+int TPCC::NewOrderReconTransaction(ReconStorageManager* storage) const {
+	// First, we retrieve the warehouse from storage
+	TxnProto* txn = storage->get_txn();
+	TPCCArgs* tpcc_args = storage->get_args();
+	storage->Init();
+	LOG(txn->txn_id(), "Executing NEWORDER RECON, is multipart? "<<(txn->multipartition()));
+
+	Key warehouse_key = txn->read_set(0);
+	int read_state;
+	Value* warehouse_val;
+	if(storage->ShouldExec()){
+		warehouse_val = storage->ReadObject(warehouse_key, read_state);
+		if (read_state == SUSPENDED)
+			return SUSPENDED;
+		else {
+			Warehouse warehouse;
+			try_until(warehouse.ParseFromString(*warehouse_val));
+		}
+	}
+
+	int order_number;
+	read_state = NORMAL;
+	Key district_key = txn->read_write_set(0);
+	if(storage->ShouldExec()){
+		Value* district_val = storage->ReadObject(district_key, read_state);
+		if (read_state == SUSPENDED)
+			return SUSPENDED;
+		else {
+			District district;
+			try_until(district.ParseFromString(*district_val));
+			order_number = district.next_order_id();
+			tpcc_args->set_lastest_order_number(order_number);;
+		}
+	}
+	else
+		order_number = tpcc_args->lastest_order_number();
+
+
+	// Next, we get the order line count, system time, and other args from the
+	// transaction proto
+	int order_line_count = tpcc_args->order_line_count(0);
+
+	// Retrieve the customer we are looking for
+    Key customer_key = txn->read_write_set(1);
+    if(storage->ShouldExec()){
+		Value* customer_val = storage->ReadObject(customer_key, read_state);
+		if (read_state == SUSPENDED)
+			return SUSPENDED;
+		else if(read_state == NORMAL){
+	    	Customer customer;
+	    	try_until(customer.ParseFromString(*customer_val));
+			//customer.set_last_order(order_key);
+			//assert(customer.SerializeToString(val));
+		}
+    }
+
+	// We initialize the order line amount total to 0
+	for (int i = 0; i < order_line_count; i++) {
+		// For each order line we parse out the three args
+		string stock_key = txn->read_write_set(i + 2);
+		string supply_warehouse_key = stock_key.substr(0, stock_key.find("s"));
+
+		// Find the item key within the stock key
+		size_t item_idx = stock_key.find("i");
+		string item_key = stock_key.substr(item_idx, string::npos);
+
+		// First, we check if the item number is valid
+		Item item;
+		try_until(item.ParseFromString(*ItemList[item_key]));
+
+		// Next, we get the correct stock from the data store
+		read_state = NORMAL;
+		if(storage->ShouldExec()){
+			Value* stock_val = storage->ReadObject(stock_key, read_state);
+			if (read_state == SUSPENDED)
+				return SUSPENDED;
+			else{
+				Stock stock;
+				try_until(stock.ParseFromString(*stock_val));
+			}
+		}
+	}
+
+	return RECON_SUCCESS;
+}
 
 int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	// First, we retrieve the warehouse from storage
@@ -804,6 +867,57 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 //
 //	return RECON_SUCCESS;
 //}
+
+int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
+	// First, we parse out the transaction args from the TPCC proto
+	TxnProto* txn = storage->get_txn();
+	TPCCArgs tpcc_args;
+	tpcc_args.ParseFromString(txn->arg());
+
+	// Read & update the warehouse object
+	int read_state;
+	Key warehouse_key = txn->read_write_set(0);
+	Value* warehouse_val;
+	if(storage->ShouldExec()){
+		warehouse_val = storage->ReadObject(warehouse_key, read_state);
+		if (read_state == SUSPENDED)
+			return SUSPENDED;
+		else {
+			Warehouse warehouse;
+			try_until(warehouse.ParseFromString(*warehouse_val));
+		}
+	}
+
+	// Read & update the district object
+	Key district_key = txn->read_write_set(1);
+	Value* district_val;
+	if(storage->ShouldExec()){
+		district_val = storage->ReadObject(district_key, read_state);
+		if (read_state == SUSPENDED)
+			return SUSPENDED;
+		else {
+			District district;
+			try_until(district.ParseFromString(*district_val));
+		}
+	}
+
+	// Read & update the customer
+	Key customer_key;
+
+	customer_key = txn->read_write_set(2);
+	Value* customer_val;
+	if(storage->ShouldExec()){
+		customer_val = storage->ReadObject(customer_key, read_state);
+		if (read_state == SUSPENDED)
+			return SUSPENDED;
+		else {
+			Customer customer;
+			try_until(customer.ParseFromString(*customer_val));
+		}
+	}
+
+	return RECON_SUCCESS;
+}
 
 // The payment function is executed when the application receives a
 // payment transaction.  This follows the TPC-C standard.

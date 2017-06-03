@@ -46,6 +46,7 @@ using std::tr1::unordered_map;
 //#define DEPENDENT_PERCENT 0
 
 #define DEPENDENT_MASK 8
+#define RECON_MASK 16
 
 #define ASSERTS_ON true
 

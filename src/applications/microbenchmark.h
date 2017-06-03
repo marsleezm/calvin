@@ -24,15 +24,23 @@ class Microbenchmark : public Application {
   enum TxnType {
 	  INITIALIZE=0,
 	  MICROTXN_SP=1,
-	  MICROTXN_MP=2,
-	  MICROTXN_DEP_SP=9,
-	  MICROTXN_DEP_MP=10
+	  MICROTXN_MP=2
   };
 
 
   Microbenchmark(int nodecount, int node_id) {
     nparts = nodecount;
     this_node_id = node_id;
+    std::cout<<"All recon is "<<ConfigReader::Value("all_recon")<<std::endl;
+    if (ConfigReader::Value("all_recon").compare("true") == 0){
+    	std::cout<<"All recon passed"<<std::endl;
+    	recon_mask = RECON_MASK;
+    }
+    else{
+    	std::cout<<"All recon not passed"<<std::endl;
+    	assert(ConfigReader::Value("all_recon").compare("false") == 0);
+    	recon_mask = 0;
+    }
   }
 
   virtual ~Microbenchmark() {}
@@ -55,6 +63,7 @@ class Microbenchmark : public Application {
   int kRWSetSize = atoi(ConfigReader::Value("rw_set_size").c_str());
   int indexAccessNum = atoi(ConfigReader::Value("index_num").c_str());
   int kDBSize = atoi(ConfigReader::Value("total_key").c_str());
+  int recon_mask;
 
   virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
 
@@ -62,7 +71,7 @@ class Microbenchmark : public Application {
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part);
   inline int RandomLocalKey(const int key_start, const int key_limit, const int part) const {
-		return key_start + part + nparts * (abs(rand()) % ((key_limit - key_start)/nparts));
+		return key_start + part + nparts * (rand() % ((key_limit - key_start)/nparts));
   }
   inline int NotSoRandomLocalKey(const int64 rand_num, const int key_start, const int key_limit, const int part) const {
 		return key_start + part + nparts * (abs(rand_num) % ((key_limit - key_start)/nparts));
