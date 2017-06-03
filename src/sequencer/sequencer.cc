@@ -310,7 +310,7 @@ void Sequencer::RunWriter() {
             	txn_id_offset++;
             	//LOG(txn->txn_id(), " type is  "<<txn->txn_type());
             	// If it's dependent transaction!!
-				if(txn->txn_type() & DEPENDENT_MASK){
+				if(txn->txn_type() & RECON_MASK){
 		            bytes txn_data;
 		            txn->SerializeToString(&txn_data);
 		            google::protobuf::RepeatedField<int>::const_iterator  it;

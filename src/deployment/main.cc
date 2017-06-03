@@ -104,18 +104,6 @@ class TClient : public Client {
     	(*txn)->set_multipartition(false);
 
     // New order txn
-
-//    int random_txn_type = rand() % 100;
-//     // New order txn
-//	if (random_txn_type < 45)  {
-//	  tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-//	} else if(random_txn_type < 88) {
-//	 	 tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-//	}  else {
-//	  *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
-//	  args.set_multipartition(false);
-//	}
-
    int random_txn_type = rand() % 100;
     // New order txn
     if (random_txn_type < 45)  {

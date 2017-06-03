@@ -197,7 +197,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  TxnProto* txn = manager->txn_;
 				  // If successfully finished
 				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
-					  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+					  LOG(txn->txn_id(), " is aborted, its type is "<<txn->txn_type()<<" its pred rw size is "<<txn->pred_read_write_set_size());
 					  txn->set_status(TxnProto::ABORTED);
 				  }
 
@@ -288,7 +288,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
 			  else{
-				  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+				  LOG(txn->txn_id(), " is aborted, its type is "<<txn->txn_type()<<" its pred rw size is "<<txn->pred_read_write_set_size());
 				  delete manager;
 
 				  txn->set_status(TxnProto::ABORTED);
