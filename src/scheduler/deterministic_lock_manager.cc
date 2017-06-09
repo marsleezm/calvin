@@ -47,8 +47,11 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
       if (requests->empty() || txn != requests->back().txn) {
         requests->push_back(LockRequest(WRITE, txn));
         // Write lock request fails if there is any previous request at all.
-        if (requests->size() > 1)
+        LOG(txn->txn_id(), " getting lock for "<<txn->read_write_set(i));
+        if (requests->size() > 1){
           not_acquired++;
+          LOG(txn->txn_id(), " write blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->read_write_set(i));
+        }
       }
     }
   }
@@ -74,9 +77,12 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
         // Only need to request this if lock txn hasn't already requested it.
         if (requests->empty() || txn != requests->back().txn) {
           requests->push_back(LockRequest(WRITE, txn));
+          //LOG(txn->txn_id(), " pending for pred "<<txn->pred_read_write_set(i));
           // Write lock request fails if there is any previous request at all.
-          if (requests->size() > 1)
+          if (requests->size() > 1){
             not_acquired++;
+            LOG(txn->txn_id(), " pred-write blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->pred_read_write_set(i));
+          }
         }
       }
     }
@@ -104,11 +110,13 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
       // Only need to request this if lock txn hasn't already requested it.
       if (requests->empty() || txn != requests->back().txn) {
         requests->push_back(LockRequest(READ, txn));
+        //LOG(txn->txn_id(), " pending for read "<<txn->read_set(i));
         // Read lock request fails if there is any previous write request.
         for (deque<LockRequest>::iterator it = requests->begin();
              it != requests->end(); ++it) {
           if (it->mode == WRITE) {
             not_acquired++;
+            LOG(txn->txn_id(), " read blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->read_set(i));
             break;
           }
         }
@@ -137,11 +145,13 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
         // Only need to request this if lock txn hasn't already requested it.
         if (requests->empty() || txn != requests->back().txn) {
           requests->push_back(LockRequest(READ, txn));
+          //LOG(txn->txn_id(), " pending for pred read "<<txn->pred_read_set(i));
           // Read lock request fails if there is any previous write request.
           for (deque<LockRequest>::iterator it = requests->begin();
                it != requests->end(); ++it) {
             if (it->mode == WRITE) {
               not_acquired++;
+              LOG(txn->txn_id(), " pred-read blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->pred_read_set(i));
               break;
             }
           }
@@ -160,8 +170,10 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
 void DeterministicLockManager::Release(TxnProto* txn) {
 
   for (int i = 0; i < txn->read_set_size(); i++)
-    if (IsLocal(txn->read_set(i)))
-      Release(txn->read_set(i), txn);
+    if (IsLocal(txn->read_set(i))){
+    	LOG(txn->txn_id(), " releasing read "<<txn->read_set(i));
+    	Release(txn->read_set(i), txn);
+    }
   for (int i = 0; i < txn->pred_read_set_size(); i++)
     if (IsLocal(txn->pred_read_set(i)))
       Release(txn->pred_read_set(i), txn);
@@ -170,9 +182,12 @@ void DeterministicLockManager::Release(TxnProto* txn) {
 //  for (int i = 0; i < txn->write_set_size(); i++)
 //    if (IsLocal(txn->write_set(i)))
 //      Release(txn->write_set(i), txn);
-  for (int i = 0; i < txn->read_write_set_size(); i++)
-    if (IsLocal(txn->read_write_set(i)))
-      Release(txn->read_write_set(i), txn);
+  for (int i = 0; i < txn->read_write_set_size(); i++){
+    if (IsLocal(txn->read_write_set(i))){
+    	LOG(txn->txn_id(), " releasing write "<<txn->read_write_set(i));
+    	Release(txn->read_write_set(i), txn);
+    }
+  }
   for (int i = 0; i < txn->pred_read_write_set_size(); i++)
     if (IsLocal(txn->pred_read_write_set(i)))
       Release(txn->pred_read_write_set(i), txn);
@@ -189,7 +204,7 @@ void DeterministicLockManager::Release(const Key& key, TxnProto* txn) {
   }
 
   if(it1 == key_requests->end()){
-	  //LOG(txn->txn_id(), " trying to release lock twice for "<<key);
+	  LOG(txn->txn_id(), " trying to release lock twice for "<<key);
 	  return;
   }
   else{
@@ -215,6 +230,8 @@ void DeterministicLockManager::Release(const Key& key, TxnProto* txn) {
 	      ++it;
 	      if (it != requests->end()) {
 	        vector<TxnProto*> new_owners;
+
+	    	LOG(txn->txn_id(), " requester mode is "<<it->mode<<", txn id is "<<it->txn->txn_id());
 	        // Grant subsequent request(s) if:
 	        //  (a) The canceled request held a write lock.
 	        //  (b) The canceled request held a read lock ALONE.
@@ -242,9 +259,12 @@ void DeterministicLockManager::Release(const Key& key, TxnProto* txn) {
 	          if (txn_waits_[new_owners[j]] == 0) {
 	            // The txn that just acquired the released lock is no longer waiting
 	            // on any lock requests.
-	            ready_txns_->push_back(new_owners[j]);
-	            txn_waits_.erase(new_owners[j]);
+	        	  LOG(txn->txn_id(), " giving "<<new_owners[j]->txn_id()<<" key "<<key);
+	        	  ready_txns_->push_back(new_owners[j]);
+	        	  txn_waits_.erase(new_owners[j]);
 	          }
+	          else
+	        	  LOG(txn->txn_id(), " giving "<<new_owners[j]->txn_id()<<" key "<<key<<", wait is "<<txn_waits_[new_owners[j]]);
 	        }
 	      }
 

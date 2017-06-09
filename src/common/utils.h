@@ -52,8 +52,14 @@ using std::tr1::unordered_map;
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)
 
-#define try_until(expr)							\
+#define try_until(expr)	\
   while(!(expr)) {\
+	continue;  \
+  }
+
+#define try_until_n(expr, n) \
+  n = 0; \
+  while(!(expr) && n++ < 3) {\
 	continue;  \
   }
 

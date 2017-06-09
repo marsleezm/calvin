@@ -172,11 +172,55 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   reply_recon_msg.set_destination_channel("sequencer");
   reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
   while (!scheduler->deconstructor_invoked_) {
-	  if (scheduler->message_queues[thread]->Pop(&message)){
+	  if(scheduler->txns_queue->Pop(&txn)){
+		  // No remote read result found, start on next txn if one is waiting.
+		  // Create manager.
+		  StorageManager* manager;
+		  if(active_txns.count(IntToString(txn->txn_id()))){
+			  manager = active_txns[IntToString(txn->txn_id())];
+			  manager->Setup(txn);
+			  //LOG(txn->txn_id(), " starting txn from before");
+		  }
+		  else{
+			  manager =
+					 new StorageManager(scheduler->configuration_,
+								scheduler->thread_connections_[thread],
+								scheduler->storage_, txn);
+			  //LOG(txn->txn_id(), " starting txn from scratch");
+		  }
+
+		  // Writes occur at this node.
+		  if (manager->ReadyToExecute()) {
+			  LOG(txn->txn_id(), " start executing txn of type "<<txn->txn_type());
+			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
+				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+				  delete manager;
+				  // Respond to scheduler;
+				  scheduler->done_queue->Push(txn);
+				  LOG(txn->txn_id(), " finish executing txn!");
+			  }
+			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
+			  else{
+				  //LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+				  delete manager;
+
+				  txn->set_status(TxnProto::ABORTED);
+				  scheduler->done_queue->Push(txn);
+			  }
+
+		  } else {
+			  LOG(txn->txn_id(), " is not ready yet");
+			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
+			  //LOG(txn->txn_id(), " waiting for remote");
+			  active_txns[IntToString(txn->txn_id())] = manager;
+		  }
+	  }
+	  else if (scheduler->message_queues[thread]->Pop(&message)){
 
 		  // If I get read_result when executing a transaction
 		  if (message.type() == MessageProto::READ_RESULT) {
 			  // Remote read result.
+			  LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
 
 			  StorageManager* manager;
 			  if(active_txns.count(message.destination_channel()) == 0){
@@ -198,10 +242,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  TxnProto* txn = manager->txn_;
 				  // If successfully finished
 				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
-					  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+					  //LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
 					  txn->set_status(TxnProto::ABORTED);
 				  }
 
+				  LOG(txn->txn_id(), " finish executing remote");
 				  delete manager;
 				  scheduler->thread_connections_[thread]->UnlinkChannel(IntToString(txn->txn_id()));
 				  active_txns.erase(message.destination_channel());
@@ -210,6 +255,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 		  else{
+			  LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
 			  //LOG(StringToInt(message.destination_channel()), " got recon read result");
 			  assert(message.type() == MessageProto::RECON_READ_RESULT);
 			  ReconStorageManager* manager;
@@ -232,7 +278,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  int result = scheduler->application_->ReconExecute(txn, manager);
 					  if(result == RECON_SUCCESS){
 						  // Clean up transaction
-						  LOG(txn->txn_id(), " finished recon phase");
+						  //LOG(txn->txn_id(), " finished recon phase");
 						  delete manager;
 						  recon_pending_txns.erase(message.destination_channel());
 						  scheduler->thread_connections_[thread]->UnlinkChannel(message.destination_channel());
@@ -261,45 +307,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 	  }
-	  else if(scheduler->txns_queue->Pop(&txn)){
-		  // No remote read result found, start on next txn if one is waiting.
-		  // Create manager.
-		  StorageManager* manager;
-		  if(active_txns.count(IntToString(txn->txn_id()))){
-			  manager = active_txns[IntToString(txn->txn_id())];
-			  manager->Setup(txn);
-			  //LOG(txn->txn_id(), " starting txn from before");
-		  }
-		  else{
-			  manager =
-					 new StorageManager(scheduler->configuration_,
-								scheduler->thread_connections_[thread],
-								scheduler->storage_, txn);
-			  //LOG(txn->txn_id(), " starting txn from scratch");
-		  }
-
-		  // Writes occur at this node.
-		  if (manager->ReadyToExecute()) {
-			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
-				  delete manager;
-				  // Respond to scheduler;
-				  scheduler->done_queue->Push(txn);
-			  }
-			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
-			  else{
-				  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
-				  delete manager;
-
-				  txn->set_status(TxnProto::ABORTED);
-				  scheduler->done_queue->Push(txn);
-			  }
-
-		  } else {
-			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
-			  active_txns[IntToString(txn->txn_id())] = manager;
-		  }
-	  }
 	  // Try to handle recon_txns
 	  else if(recon_txns.size()){
 
@@ -320,6 +327,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  manager->Setup(txn);
 		  }
 
+		  //LOG(txn->txn_id(), " recon txn is being executed");
 		  int result = scheduler->application_->ReconExecute(txn, manager);
 		  if(result == RECON_SUCCESS){
 			  delete manager;
@@ -500,6 +508,7 @@ int abort_number = 0;
           }
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
+          LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
           if (txn->start_time() == 0)
         	  txn->set_start_time(GetUTime());
           batch_offset++;
@@ -515,6 +524,7 @@ int abort_number = 0;
     // Start executing any and all ready transactions to get them off our plate
     while (!scheduler->ready_txns_->empty()) {
       TxnProto* txn = scheduler->ready_txns_->front();
+      LOG(batch_number, " adding to ready queue "<<txn->txn_id());
       scheduler->ready_txns_->pop_front();
       pending_txns--;
       executing_txns++;
