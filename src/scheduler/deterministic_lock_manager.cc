@@ -47,10 +47,10 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
       if (requests->empty() || txn != requests->back().txn) {
         requests->push_back(LockRequest(WRITE, txn));
         // Write lock request fails if there is any previous request at all.
-        LOG(txn->txn_id(), " getting lock for "<<txn->read_write_set(i));
+        //LOG(txn->txn_id(), " getting lock for "<<txn->read_write_set(i));
         if (requests->size() > 1){
           not_acquired++;
-          LOG(txn->txn_id(), " write blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->read_write_set(i));
+          //LOG(txn->txn_id(), " write blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->read_write_set(i));
         }
       }
     }
@@ -81,7 +81,7 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
           // Write lock request fails if there is any previous request at all.
           if (requests->size() > 1){
             not_acquired++;
-            LOG(txn->txn_id(), " pred-write blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->pred_read_write_set(i));
+            //LOG(txn->txn_id(), " pred-write blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->pred_read_write_set(i));
           }
         }
       }
@@ -116,7 +116,7 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
              it != requests->end(); ++it) {
           if (it->mode == WRITE) {
             not_acquired++;
-            LOG(txn->txn_id(), " read blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->read_set(i));
+            //LOG(txn->txn_id(), " read blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->read_set(i));
             break;
           }
         }
@@ -151,7 +151,7 @@ int DeterministicLockManager::Lock(TxnProto* txn) {
                it != requests->end(); ++it) {
             if (it->mode == WRITE) {
               not_acquired++;
-              LOG(txn->txn_id(), " pred-read blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->pred_read_set(i));
+              //LOG(txn->txn_id(), " pred-read blocked by "<<requests->front().txn->txn_id()<<" for "<<txn->pred_read_set(i));
               break;
             }
           }
@@ -171,7 +171,7 @@ void DeterministicLockManager::Release(TxnProto* txn) {
 
   for (int i = 0; i < txn->read_set_size(); i++)
     if (IsLocal(txn->read_set(i))){
-    	LOG(txn->txn_id(), " releasing read "<<txn->read_set(i));
+    	//LOG(txn->txn_id(), " releasing read "<<txn->read_set(i));
     	Release(txn->read_set(i), txn);
     }
   for (int i = 0; i < txn->pred_read_set_size(); i++)
@@ -184,7 +184,7 @@ void DeterministicLockManager::Release(TxnProto* txn) {
 //      Release(txn->write_set(i), txn);
   for (int i = 0; i < txn->read_write_set_size(); i++){
     if (IsLocal(txn->read_write_set(i))){
-    	LOG(txn->txn_id(), " releasing write "<<txn->read_write_set(i));
+    	//LOG(txn->txn_id(), " releasing write "<<txn->read_write_set(i));
     	Release(txn->read_write_set(i), txn);
     }
   }
@@ -231,7 +231,7 @@ void DeterministicLockManager::Release(const Key& key, TxnProto* txn) {
 	      if (it != requests->end()) {
 	        vector<TxnProto*> new_owners;
 
-	    	LOG(txn->txn_id(), " requester mode is "<<it->mode<<", txn id is "<<it->txn->txn_id());
+	    	//LOG(txn->txn_id(), " requester mode is "<<it->mode<<", txn id is "<<it->txn->txn_id());
 	        // Grant subsequent request(s) if:
 	        //  (a) The canceled request held a write lock.
 	        //  (b) The canceled request held a read lock ALONE.
@@ -259,12 +259,12 @@ void DeterministicLockManager::Release(const Key& key, TxnProto* txn) {
 	          if (txn_waits_[new_owners[j]] == 0) {
 	            // The txn that just acquired the released lock is no longer waiting
 	            // on any lock requests.
-	        	  LOG(txn->txn_id(), " giving "<<new_owners[j]->txn_id()<<" key "<<key);
+	        	  //LOG(txn->txn_id(), " giving "<<new_owners[j]->txn_id()<<" key "<<key);
 	        	  ready_txns_->push_back(new_owners[j]);
 	        	  txn_waits_.erase(new_owners[j]);
 	          }
-	          else
-	        	  LOG(txn->txn_id(), " giving "<<new_owners[j]->txn_id()<<" key "<<key<<", wait is "<<txn_waits_[new_owners[j]]);
+	          //else
+	        	  //LOG(txn->txn_id(), " giving "<<new_owners[j]->txn_id()<<" key "<<key<<", wait is "<<txn_waits_[new_owners[j]]);
 	        }
 	      }
 

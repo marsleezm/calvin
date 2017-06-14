@@ -197,7 +197,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  delete manager;
 				  // Respond to scheduler;
 				  scheduler->done_queue->Push(txn);
-				  LOG(txn->txn_id(), " finish executing txn!");
+				  //LOG(txn->txn_id(), " finish executing txn!");
 			  }
 			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
 			  else{
@@ -246,7 +246,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					  txn->set_status(TxnProto::ABORTED);
 				  }
 
-				  LOG(txn->txn_id(), " finish executing remote");
+				  //LOG(txn->txn_id(), " finish executing remote");
 				  delete manager;
 				  scheduler->thread_connections_[thread]->UnlinkChannel(IntToString(txn->txn_id()));
 				  active_txns.erase(message.destination_channel());
@@ -255,7 +255,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 		  else{
-			  LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
+			  //LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
 			  //LOG(StringToInt(message.destination_channel()), " got recon read result");
 			  assert(message.type() == MessageProto::RECON_READ_RESULT);
 			  ReconStorageManager* manager;
@@ -281,7 +281,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						  //LOG(txn->txn_id(), " finished recon phase");
 						  delete manager;
 						  recon_pending_txns.erase(message.destination_channel());
-						  scheduler->thread_connections_[thread]->UnlinkChannel(message.destination_channel());
 
 						  // Only one of all receivers for a multi-part dependent txn replies RECON msg
 						  if(txn->readers(0) == scheduler->configuration_->this_node_id){
@@ -300,8 +299,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						  //LOG(txn->txn_id(), " suspended!");
 						  continue;
 					  }
-					  else {
-						  std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
+					  else{
+						  delete manager;
+						  recon_pending_txns.erase(message.destination_channel());
+						  //std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
 					  }
 				  }
 			  }
@@ -349,7 +350,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  else if(result == SUSPENDED){
 			  //LOG(txn->txn_id(), " recon suspend!");
 			  recon_pending_txns[IntToString(txn->txn_id())] = manager;
-			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
 			  continue;
 		  }
 		  else {
@@ -428,6 +428,11 @@ int abort_number = 0;
 	int latency_count = 0;
 	int sample_count = 0;
 
+	int zero_duration = 0;
+	int local_txn_cnt = 0;
+
+	map<TxnProto*, int> unfinished_txns;
+
 	MessageProto restart_msg;
 	restart_msg.set_destination_channel("sequencer");
 	restart_msg.set_destination_node(scheduler->configuration_->this_node_id);
@@ -445,6 +450,8 @@ int abort_number = 0;
     	LOG(done_txn->txn_id(), " unlock txn");
     	scheduler->lock_manager_->Release(done_txn);
     	executing_txns--;
+
+    	unfinished_txns.erase(done_txn);
     	//executing.erase((int)done_txn->txn_id());
 
     	// Must be dependent txn
@@ -508,7 +515,7 @@ int abort_number = 0;
           }
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
-          LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+          //LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
           if (txn->start_time() == 0)
         	  txn->set_start_time(GetUTime());
           batch_offset++;
@@ -529,6 +536,7 @@ int abort_number = 0;
       pending_txns--;
       executing_txns++;
 
+      unfinished_txns[txn] = local_txn_cnt++;
       scheduler->txns_queue->Push(txn);
       //locked.erase((int)txn->txn_id());
       //executing.insert((int)txn->txn_id());
@@ -547,6 +555,22 @@ int abort_number = 0;
                 << pending_txns << " pending \n"
 				<< std::flush;
       // Reset txn count.
+      if (txns == 0)
+    	  ++zero_duration;
+      else
+    	  zero_duration = 0;
+      if(zero_duration >= 20){
+    	  int min_count = 10000000;
+    	  TxnProto* min_txn;
+    	  for(map<TxnProto*, int>::iterator it = unfinished_txns.begin(); it != unfinished_txns.end(); ++it) {
+    		  if(it->second < min_count){
+    			  min_count = it->second;
+    			  min_txn = it->first;
+    		  }
+    	  }
+    	  if (min_txn)
+    		  LOG(min_txn->txn_id(), " is the smallest that was stuck!");
+      }
       scheduler->throughput[test] = (static_cast<double>(txns) / total_time);
       scheduler->abort[test] = abort_number/total_time;
       time = GetTime();
@@ -557,3 +581,4 @@ int abort_number = 0;
   }
   return NULL;
 }
+

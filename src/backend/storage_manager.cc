@@ -93,7 +93,7 @@ void StorageManager::Setup(TxnProto* txn){
 	  if (txn->writers(i) != configuration_->this_node_id) {
 		message.set_destination_node(txn->writers(i));
 		connection_->Send1(message);
-		LOG(txn->txn_id(), " sending read results to "<<txn->writers(i));
+		//LOG(txn->txn_id(), " sending read results to "<<txn->writers(i));
 	  }
 	}
 
@@ -116,6 +116,10 @@ void StorageManager::ApplyChange(){
 		else
 			*objects_[it->first] = it->second;
 	 }
+	for(uint i = 0; i<buffered_modification.size(); ++i)
+		*buffered_modification[i].first = buffered_modification[i].second;
+	for(uint i = 0; i<buffered_delete.size(); ++i)
+		DeleteObject(buffered_delete[i]);
 }
 
 void StorageManager::HandleReadResult(const MessageProto& message) {

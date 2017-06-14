@@ -52,10 +52,13 @@ using std::tr1::unordered_map;
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)
 
-#define try_until(expr)	\
-  while(!(expr)) {\
-	continue;  \
-  }
+#define try_until(expr, retry_cnt)	\
+	retry_cnt = 0; \
+	while(retry_cnt++ <5) {\
+		if(expr) \
+	  	  	  break; \
+	}\
+	if( retry_cnt == 5) return FAILURE;
 
 #define try_until_n(expr, n) \
   n = 0; \

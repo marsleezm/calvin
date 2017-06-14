@@ -29,6 +29,7 @@
 #include "common/types.h"
 
 using std::vector;
+using std::pair;
 using std::tr1::unordered_map;
 //using std::unordered_map;
 
@@ -55,6 +56,12 @@ class StorageManager {
   Value* ReadObject(const Key& key);
   inline void WriteToBuffer(const Key& key, const Value& value){
 	  write_set_[key] = value;
+  }
+  inline void ModifyToBuffer(Value* value_addr, const Value value){
+	  buffered_modification.push_back(make_pair(value_addr, value));
+  }
+  inline void DeleteToBuffer(const Key& key){
+	  buffered_delete.push_back(key);
   }
   bool PutObject(const Key& key, Value* value);
   bool DeleteObject(const Key& key);
@@ -96,6 +103,8 @@ class StorageManager {
   unordered_map<Key, Value> write_set_;
 
   vector<Value*> remote_reads_;
+  vector<pair<Value*, Value>> buffered_modification;
+  vector<Key> buffered_delete;
 
   int got_read_set;
 

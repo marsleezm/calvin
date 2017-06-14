@@ -24,6 +24,7 @@ ReconStorageManager::ReconStorageManager(Configuration* config, Connection* conn
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0){
 	tpcc_args = new TPCCArgs();
+
 	tpcc_args ->ParseFromString(txn->arg());
 	if (txn->multipartition()){
 		message_ = new MessageProto();
@@ -31,8 +32,9 @@ ReconStorageManager::ReconStorageManager(Configuration* config, Connection* conn
 		message_->set_type(MessageProto::RECON_READ_RESULT);
 		connection->LinkChannel(IntToString(txn->txn_id()));
 	}
-	else
+	else{
 		message_ = NULL;
+	}
 }
 
 void ReconStorageManager::Setup(TxnProto* txn){

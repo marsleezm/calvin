@@ -210,6 +210,7 @@ void ConnectionMultiplexer::Run() {
         vector<MessageProto>::iterator i;
         for (i = undelivered_messages_[*new_connection_channel_].begin();
              i != undelivered_messages_[*new_connection_channel_].end(); ++i) {
+        	LOG(-1, " sending undelivered msg: "<<message.type()<<" for "<<message.destination_channel());
           Send(*i);
         }
         undelivered_messages_.erase(*new_connection_channel_);
@@ -256,9 +257,10 @@ void ConnectionMultiplexer::Run() {
      bool got_it = it->second->Pop(&message);
      if (got_it == true) {
        if (message.type() == MessageProto::LINK_CHANNEL) {
+    	   //LOG(-1, " linking channel: "<<message.channel_request());
     	   pthread_mutex_lock(&remote_result_mutex_);
-         remote_result_[message.channel_request()] = remote_result_[it->first];
-         pthread_mutex_unlock(&remote_result_mutex_);
+    	   remote_result_[message.channel_request()] = remote_result_[it->first];
+    	   pthread_mutex_unlock(&remote_result_mutex_);
          // Forward on any messages sent to this channel before it existed.
          vector<MessageProto>::iterator i;
          for (i = undelivered_messages_[message.channel_request()].begin();
@@ -267,10 +269,14 @@ void ConnectionMultiplexer::Run() {
            Send(*i);
          }
          undelivered_messages_.erase(message.channel_request());
-       } else if (message.type() == MessageProto::UNLINK_CHANNEL) {
+       }
+       else if (message.type() == MessageProto::UNLINK_CHANNEL) {
     	   pthread_mutex_lock(&remote_result_mutex_);
-         remote_result_.erase(message.channel_request());
-         pthread_mutex_unlock(&remote_result_mutex_);
+    	   //if(remote_result_[message.channel_request()] == remote_result_[it->first]){
+    	   remote_result_.erase(message.channel_request());
+    	   //}
+		   pthread_mutex_unlock(&remote_result_mutex_);
+		   //LOG(-1, " unlinking channel: "<<message.channel_request()<<" from "<<it->first);
        }
      }
    }
@@ -291,9 +297,13 @@ void ConnectionMultiplexer::Send(const MessageProto& message) {
     if (remote_result_.count(message.destination_channel()) > 0) {
       remote_result_[message.destination_channel()]->Push(message);
       pthread_mutex_unlock(&remote_result_mutex_);
+      if(message.type() == MessageProto::READ_RESULT)
+    	  LOG(-1, " put message into queue: "<<message.type()<<" for "<<message.destination_channel());
     } else {
     	pthread_mutex_unlock(&remote_result_mutex_);
-      undelivered_messages_[message.destination_channel()].push_back(message);
+    	if(message.type() == MessageProto::READ_RESULT)
+    		LOG(-1, " put message into undelivered: "<<message.type()<<" for "<<message.destination_channel());
+    	undelivered_messages_[message.destination_channel()].push_back(message);
     }
   } else if (message.type() == MessageProto::TXN_RESTART) {
     restart_queue->Push(message);
@@ -421,6 +431,7 @@ void Connection::LinkChannel(const string& channel) {
   MessageProto m;
   m.set_type(MessageProto::LINK_CHANNEL);
   m.set_channel_request(channel);
+  //LOG(-1, " calling linking channel for "<<channel<<" to "<<channel_);
   multiplexer()->link_unlink_queue_[channel_]->Push(m);
 }
 
@@ -428,5 +439,6 @@ void Connection::UnlinkChannel(const string& channel) {
   MessageProto m;
   m.set_type(MessageProto::UNLINK_CHANNEL);
   m.set_channel_request(channel);
+  //LOG(-1, " calling unlink channel for "<<channel<<" to "<<channel_);
   multiplexer()->link_unlink_queue_[channel_]->Push(m);
 }
