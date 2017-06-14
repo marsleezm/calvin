@@ -429,7 +429,6 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 	int sample_count = 0;
 
 	int zero_duration = 0;
-	int local_txn_cnt = 0;
 
 	//map<TxnProto*, int> unfinished_txns;
 
