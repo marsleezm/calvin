@@ -270,14 +270,14 @@ void ConnectionMultiplexer::Run() {
          }
          undelivered_messages_.erase(message.channel_request());
        }
-       else if (message.type() == MessageProto::UNLINK_CHANNEL) {
-    	   pthread_mutex_lock(&remote_result_mutex_);
-    	   //if(remote_result_[message.channel_request()] == remote_result_[it->first]){
-    	   remote_result_.erase(message.channel_request());
-    	   //}
-		   pthread_mutex_unlock(&remote_result_mutex_);
-		   //LOG(-1, " unlinking channel: "<<message.channel_request()<<" from "<<it->first);
-       }
+//       else if (message.type() == MessageProto::UNLINK_CHANNEL) {
+//    	   pthread_mutex_lock(&remote_result_mutex_);
+//    	   //if(remote_result_[message.channel_request()] == remote_result_[it->first]){
+//    	   remote_result_.erase(message.channel_request());
+//    	   //}
+//		   pthread_mutex_unlock(&remote_result_mutex_);
+//		   //LOG(-1, " unlinking channel: "<<message.channel_request()<<" from "<<it->first);
+//       }
      }
    }
        
@@ -329,11 +329,11 @@ void ConnectionMultiplexer::Send(const MessageProto& message) {
     } else {
       // Message is addressed to valid remote node. Channel validity will be
       // checked by the remote multiplexer.
-      pthread_mutex_lock(&send_mutex_[message.destination_node()]);  
+      pthread_mutex_lock(&send_mutex_[message.destination_node()]);
       //LOG(0, " trying to send msg "<<message.type()<<", batch is "<<message.batch_number());
       remote_out_[message.destination_node()]->send(msg);
-      pthread_mutex_unlock(&send_mutex_[message.destination_node()]);  
-    } 
+      pthread_mutex_unlock(&send_mutex_[message.destination_node()]);
+    }
   }
 }
 
@@ -436,9 +436,8 @@ void Connection::LinkChannel(const string& channel) {
 }
 
 void Connection::UnlinkChannel(const string& channel) {
-  MessageProto m;
-  m.set_type(MessageProto::UNLINK_CHANNEL);
-  m.set_channel_request(channel);
-  //LOG(-1, " calling unlink channel for "<<channel<<" to "<<channel_);
-  multiplexer()->link_unlink_queue_[channel_]->Push(m);
+	pthread_mutex_lock(&multiplexer_->remote_result_mutex_);
+	if(multiplexer_->remote_result_[channel] == multiplexer_->remote_result_[channel_])
+		multiplexer_->remote_result_.erase(channel);
+ 	pthread_mutex_unlock(&multiplexer_->remote_result_mutex_);
 }
