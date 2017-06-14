@@ -423,15 +423,15 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
   int pending_txns = 0;
   int batch_offset = 0;
   int batch_number = 0;
-int test = 0;
-int abort_number = 0;
+  int test = 0;
+  int abort_number = 0;
 	int latency_count = 0;
 	int sample_count = 0;
 
 	int zero_duration = 0;
 	int local_txn_cnt = 0;
 
-	map<TxnProto*, int> unfinished_txns;
+	//map<TxnProto*, int> unfinished_txns;
 
 	MessageProto restart_msg;
 	restart_msg.set_destination_channel("sequencer");
@@ -451,7 +451,7 @@ int abort_number = 0;
     	scheduler->lock_manager_->Release(done_txn);
     	executing_txns--;
 
-    	unfinished_txns.erase(done_txn);
+    	//unfinished_txns.erase(done_txn);
     	//executing.erase((int)done_txn->txn_id());
 
     	// Must be dependent txn
@@ -536,7 +536,7 @@ int abort_number = 0;
       pending_txns--;
       executing_txns++;
 
-      unfinished_txns[txn] = local_txn_cnt++;
+      //unfinished_txns[txn] = local_txn_cnt++;
       scheduler->txns_queue->Push(txn);
       //locked.erase((int)txn->txn_id());
       //executing.insert((int)txn->txn_id());
@@ -559,18 +559,18 @@ int abort_number = 0;
     	  ++zero_duration;
       else
     	  zero_duration = 0;
-      if(zero_duration >= 20){
-    	  int min_count = 10000000;
-    	  TxnProto* min_txn;
-    	  for(map<TxnProto*, int>::iterator it = unfinished_txns.begin(); it != unfinished_txns.end(); ++it) {
-    		  if(it->second < min_count){
-    			  min_count = it->second;
-    			  min_txn = it->first;
-    		  }
-    	  }
-    	  if (min_txn)
-    		  LOG(min_txn->txn_id(), " is the smallest that was stuck!");
-      }
+      //if(zero_duration >= 20){
+    //	  int min_count = 10000000;
+    //	  TxnProto* min_txn;
+    	  //for(map<TxnProto*, int>::iterator it = unfinished_txns.begin(); it != unfinished_txns.end(); ++it) {
+    	//	  if(it->second < min_count){
+    	//		  min_count = it->second;
+    	//		  min_txn = it->first;
+    	//	  }
+    	 // }
+    	  //if (min_txn)
+    	//	  LOG(min_txn->txn_id(), " is the smallest that was stuck!");
+      //}
       scheduler->throughput[test] = (static_cast<double>(txns) / total_time);
       scheduler->abort[test] = abort_number/total_time;
       time = GetTime();
