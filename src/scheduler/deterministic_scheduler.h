@@ -172,7 +172,7 @@ class DeterministicScheduler : public Scheduler {
   priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* to_sc_txns_[num_threads];
 
   // Transactions that can only resume execution after all its previous txns have been local-committed
-  priority_queue<MyFour<int64_t, int64_t, int, bool>,  vector<MyFour<int64_t, int64_t, int, bool>>, CompareFour>* pending_txns_[num_threads];
+  priority_queue<MyTuple<int64_t, int64_t, int>,  vector<MyTuple<int64_t, int64_t, int>>, CompareTuple>* pending_txns_[num_threads];
 
   int num_suspend[num_threads];
 

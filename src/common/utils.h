@@ -849,10 +849,10 @@ public:
 //    }
 //};
 
-class CompareFour
+class CompareTuple
 {
 public:
-    bool operator() (MyFour<int64_t, int64_t, int, bool> left, MyFour<int64_t, int64_t, int, bool> right)
+    bool operator() (MyTuple<int64_t, int64_t, int> left, MyTuple<int64_t, int64_t, int> right)
     {
     	return (left.second > right.second);
     }
