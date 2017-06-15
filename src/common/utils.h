@@ -889,23 +889,24 @@ public:
     	return (left.second > right.second);
     }
 };
-//class CompareTuple
-//{
-//public:
-//    bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
-//    {
-//    	return (left.first > right.first);
-//    }
-//};
 
-class CompareFour
+class CompareTuple
 {
 public:
-    bool operator() (MyFour<int64_t, int64_t, int, bool> left, MyFour<int64_t, int64_t, int, bool> right)
+    bool operator() (MyTuple<int64_t, int64_t, int> left, MyTuple<int64_t, int64_t, int> right)
     {
     	return (left.second > right.second);
     }
 };
+
+//class CompareFour
+//{
+//public:
+//    bool operator() (MyFour<int64_t, int64_t, int, bool> left, MyFour<int64_t, int64_t, int, bool> right)
+//    {
+//    	return (left.second > right.second);
+//    }
+//};
 
 class DataNode {
 	public:
