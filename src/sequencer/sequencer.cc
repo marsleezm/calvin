@@ -476,13 +476,12 @@ void Sequencer::RunReader() {
 
       // Reset txn count.
       time = now_time;
-	  last_committed = Sequencer::num_lc_txns_;
 	  last_aborted = Sequencer::num_aborted_;
 
       txn_count = 0;
       batch_count = 0;
       num_fetched_this_round = 0;
-      last_committed = Sequencer::num_lc_txns_;
+      last_committed = Sequencer::num_committed;
     }
   }
   Spin(1);
