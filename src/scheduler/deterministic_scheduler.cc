@@ -198,7 +198,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  mgr = active_l_tids[to_sc_txn.second];
 				  AGGRLOG(to_sc_txn.first,  " committed! Num committed txn is "<<Sequencer::num_lc_txns_+1);
 				  ++Sequencer::num_lc_txns_;
-				  if(mgr->get_txn()->writers() == 0 || mgr->get_txn()->writers(0) == this_node)
+				  if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
 					  ++Sequencer::num_committed;
 
 				  if(mgr->ReadOnly())
@@ -534,7 +534,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 
 					// TODO!: can SC here
 					++Sequencer::num_lc_txns_;
-					if(txn->writers() == 0 || txn->writers(0) == this_node)
+					if(txn->writers_size() == 0 || txn->writers(0) == this_node)
 						++Sequencer::num_committed;
 					active_g_tids.erase(txn->txn_id());
 					active_l_tids.erase(txn->local_txn_id());

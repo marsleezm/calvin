@@ -85,6 +85,7 @@ class Sequencer {
 
  public:
   static int64_t num_lc_txns_;
+  static int64_t num_committed;
   //static int64_t num_c_txns_;
   //static int64_t max_commit_ts;
   static atomic<int64_t> num_pend_txns_;
@@ -171,7 +172,6 @@ class Sequencer {
   AtomicQueue<string>* paxos_queues;
 
   int num_queues_;
-  int num_committed = 0;
 
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
   //float dependent_percent = stof(ConfigReader::Value("General", "dependent_percent").c_str());
