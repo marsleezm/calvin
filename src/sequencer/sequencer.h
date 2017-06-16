@@ -171,6 +171,7 @@ class Sequencer {
   AtomicQueue<string>* paxos_queues;
 
   int num_queues_;
+  int num_committed = 0;
 
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
   //float dependent_percent = stof(ConfigReader::Value("General", "dependent_percent").c_str());
