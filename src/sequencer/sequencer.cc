@@ -45,6 +45,7 @@ double scheduler_unlock[SAMPLES];
 #endif
 
 int64_t Sequencer::num_lc_txns_=0;
+int64_t Sequencer::num_committed=0;
 //int64_t Sequencer::max_commit_ts=-1;
 //int64_t Sequencer::num_c_txns_=0;
 atomic<int64_t> Sequencer::num_aborted_(0);
@@ -591,7 +592,7 @@ void Sequencer::RunReader() {
 				<< "txns \n" << std::flush;
 #endif
       std::cout << " Completed " <<
-      		  (static_cast<double>(Sequencer::num_lc_txns_-last_committed) / (now_time- time))
+      		  (static_cast<double>(Sequencer::num_committed-last_committed) / (now_time- time))
       			<< " txns/sec, "
       			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
       			<< " txns/sec aborted, "
@@ -599,32 +600,33 @@ void Sequencer::RunReader() {
       			//<< test<< " for drop speed , "
       			//<< executing_txns << " executing, "
       			<< num_pend_txns_ << " pending, time is "<<second<<"\n" << std::flush;
-      throughput[second] = (Sequencer::num_lc_txns_-last_committed) / (now_time- time);
+      throughput[second] = (Sequencer::num_committed-last_committed) / (now_time- time);
       abort[second] = (Sequencer::num_aborted_-last_aborted) / (now_time- time);
 
       ++second;
-	  if(last_committed && Sequencer::num_lc_txns_-last_committed == 0){
+	  if(last_committed && Sequencer::num_committed-last_committed == 0){
 		  for(int i = 0; i<NUM_THREADS; ++i){
-			  int sc_first = -1, pend_first = -1;
-			  if (scheduler_->to_sc_txns_[i]->size())
-				  sc_first = scheduler_->to_sc_txns_[i]->top().first;
-			  if (scheduler_->pending_txns_[i]->size())
-				  pend_first = scheduler_->pending_txns_[i]->top().first;
-			  std::cout<< " doing nothing, top is "<<sc_first
-				  <<", num committed txn is "<<Sequencer::num_lc_txns_
-				  <<", the first one is "<<pend_first<<std::endl;
+                if (scheduler_->to_sc_txns_[i]->size())
+			        std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
+				    <<", num committed txn is "<<Sequencer::num_committed
+				    <<", waiting queue is"<<std::endl;
+                else
+                    std::cout<< " doing nothing, no top,  num committed txn is "<<Sequencer::num_committed
+                    <<", waiting queue is"<<std::endl;
+
+			  if(scheduler_->pending_txns_[i]->size())
+				  std::cout<<"Pend txn size is "<<scheduler_->pending_txns_[i]->top().second<<"\n";
 		  }
 	  }
 
       // Reset txn count.
       time = now_time;
-	  last_committed = Sequencer::num_lc_txns_;
 	  last_aborted = Sequencer::num_aborted_;
 
       txn_count = 0;
       batch_count = 0;
       num_fetched_this_round = 0;
-      last_committed = Sequencer::num_lc_txns_;
+      last_committed = Sequencer::num_committed;
     }
   }
   Spin(1);

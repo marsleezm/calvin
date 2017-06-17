@@ -93,7 +93,7 @@ class DeterministicScheduler : public Scheduler {
   bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
 		  priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm,
-		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array);
+		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array, int this_node);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
