@@ -46,7 +46,7 @@ using std::tr1::unordered_map;
 using zmq::socket_t;
 using std::map;
 
-
+int64_t DeterministicScheduler::num_lc_txns_(0);
 bool DeterministicScheduler::terminated_(false);
 
 static void DeleteTxnPtr(void* data, void* hint) { free(data); }
@@ -185,6 +185,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   pair<int64, int64>* latency_array = scheduler->latency[thread];
 
   while (!terminated_) {
+<<<<<<< HEAD
 	  if (sc_txn_list[num_lc_txns_%SC_ARRAY_SIZE].first == num_lc_txns_ && pthread_mutex_trylock(&commit_tx_mutex)){
 		  // Try to commit txns one by one
 		  MyTuple<int64_t, int, StorageManager*> to_commit_tx = sc_txn_list[num_lc_txns_%SC_ARRAY_SIZE];
@@ -390,7 +391,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 		  ++out_counter1;
 		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
-		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
+		//		  <<", num committed txn is "<<num_lc_txns_<<std::endl;
 	  }
   }
   return NULL;
@@ -414,7 +415,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			return true;
 		}
 		else{
-			AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<Sequencer::num_lc_txns_);
+			AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_);
 			active_l_tids[txn->local_txn_id()] = manager;
 			//AGGRLOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 			to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
@@ -438,6 +439,8 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			if(txn->local_txn_id() != num_lc_txns_){
 				//if(pending_confirm.size())
 				//	LOG(txn->txn_id(), "before pushing first is "<<pending_confirm.top().second);
+				//pending_confirm.push(MyTuple<int64, int64, int>(txn->txn_id(), txn->local_txn_id(),
+				//	manager->num_restarted_));
 				sc_txn_list[txn->local_txn_id()%SC_ARRAY_SIZE] = MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->num_aborted_, manager);
 				//AGGRLOG(txn->txn_id(), "after pushing first is "<<pending_confirm.top().second);
 				manager->SendLocalReads(false);
@@ -466,7 +469,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			if (num_lc_txns_ == txn->local_txn_id()){
 				int can_commit = manager->CanCommit();
 				if(can_commit == SUCCESS){
-					AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<Sequencer::num_lc_txns_+1);
+					AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<num_lc_txns_+1);
 					manager->ApplyChange(true);
 
 					++num_lc_txns_;
@@ -514,7 +517,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				else
 					sc_txn_list[txn->local_txn_id()%SC_ARRAY_SIZE] = MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), TRY_COMMIT, manager);
 				manager->ApplyChange(false);
-				AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<Sequencer::num_lc_txns_);
+				AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<num_lc_txns_);
 				active_l_tids[txn->local_txn_id()] = manager;
 				//LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 				to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));

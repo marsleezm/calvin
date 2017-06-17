@@ -66,10 +66,13 @@ class DeterministicScheduler : public Scheduler {
   virtual ~DeterministicScheduler();
   void static terminate() { terminated_ = true; }
 
+ public:
+  static int64_t num_lc_txns_;
+
  protected:
   static bool terminated_;
   // Function for starting main loops in a separate pthreads.
-  void* RunWorkerThread(void* arg);
+  static void* RunWorkerThread(void* arg);
 
   inline static void AddLatency(int& sample_count, int& latency_count, pair<int64, int64>* array, TxnProto* txn){
       if (sample_count == SAMPLE_RATE)
