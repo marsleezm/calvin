@@ -174,6 +174,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
   int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
+  int this_node = scheduler->configuration_->this_node_id;
 
   double last_blocked = 0;
   bool if_blocked = false;
@@ -198,6 +199,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  //ASSERT(Sequencer::max_commit_ts < to_sc_txn.first);
 				  //Sequencer::max_commit_ts = to_sc_txn.first;
 				  ++Sequencer::num_lc_txns_;
+				  if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
+					  ++Sequencer::num_committed;
 
 				  if(mgr->ReadOnly())
 					  scheduler->application_->ExecuteReadOnly(mgr);
@@ -234,7 +237,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  LOG(to_wait_txn.first, " is the first, addr is "<<reinterpret_cast<int64>(manager));
 			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
 				  --scheduler->num_suspend[thread];
-				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == false)
+				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node) == false)
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->num_restarted_, manager));
 			  }
 			  else{
@@ -294,7 +297,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  scheduler->num_suspend[thread] -= manager->is_suspended_;
 				  ++Sequencer::num_aborted_;
 				  manager->Abort();
-				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == false)
+				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node) == false)
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_abort_txn.first, manager->num_restarted_, manager));
 			  }
 		  }
@@ -320,7 +323,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  else {
 			  manager->HandleReadResult(message);
 			  TxnProto* txn = manager->txn_;
-			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == false)
+			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node) == false)
 				  retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->num_restarted_, manager));
 		  }
 	  }
@@ -330,7 +333,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if(retry_txns.front().first < Sequencer::num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->num_restarted_)
 			  retry_txns.pop();
 		  else{
-			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == true)
+			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node) == true)
 				  retry_txns.pop();
 			  else{
 				  retry_txns.front().second = retry_txns.front().third->num_restarted_;
@@ -360,7 +363,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager = active_g_tids[txn->txn_id()];
 				  manager->SetupTxn(txn);
 			  }
-			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array) == false)
+			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node) == false)
 				  retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->num_restarted_, manager));
 		  }
 //		  else{
@@ -398,7 +401,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		unordered_map<int64_t, StorageManager*>& active_g_tids, unordered_map<int64_t, StorageManager*>& active_l_tids,
-		int& sample_count, int& latency_count, pair<int64, int64>* latency_array){
+		int& sample_count, int& latency_count, pair<int64, int64>* latency_array, int this_node){
 	TxnProto* txn = manager->get_txn();
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way
 	if(manager->ReadOnly()){
@@ -406,6 +409,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			//ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 			//Sequencer::max_commit_ts = txn->txn_id();
 			++Sequencer::num_lc_txns_;
+			++Sequencer::num_committed;
 			application_->ExecuteReadOnly(manager);
 			AddLatency(sample_count, latency_count, latency_array, txn);
 			delete manager;
@@ -458,6 +462,8 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					manager->ApplyChange(true);
 					//Sequencer::max_commit_ts = txn->txn_id();
 					++Sequencer::num_lc_txns_;
+					if(txn->writers_size() == 0 || txn->writers(0) == this_node)
+						++Sequencer::num_committed;
 					active_g_tids.erase(txn->txn_id());
 					//LOG(txn->local_txn_id(), " is being erased, addr is "<<reinterpret_cast<int64>(manager));
 					active_l_tids.erase(txn->local_txn_id());

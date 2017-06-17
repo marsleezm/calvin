@@ -68,15 +68,6 @@ class DeterministicScheduler : public Scheduler {
   
   static void* LockManagerThread(void* arg);
 
-  inline void CommitSuspendedTxn(int64_t txn_id, unordered_map<int64_t, StorageManager*> active_txns){
-	  //assert(Sequencer::max_commit_ts < txn_id);
-	  //Sequencer::max_commit_ts = txn_id;
-	  ++Sequencer::num_lc_txns_;
-	  --Sequencer::num_sc_txns_;
-	  delete active_txns[txn_id];
-	  active_txns.erase(txn_id);
-  }
-
   inline static void AddLatency(int& sample_count, int& latency_count, pair<int64, int64>* array, TxnProto* txn){
       if (sample_count == SAMPLE_RATE)
       {
@@ -124,7 +115,7 @@ class DeterministicScheduler : public Scheduler {
 
   bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
-		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array);
+		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array, int this_node);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
