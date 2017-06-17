@@ -16,7 +16,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 								 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), message_has_value_(false),
-	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
+	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), suspended_key(""){
 	tpcc_args = new TPCCArgs();
 	txn_ = NULL;
 }
@@ -26,7 +26,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), message_has_value_(false),
-	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_restarted_(0), suspended_key(""){
+	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), suspended_key(""){
 	tpcc_args = new TPCCArgs();
 	tpcc_args ->ParseFromString(txn->arg());
 	if (txn->multipartition()){
@@ -126,7 +126,7 @@ void StorageManager::Abort(){
 	tpcc_args ->ParseFromString(txn_->arg());
 	spec_committed_ = false;
 	max_counter_ = 0;
-	num_restarted_ = abort_bit_;
+	num_aborted_ = abort_bit_;
 }
 
 // If successfully spec-commit, all data are put into the list and all copied data are deleted
@@ -203,7 +203,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 					  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", source node is "<<source_node<<std::endl;
 					  if (source_node == affecting_readers[i]){
 						  ++abort_bit_;
-						  num_restarted_ = abort_bit_;
+						  num_aborted_ = abort_bit_;
 						  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", I am aborted due to read!"<<std::endl;
 						  return ABORT;
 					  }
@@ -216,7 +216,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  if(txn_)
 		  AGGRLOG(txn_->txn_id(), " WTF, I didn't find anyone in the list? Impossible.");
 	  ++abort_bit_;
-	  num_restarted_ = abort_bit_;
+	  num_aborted_ = abort_bit_;
 	  return ABORT;
   }
   else{
@@ -252,7 +252,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 						  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", source node is "<<source_node<<std::endl;
 						  if (source_node == affecting_readers[i]){
 							  ++abort_bit_;
-							  num_restarted_ = abort_bit_;
+							  num_aborted_ = abort_bit_;
 							  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", I am aborted due to read!"<<std::endl;
 							  return ABORT;
 						  }
@@ -271,7 +271,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  if(txn_)
 		  AGGRLOG(txn_->txn_id(), " NOT POSSIBLE! I did not find my entry...");
 	  ++abort_bit_;
-	  num_restarted_ = abort_bit_;
+	  num_aborted_ = abort_bit_;
 	  return ABORT;
   }
 }
@@ -280,7 +280,7 @@ StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
 	if(has_confirmed==false && message_){
 		LOG(txn_->txn_id(), " sending confirm when committing");
-		SendConfirm(num_restarted_);
+		SendConfirm(num_aborted_);
 	}
 	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
@@ -297,10 +297,10 @@ StorageManager::~StorageManager() {
 
 Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) {
 	read_state = NORMAL;
-	if(abort_bit_ > num_restarted_){
-		LOCKLOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
+	if(abort_bit_ > num_aborted_){
+		LOCKLOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_aborted_<<", num aborted is "<<abort_bit_);
 		max_counter_ = 0;
-		num_restarted_ = abort_bit_;
+		num_aborted_ = abort_bit_;
 		read_state = SPECIAL;
 		return reinterpret_cast<Value*>(ABORT);
 	}
@@ -312,11 +312,11 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 			if (read_set_[key].second == NULL){
 				read_set_[key].first = read_set_[key].first | new_obj;
 				ValuePair result = actual_storage_->ReadObject(key, txn_->local_txn_id(), &abort_bit_,
-						num_restarted_, abort_queue_, pend_queue_, new_obj);
-				if(abort_bit_ > num_restarted_){
-					LOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_restarted_<<", num aborted is "<<abort_bit_);
+						num_aborted_, abort_queue_, pend_queue_, new_obj);
+				if(abort_bit_ > num_aborted_){
+					LOG(txn_->txn_id(), " is just aborted!! Num aborted is "<<num_aborted_<<", num aborted is "<<abort_bit_);
 					max_counter_ = 0;
-					num_restarted_ = abort_bit_;
+					num_aborted_ = abort_bit_;
 					read_state = SPECIAL;
 					return reinterpret_cast<Value*>(ABORT);
 				}
@@ -377,10 +377,10 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 
 Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object) {
 	read_state = NORMAL;
-	if(abort_bit_ > num_restarted_){
-		LOCKLOG(txn_->txn_id(), " is just aborted!! Num restarted is "<<num_restarted_<<", abort bit is "<<abort_bit_);
+	if(abort_bit_ > num_aborted_){
+		LOCKLOG(txn_->txn_id(), " is just aborted!! Num restarted is "<<num_aborted_<<", abort bit is "<<abort_bit_);
 		max_counter_ = 0;
-		num_restarted_ = abort_bit_;
+		num_aborted_ = abort_bit_;
 		read_state = SPECIAL;
 		return reinterpret_cast<Value*>(ABORT);
 	}
@@ -400,7 +400,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 			else{
 				// The value has never been read
 				ValuePair result = actual_storage_->ReadLock(key, txn_->local_txn_id(), &abort_bit_,
-									num_restarted_, abort_queue_, pend_queue_, new_object);
+									num_aborted_, abort_queue_, pend_queue_, new_object);
 				if(result.first == SUSPEND){
 					//LOCKLOG(txn_->txn_id(), " suspend when read&lock "<<key<<", exec counter is "<<exec_counter_);
 					read_state = SPECIAL;

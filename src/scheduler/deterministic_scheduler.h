@@ -30,6 +30,9 @@
 
 #define LATENCY_SIZE 2000
 #define SAMPLE_RATE 1000
+#define NUM_SC_TXNS 500
+// Checking the number of pending txns to decide if start a new txn is not totally synchronized, so we allocate a little bit more space
+#define SC_ARRAY_SIZE NUM_SC_TXNS+NUM_THREADS*2
 
 using std::deque;
 
@@ -49,6 +52,8 @@ class Client;
 
 #define TO_SEND true
 #define TO_READ false
+#define NO_TXN -1
+#define TRY_COMMIT -1
 
 // #define PREFETCHING
 
@@ -64,18 +69,7 @@ class DeterministicScheduler : public Scheduler {
  protected:
   static bool terminated_;
   // Function for starting main loops in a separate pthreads.
-  static void* RunWorkerThread(void* arg);
-  
-  static void* LockManagerThread(void* arg);
-
-  inline void CommitSuspendedTxn(int64_t txn_id, unordered_map<int64_t, StorageManager*> active_txns){
-	  //assert(Sequencer::max_commit_ts < txn_id);
-	  //Sequencer::max_commit_ts = txn_id;
-	  ++Sequencer::num_lc_txns_;
-	  --Sequencer::num_sc_txns_;
-	  delete active_txns[txn_id];
-	  active_txns.erase(txn_id);
-  }
+  void* RunWorkerThread(void* arg);
 
   inline static void AddLatency(int& sample_count, int& latency_count, pair<int64, int64>* array, TxnProto* txn){
       if (sample_count == SAMPLE_RATE)
@@ -92,7 +86,6 @@ class DeterministicScheduler : public Scheduler {
 
   bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
-		  priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm>& pending_confirm,
 		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array, int this_node);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
@@ -153,5 +146,9 @@ class DeterministicScheduler : public Scheduler {
   int suspend_block[num_threads];
 
   pair<int64, int64> latency[num_threads][LATENCY_SIZE];
+  MyTuple<int64, int, StorageManager*> sc_txn_list[SC_ARRAY_SIZE];
+  pthread_mutex_t commit_tx_mutex;
+  int64_t num_lc_txns_;
+  atomic<int64_t> latest_started_tx;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

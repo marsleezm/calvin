@@ -65,10 +65,10 @@ class StorageManager {
 	  if(if_confirmed){
 		  has_confirmed = true;
 		  message_->set_confirmed(true);
-		  ASSERT(abort_bit_ == num_restarted_);
+		  ASSERT(abort_bit_ == num_aborted_);
 	  }
-	  LOG(txn_->txn_id(), " sending local message of restarted "<<num_restarted_);
-	  message_->set_num_aborted(num_restarted_);
+	  LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_);
+	  message_->set_num_aborted(num_aborted_);
 //	  for(uint i = 0; i<to_confirm.size(); ++i){
 //		  message_->add_committed_txns(to_confirm[i].first);
 //		  message_->add_final_abort_nums(to_confirm[i].second);
@@ -108,7 +108,7 @@ class StorageManager {
   inline int LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-		if(abort_bit_ == num_restarted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, num_restarted_, abort_queue_)){
+		if(abort_bit_ == num_aborted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, num_aborted_, abort_queue_)){
 			// It should always be a new object
 			ASSERT(read_set_.count(key) == 0);
 			read_set_[key] = ValuePair(NEW_MASK | WRITE, new Value);
@@ -134,11 +134,11 @@ class StorageManager {
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
-	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_restarted_<<", ABit "<<abort_bit_);
+	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_aborted_<<", ABit "<<abort_bit_);
 	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
-	  return num_aborted > num_restarted_ && num_aborted == abort_bit_;}
+	  return num_aborted > num_aborted_ && num_aborted == abort_bit_;}
   inline bool TryToResume(int num_aborted, ValuePair v) {
-	  if(num_aborted == num_restarted_&& num_aborted == abort_bit_){
+	  if(num_aborted == num_aborted_&& num_aborted == abort_bit_){
 		  v.first = v.first | read_set_[suspended_key].first;
 		  read_set_[suspended_key] = v;
 		  return true;
@@ -152,7 +152,7 @@ class StorageManager {
 	  if (ReadOnly())
 		  return SUCCESS;
 	  else{
-		  if(num_restarted_ != abort_bit_)
+		  if(num_aborted_ != abort_bit_)
 			  return ABORT;
 		  else if(spec_committed_ && num_unconfirmed_read == 0)
 			  return SUCCESS;
@@ -161,7 +161,7 @@ class StorageManager {
 	  }
   }
   inline int CanCommit() {
-	  if (num_restarted_ != abort_bit_)
+	  if (num_aborted_ != abort_bit_)
 		  return ABORT;
 	  else if(num_unconfirmed_read == 0)
 		  return SUCCESS;
@@ -301,7 +301,7 @@ class StorageManager {
   bool is_suspended_;
   bool spec_committed_;
   atomic<int> abort_bit_;
-  int num_restarted_;
+  int num_aborted_;
 
   Key suspended_key;
 
