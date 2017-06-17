@@ -61,21 +61,13 @@ class DeterministicScheduler : public Scheduler {
   virtual ~DeterministicScheduler();
   void static terminate() { terminated_ = true; }
 
+ public:
+  static int64_t num_lc_txns_;
+
  protected:
   static bool terminated_;
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
-  
-  static void* LockManagerThread(void* arg);
-
-  inline void CommitSuspendedTxn(int64_t txn_id, unordered_map<int64_t, StorageManager*> active_txns){
-	  //assert(Sequencer::max_commit_ts < txn_id);
-	  //Sequencer::max_commit_ts = txn_id;
-	  ++Sequencer::num_lc_txns_;
-	  --Sequencer::num_sc_txns_;
-	  delete active_txns[txn_id];
-	  active_txns.erase(txn_id);
-  }
 
   inline static void AddLatency(int& sample_count, int& latency_count, pair<int64, int64>* array, TxnProto* txn){
       if (sample_count == SAMPLE_RATE)
