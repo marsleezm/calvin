@@ -44,7 +44,6 @@ double worker_end[SAMPLES];
 double scheduler_unlock[SAMPLES];
 #endif
 
-int64_t Sequencer::num_lc_txns_=0;
 int64_t Sequencer::num_committed=0;
 //int64_t Sequencer::max_commit_ts=-1;
 //int64_t Sequencer::num_c_txns_=0;

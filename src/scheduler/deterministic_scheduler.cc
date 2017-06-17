@@ -46,7 +46,7 @@ using std::tr1::unordered_map;
 using zmq::socket_t;
 using std::map;
 
-
+int64_t DeterministicScheduler::num_lc_txns_(0);
 bool DeterministicScheduler::terminated_(false);
 
 static void DeleteTxnPtr(void* data, void* hint) { free(data); }
@@ -186,7 +186,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  if (!my_to_sc_txns->empty()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
-		  if ( to_sc_txn.second == Sequencer::num_lc_txns_){
+		  if ( to_sc_txn.second == num_lc_txns_){
 			  //AGGRLOG(to_sc_txn.first, " check if can spec-commit transaction");
 			  int can_commit = active_l_tids[to_sc_txn.second]->CanSCToCommit();
 			  if (can_commit == ABORT){
@@ -196,8 +196,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  else if(can_commit == SUCCESS){
 				  mgr = active_l_tids[to_sc_txn.second];
-				  AGGRLOG(to_sc_txn.first,  " committed! Num committed txn is "<<Sequencer::num_lc_txns_+1);
-				  ++Sequencer::num_lc_txns_;
+				  AGGRLOG(to_sc_txn.first,  " committed! Num committed txn is "<<num_lc_txns_+1);
+				  ++num_lc_txns_;
 				  if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
 					  ++Sequencer::num_committed;
 
@@ -220,7 +220,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 			  // Do nothing otherwise
 		  }
-		  else if (to_sc_txn.second < Sequencer::num_lc_txns_)
+		  else if (to_sc_txn.second < num_lc_txns_)
 			  my_to_sc_txns->pop();
 	  }
 
@@ -229,7 +229,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  MyTuple<int64_t, int, ValuePair> to_wait_txn;
 		  waiting_queue.Pop(&to_wait_txn);
 		  AGGRLOG(-1, " In to-suspend, the first one is "<< to_wait_txn.first);
-		  if(to_wait_txn.first >= Sequencer::num_lc_txns_){
+		  if(to_wait_txn.first >= num_lc_txns_){
 			  //AGGRLOG(-1, " To suspending txn is " << to_wait_txn.first);
 			  StorageManager* manager = active_l_tids[to_wait_txn.first];
 			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
@@ -254,7 +254,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
 		  AGGRLOG(-1, "In to-abort, the first one is "<< to_abort_txn.first);
-		  if(to_abort_txn.first >= Sequencer::num_lc_txns_){
+		  if(to_abort_txn.first >= num_lc_txns_){
 			  AGGRLOG(-1, "To abort txn is "<< to_abort_txn.first);
 			  StorageManager* manager = active_l_tids[to_abort_txn.first];
 			  if (manager && manager->ShouldRestart(to_abort_txn.second)){
@@ -320,20 +320,20 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 
 	  if (pending_confirm.size()) {
-		  if(pending_confirm.top().second == Sequencer::num_lc_txns_){
+		  if(pending_confirm.top().second == num_lc_txns_){
 			  AGGRLOG(pending_confirm.top().second, " is the first one in confirm");
 			  active_g_tids[pending_confirm.top().first]->SendConfirm(pending_confirm.top().third);
 			  pending_confirm.pop();
 		  }
-		  else if (pending_confirm.top().second < Sequencer::num_lc_txns_)
+		  else if (pending_confirm.top().second < num_lc_txns_)
 			  pending_confirm.pop();
 	  }
 //	  else{
 //		  if(pending_confirm.size())
-//			  LOG(pending_confirm.top().second, "is the first in confirm, num lc is "<<Sequencer::num_lc_txns_);
+//			  LOG(pending_confirm.top().second, "is the first in confirm, num lc is "<<num_lc_txns_);
 //	  }
 //	  // Try to re-execute pending transactions
-//	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
+//	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == num_lc_txns_){
 //		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 //		  MyTuple<int64_t, int64_t, bool> pend_txn = my_pend_txns->top();
 //
@@ -363,7 +363,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //				  int can_commit = manager->CanCommit();
 //				  if(can_commit == SUCCESS){
 //					  manager->ApplyChange(true);
-//					  ++Sequencer::num_lc_txns_;
+//					  ++num_lc_txns_;
 //					  active_g_tids.erase(pend_txn.first);
 //					  active_l_tids.erase(pend_txn.second);
 //					  delete manager;
@@ -383,7 +383,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  if(retry_txns.size()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  LOG(retry_txns.front().first, " before retrying txn ");
-		  if(retry_txns.front().first < Sequencer::num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->abort_bit_){
+		  if(retry_txns.front().first < num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->abort_bit_){
 			  LOG(retry_txns.front().first, " not retrying it, because restart is "<<retry_txns.front().second<<", aborted is"<<retry_txns.front().third->abort_bit_);
 			  retry_txns.pop();
 		  }
@@ -453,7 +453,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 		  ++out_counter1;
 		  //std::cout<< std::this_thread::get_id()<<" doing nothing, top is "<<my_to_sc_txns->top().first
-		//		  <<", num committed txn is "<<Sequencer::num_lc_txns_<<std::endl;
+		//		  <<", num committed txn is "<<num_lc_txns_<<std::endl;
 	  }
   }
   return NULL;
@@ -467,10 +467,10 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 	// No need to resume if the txn is still suspended
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way
 	if(manager->ReadOnly()){
-		if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
+		if (num_lc_txns_ == txn->local_txn_id()){
 			//ASSERT(Sequencer::max_commit_ts < txn->txn_id());
 			//Sequencer::max_commit_ts = txn->txn_id();
-			++Sequencer::num_lc_txns_;
+			++num_lc_txns_;
 			++Sequencer::num_committed;
 			application_->ExecuteReadOnly(manager);
 			AddLatency(sample_count, latency_count, latency_array, txn);
@@ -478,7 +478,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			return true;
 		}
 		else{
-			AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<Sequencer::num_lc_txns_);
+			AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_);
 			active_l_tids[txn->local_txn_id()] = manager;
 			//AGGRLOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 			to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
@@ -498,7 +498,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			// There are outstanding remote reads.
 			AGGRLOG(txn->txn_id(),  " suspend and sent for remote read");
 			active_g_tids[txn->txn_id()] = manager;
-			if(txn->local_txn_id() != Sequencer::num_lc_txns_){
+			if(txn->local_txn_id() != num_lc_txns_){
 				if(pending_confirm.size())
 					LOG(txn->txn_id(), "before pushing first is "<<pending_confirm.top().second);
 				pending_confirm.push(MyTuple<int64, int64, int>(txn->txn_id(), txn->local_txn_id(),
@@ -527,14 +527,14 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			return false;
 		}
 		else{
-			if (Sequencer::num_lc_txns_ == txn->local_txn_id()){
+			if (num_lc_txns_ == txn->local_txn_id()){
 				int can_commit = manager->CanCommit();
 				if(can_commit == SUCCESS){
-					AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<Sequencer::num_lc_txns_+1);
+					AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<num_lc_txns_+1);
 					manager->ApplyChange(true);
 
 					// TODO!: can SC here
-					++Sequencer::num_lc_txns_;
+					++num_lc_txns_;
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node)
 						++Sequencer::num_committed;
 					active_g_tids.erase(txn->txn_id());
@@ -575,7 +575,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					manager->SendLocalReads(false);
 				}
 				manager->ApplyChange(false);
-				AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<Sequencer::num_lc_txns_);
+				AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<num_lc_txns_);
 				active_l_tids[txn->local_txn_id()] = manager;
 				//LOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 				to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
