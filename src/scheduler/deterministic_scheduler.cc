@@ -78,17 +78,26 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 											   )
     : configuration_(conf), batch_connection_(batch_connection), storage_(storage),
 	   txns_queue_(txns_queue), client_(client), application_(application), queue_mode(mode) {
-  //lock_manager_ = new DeterministicLockManager(configuration_);
-	//to_sc_txns_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t> >[NUM_THREADS];
-	//pending_txns_ = new priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>[NUM_THREADS];
 
-	//pending_reads_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>[NUM_THREADS];
-	//to_sc_txns_ = new pair<int64_t, int32_t>[TO_SC_NUM];
-	//pending_txns_ = new pair<int64_t, int32_t>[PEND_NUM];
+	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
+	message_queues = new AtomicQueue<MessageProto>*[num_threads];
+
+	num_suspend = new int[num_threads];
+	block_time = new double[num_threads];
+	sc_block = new int[num_threads];
+	pend_block = new int[num_threads];
+	suspend_block = new int[num_threads];
+
+	latency = new pair<int64, int64>*[num_threads];
+
+	to_sc_txns_ = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >*[num_threads];
+	threads_ = new pthread_t[num_threads];
+	thread_connections_ = new Connection*[num_threads];
+
 	for (int i = 0; i < num_threads; i++) {
+		latency[i] = new pair<int64, int64>[LATENCY_SIZE];
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
-		pending_txns_[i] = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>();
 		num_suspend[i] = 0;
 
 		block_time[i] = 0;
@@ -98,34 +107,33 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	}
 
 	Spin(2);
-
-	uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
-	sc_txn_list = new MyTuple<int64, int, StorageManager*>[max_sc+2*NUM_THREADS];
-	for(uint i = 0; i< max_sc+2*NUM_THREADS; ++i)
-		sc_txn_list[i] = MyTuple<int64, int, StorageManager*>(NO_TXN, TRY_COMMIT, NULL);
 	pthread_mutex_init(&commit_tx_mutex, NULL);
+	int array_size = atoi(ConfigReader::Value("num_threads").c_str())+num_threads*2;
+	sc_txn_list = new MyTuple<int64_t, int, StorageManager*>[array_size];
+	for( int i = 0; i<array_size; ++i)
+		sc_txn_list[i] = MyTuple<int64_t, int, StorageManager*>(NO_TXN, TRY_COMMIT, NULL);
 
-  // Start all worker threads.
-  for (int i = 0; i < num_threads; i++) {
-    string channel("scheduler");
-    channel.append(IntToString(i));
-    thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
+	  // Start all worker threads.
+	  for (int i = 0; i < num_threads; i++) {
+	    string channel("scheduler");
+	    channel.append(IntToString(i));
+	    thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
-    for (int j = 0; j<LATENCY_SIZE; ++j)
-    	latency[i][j] = make_pair(0, 0);
+	    for (int j = 0; j<LATENCY_SIZE; ++j)
+	    	latency[i][j] = make_pair(0, 0);
 
-    cpu_set_t cpuset;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    CPU_ZERO(&cpuset);
-    CPU_SET(i+3, &cpuset);
-    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
-    std::cout << "Worker thread #"<<i<<" starts at core "<<i+3<<std::endl;
+	    cpu_set_t cpuset;
+	    pthread_attr_t attr;
+	    pthread_attr_init(&attr);
+	    CPU_ZERO(&cpuset);
+	    CPU_SET(i+3, &cpuset);
+	    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
+	    std::cout << "Worker thread #"<<i<<" starts at core "<<i+3<<std::endl;
 
-    pthread_create(&(threads_[i]), &attr, RunWorkerThread,
-                   reinterpret_cast<void*>(
-                   new pair<int, DeterministicScheduler*>(i, this)));
-  }
+	    pthread_create(&(threads_[i]), &attr, RunWorkerThread,
+	                   reinterpret_cast<void*>(
+	                   new pair<int, DeterministicScheduler*>(i, this)));
+	}
 }
 
 //void UnfetchAll(Storage* storage, TxnProto* txn) {
@@ -179,7 +187,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   //uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
   int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
-  int sc_array_size = max_sc + 2*NUM_THREADS;
+  int sc_array_size = max_sc + 2*scheduler->num_threads;
 
   double last_blocked = 0;
   bool if_blocked = false;
@@ -564,7 +572,7 @@ DeterministicScheduler::~DeterministicScheduler() {
 		total_pend_block += pend_block[i];
 		total_suspend_block += suspend_block[i];
 		delete to_sc_txns_[i];
-		delete pending_txns_[i];
+		//delete pending_txns_[i];
 		delete thread_connections_[i];
 	}
 	std::cout<<" Scheduler done, total block time is "<<total_block/1e6<<std::endl;

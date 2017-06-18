@@ -241,7 +241,7 @@ int main(int argc, char** argv) {
 	std::cout<<"	Distribute txn percent: "<<ConfigReader::Value("distribute_percent")<<std::endl;
 	std::cout<<"	Dependent txn percent: "<<ConfigReader::Value("dependent_percent")<<std::endl;
 	std::cout<<"	Max batch size: "<<ConfigReader::Value("max_batch_size")<<std::endl;
-	std::cout<<"	Num of threads: "<<NUM_THREADS<<std::endl;
+	std::cout<<"	Num of threads: "<<ConfigReader::Value("num_threads")<<std::endl;
 
 	if (argv[2][0] == 'm') {
 		std::cout<<"Micro benchmark. Parameters: "<<std::endl;
