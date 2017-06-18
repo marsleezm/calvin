@@ -52,6 +52,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 void StorageManager::SendConfirm(int last_restarted){
 	// Is multi-part transactions
 	if(last_restarted == abort_bit_){
+		LOG(txn_->txn_id(), " trying to send confirm, last restarted is "<<last_restarted<<", abort bit is "<<abort_bit_);
 		ASSERT(has_confirmed == false);
 		has_confirmed = true;
 		MessageProto msg;
@@ -59,6 +60,7 @@ void StorageManager::SendConfirm(int last_restarted){
 		msg.set_destination_channel(IntToString(txn_->txn_id()));
 		msg.set_num_aborted(last_restarted);
 		msg.set_source_node(configuration_->this_node_id);
+		msg.set_source_channel(txn_->txn_id());
 		AGGRLOG(txn_->txn_id(), " sent confirm");
 		for (int i = 0; i < txn_->writers().size(); i++) {
 			if (txn_->writers(i) != configuration_->this_node_id) {

@@ -47,6 +47,7 @@ using zmq::socket_t;
 using std::map;
 
 int64_t DeterministicScheduler::num_lc_txns_(0);
+atomic<int64_t> DeterministicScheduler::latest_started_tx(-1);
 bool DeterministicScheduler::terminated_(false);
 
 static void DeleteTxnPtr(void* data, void* hint) { free(data); }
@@ -76,7 +77,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 											   int mode
 											   )
     : configuration_(conf), batch_connection_(batch_connection), storage_(storage),
-	   txns_queue_(txns_queue), client_(client), application_(application), queue_mode(mode), num_lc_txns_(0), latest_started_tx(-1) {
+	   txns_queue_(txns_queue), client_(client), application_(application), queue_mode(mode) {
   //lock_manager_ = new DeterministicLockManager(configuration_);
 	//to_sc_txns_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t> >[NUM_THREADS];
 	//pending_txns_ = new priority_queue<pair<int64_t, bool>,  vector<pair<int64_t, bool> >, Compare>[NUM_THREADS];
@@ -99,7 +100,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	Spin(2);
 
 	for(int i = 0; i< SC_ARRAY_SIZE; ++i)
-		sc_txn_list[i] = MyTuple<int64, int, StorageManager>(NO_TXN, TRY_COMMIT, NULL);
+		sc_txn_list[i] = MyTuple<int64, int, StorageManager*>(NO_TXN, TRY_COMMIT, NULL);
 	pthread_mutex_init(&commit_tx_mutex, NULL);
 
   // Start all worker threads.
@@ -170,7 +171,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   priority_queue<MyTuple<int64, int64, int>, vector<MyTuple<int64, int64, int>>, ComparePendingConfirm> pending_confirm;
   //vector<pair<int64, int>> to_confirm;
 
-  StorageManager *mgr = NULL;
   queue<MyTuple<int64, int, StorageManager*>> retry_txns;
   int this_node = scheduler->configuration_->this_node_id;
 
@@ -185,30 +185,40 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   pair<int64, int64>* latency_array = scheduler->latency[thread];
 
   while (!terminated_) {
-<<<<<<< HEAD
-	  if (sc_txn_list[num_lc_txns_%SC_ARRAY_SIZE].first == num_lc_txns_ && pthread_mutex_trylock(&commit_tx_mutex)){
+	  if (scheduler->sc_txn_list[num_lc_txns_%SC_ARRAY_SIZE].first == num_lc_txns_ && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
 		  // Try to commit txns one by one
-		  MyTuple<int64_t, int, StorageManager*> to_commit_tx = sc_txn_list[num_lc_txns_%SC_ARRAY_SIZE];
+		  MyTuple<int64_t, int, StorageManager*> to_commit_tx = scheduler->sc_txn_list[num_lc_txns_%SC_ARRAY_SIZE];
+		  LOG(-1, " num lc is "<<num_lc_txns_<<", location is "<<num_lc_txns_%SC_ARRAY_SIZE<<", "<<
+				  to_commit_tx.first<<"is the first one in queue, status is "<<to_commit_tx.second);
 		  while(true){
 			  // -1 means this txn should be committed; otherwise, it is the last_restarted number of the txn, which wishes to send confirm
-			  if(to_commit_tx == num_lc_txns_){
-				  if (to_commit_tx.second != TRY_COMMIT)
-					  to_commit_tx.third->SendConfirm(to_commit_tx.second);
-				  if(to_commit_tx.third->CanSCToCommit()){
+			  if(to_commit_tx.first == num_lc_txns_){
+				  StorageManager* mgr = to_commit_tx.third;
+				  if (to_commit_tx.second != TRY_COMMIT){
+					  LOG(to_commit_tx.first, " trying to send confirm for him, second is "<<to_commit_tx.second);
+					  mgr->SendConfirm(to_commit_tx.second);
+					  LOG(to_commit_tx.first, " sent, setting value to "<<TRY_COMMIT);
+					  scheduler->sc_txn_list[num_lc_txns_%SC_ARRAY_SIZE].second = TRY_COMMIT;
+				  }
+				  if(mgr->CanSCToCommit() == SUCCESS){
 					  ++num_lc_txns_;
+					  LOG(to_commit_tx.first, " committed");
 					  if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
 						  ++Sequencer::num_committed;
 				  }
-				  else{
-					  to_commit_tx.first = NO_TXN;
+				  else
 					  break;
-				  }
 			  }
 			  else
 				  break;
 		  }
-		  pthread_mutex_unlock(&commit_tx_mutex);
+		  LOG(to_commit_tx.first, " exited lock.");
+		  pthread_mutex_unlock(&scheduler->commit_tx_mutex);
 	  }
+	  //else{
+	//	  LOG(scheduler->sc_txn_list[num_lc_txns_%SC_ARRAY_SIZE].first, " is the first one in queue, num_lc_txns are "<<num_lc_txns_<<", "
+	//			  "sc array size is "<<SC_ARRAY_SIZE);
+	 // }
 
 	  while (!my_to_sc_txns->empty()){
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
@@ -250,6 +260,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node) == false){
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->num_aborted_, manager));
 					  --scheduler->num_suspend[thread];
+				  }
 				  //AGGRLOG(to_wait_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
 			  }
 			  else{
@@ -328,7 +339,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	      }
 	      else if(message.type() == MessageProto::READ_CONFIRM){
 	    	  //AGGRLOG(StringToInt(message.destination_channel()), "I got read confirm");
-	    	  StorageManager* manager =  active_g_tids[atoi(message.destination_channel().c_str())];
+	    	  StorageManager* manager = active_g_tids[atoi(message.destination_channel().c_str())];
 	    	  manager->AddReadConfirm(message.source_node(), message.num_aborted());
 	      }
 	  }
@@ -351,6 +362,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // Try to start a new transaction
 	  else if (latest_started_tx - num_lc_txns_ < NUM_SC_TXNS){ // && scheduler->num_suspend[thread]<=max_suspend) {
+		  //LOG(-1, " lastest is "<<latest_started_tx<<", num_lc_txns_ is "<<num_lc_txns_<<", diff is "<<latest_started_tx-num_lc_txns_);
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
@@ -362,6 +374,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if (got_it == true) {
 			  txn->set_start_time(GetUTime());
 			  latest_started_tx = txn->local_txn_id();
+			  //LOG(-1, " started tx id is "<<latest_started_tx);
 			  // Create manager.
 			  StorageManager* manager;
 			  if (active_g_tids.count(txn->txn_id()) == 0)
@@ -506,16 +519,21 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				}
 			}
 			else{
-				//AGGRLOG(txn->txn_id(),  " spec-committing");
+				LOG(txn->txn_id(),  " spec-committing");
 				if (manager->message_has_value_){
 					//pending_confirm.push(MyTuple<int64, int64, int>(txn->txn_id(), txn->local_txn_id(),
 					//	manager->num_aborted_));
 					sc_txn_list[txn->local_txn_id()%SC_ARRAY_SIZE] = MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->num_aborted_, manager);
 					//AGGRLOG(txn->txn_id(),  " just pushed, now first queue is "<<pending_confirm.top().second);
+					LOG(txn->local_txn_id(), " is added to sc list");
 					manager->SendLocalReads(false);
 				}
-				else
+				else{
+					LOG(-1, " before adding "<<txn->local_txn_id()<<", org local is "<<sc_txn_list[txn->local_txn_id()%SC_ARRAY_SIZE].first<<", num loc is "<<num_lc_txns_);
+					LOG(txn->local_txn_id(), "s reminder is  "<<txn->local_txn_id()%SC_ARRAY_SIZE<<", org reminder is "<<sc_txn_list[txn->local_txn_id()%SC_ARRAY_SIZE].first%SC_ARRAY_SIZE<<", size is "<<SC_ARRAY_SIZE);
 					sc_txn_list[txn->local_txn_id()%SC_ARRAY_SIZE] = MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), TRY_COMMIT, manager);
+					LOG(txn->local_txn_id(), " is added to sc list");
+				}
 				manager->ApplyChange(false);
 				AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<num_lc_txns_);
 				active_l_tids[txn->local_txn_id()] = manager;
