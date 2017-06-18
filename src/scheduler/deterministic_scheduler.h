@@ -30,9 +30,9 @@
 
 #define LATENCY_SIZE 2000
 #define SAMPLE_RATE 1000
-#define NUM_SC_TXNS 1000
+//#define NUM_SC_TXNS 1000
 // Checking the number of pending txns to decide if start a new txn is not totally synchronized, so we allocate a little bit more space
-#define SC_ARRAY_SIZE (NUM_SC_TXNS+NUM_THREADS*2)
+//#define SC_ARRAY_SIZE (NUM_SC_TXNS+NUM_THREADS*2)
 
 using std::deque;
 
@@ -90,7 +90,7 @@ class DeterministicScheduler : public Scheduler {
 
   bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
-		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array, int this_node);
+		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array, int this_node, int sc_array_size);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
@@ -150,7 +150,7 @@ class DeterministicScheduler : public Scheduler {
   int suspend_block[num_threads];
 
   pair<int64, int64> latency[num_threads][LATENCY_SIZE];
-  MyTuple<int64, int, StorageManager*> sc_txn_list[SC_ARRAY_SIZE];
+  MyTuple<int64, int, StorageManager*>* sc_txn_list;
   pthread_mutex_t commit_tx_mutex;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_
