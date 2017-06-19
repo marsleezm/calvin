@@ -72,7 +72,6 @@ class Sequencer {
 
   // Get the transaction queue
   inline AtomicQueue<TxnProto*>* GetTxnsQueue(){
-	  std::cout<<"Getting txns queue, queue addr is "<<txns_queue_<<std::endl;
 	  return txns_queue_;
   }
 

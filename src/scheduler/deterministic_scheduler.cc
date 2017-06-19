@@ -108,7 +108,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
 
 	pthread_mutex_init(&commit_tx_mutex, NULL);
-	int array_size = atoi(ConfigReader::Value("num_threads").c_str())+num_threads*2;
+	int array_size = atoi(ConfigReader::Value("max_sc").c_str())+num_threads*2;
 	sc_txn_list = new MyTuple<int64_t, int, StorageManager*>[array_size];
 	for( int i = 0; i<array_size; ++i)
 		sc_txn_list[i] = MyTuple<int64_t, int, StorageManager*>(NO_TXN, TRY_COMMIT, NULL);
@@ -187,8 +187,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   //uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
   //int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
-  int num_threads = scheduler->num_threads;
-  int sc_array_size = max_sc + 2*num_threads;
+  int sc_array_size = max_sc + 2*scheduler->num_threads;
 
   double last_blocked = 0;
   bool if_blocked = false;
@@ -380,7 +379,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
-		  std::cout<<"Txns queue addr is "<<scheduler->txns_queue_<<std::endl;
 		  got_it = scheduler->txns_queue_->Pop(&txn);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
 		  //LOCKLOG(txn->txn_id(), " before starting txn ");
