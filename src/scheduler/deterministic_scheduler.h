@@ -99,7 +99,6 @@ class DeterministicScheduler : public Scheduler {
   // Configuration specifying node & system settings.
   Configuration* configuration_;
 
-  int num_threads;
   //int num_threads = 5;
   // Thread contexts and their associated Connection objects.
   pthread_t* threads_;
@@ -139,14 +138,6 @@ class DeterministicScheduler : public Scheduler {
   priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >** to_sc_txns_;
 
   // Transactions that can only resume execution after all its previous txns have been local-committed
-<<<<<<< HEAD
-  priority_queue<MyTuple<int64_t, int64_t, int>,  vector<MyTuple<int64_t, int64_t, int>>, CompareTuple>** pending_txns_;
-
-  int* num_suspend;
-=======
-  priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>** pending_txns_;
-
->>>>>>> spec_calvin_aggr_fast_test
 
   AtomicQueue<MessageProto>** message_queues;
 
@@ -155,11 +146,7 @@ class DeterministicScheduler : public Scheduler {
   int* pend_block;
   int* suspend_block;
 
-<<<<<<< HEAD
-pair<int64, int64>** latency;
-=======
   pair<int64, int64>** latency;
->>>>>>> spec_calvin_aggr_fast_test
   MyTuple<int64, int, StorageManager*>* sc_txn_list;
   pthread_mutex_t commit_tx_mutex;
 };

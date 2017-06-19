@@ -80,11 +80,8 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	pthread_mutex_init(&mutex_, NULL);
 	// Start Sequencer main loops running in background thread.
-	if (queue_mode == FROM_SEQ_DIST)
-		txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
-	else{
-		txns_queue_ = new AtomicQueue<TxnProto*>();
-	}
+	txns_queue_ = new AtomicQueue<TxnProto*>();
+
 	paxos_queues = new AtomicQueue<string>();
 
 	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
@@ -470,8 +467,8 @@ void Sequencer::RunReader() {
                     std::cout<< " doing nothing, no top,  num committed txn is "<<Sequencer::num_committed
                     <<", waiting queue is"<<std::endl;
 
-			  if(scheduler_->pending_txns_[i]->size())
-				  std::cout<<"Pend txn size is "<<scheduler_->pending_txns_[i]->top().second<<"\n";
+			  //if(scheduler_->pending_txns_[i]->size())
+			//	  std::cout<<"Pend txn size is "<<scheduler_->pending_txns_[i]->top().second<<"\n";
 		  }
 	  }
 

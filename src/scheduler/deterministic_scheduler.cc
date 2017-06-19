@@ -80,7 +80,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	   txns_queue_(txns_queue), client_(client), application_(application), queue_mode(mode) {
 
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
-	message_queues = new AtomicQueue<MessageProto>*[num_threads];
 
 	block_time = new double[num_threads];
 	sc_block = new int[num_threads];
@@ -91,7 +90,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	latency = new pair<int64, int64>*[num_threads];
 
 	to_sc_txns_ = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >*[num_threads];
-	pending_txns_ = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>*[num_threads];
 	threads_ = new pthread_t[num_threads];
 	thread_connections_ = new Connection*[num_threads];
 
@@ -99,7 +97,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 		latency[i] = new pair<int64, int64>[LATENCY_SIZE];
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
-		pending_txns_[i] = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>();
 
 		block_time[i] = 0;
 		sc_block[i] = 0;
@@ -383,6 +380,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
+		  std::cout<<"Txns queue addr is "<<scheduler->txns_queue_<<std::endl;
 		  got_it = scheduler->txns_queue_->Pop(&txn);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
 		  //LOCKLOG(txn->txn_id(), " before starting txn ");
