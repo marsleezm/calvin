@@ -99,11 +99,10 @@ class DeterministicScheduler : public Scheduler {
   // Configuration specifying node & system settings.
   Configuration* configuration_;
 
-  const static int num_threads = NUM_THREADS;
   //int num_threads = 5;
   // Thread contexts and their associated Connection objects.
-  pthread_t threads_[num_threads];
-  Connection* thread_connections_[num_threads];
+  pthread_t* threads_;
+  Connection** thread_connections_;
 
   //pthread_t lock_manager_thread_;
   // Connection for receiving txn batches from sequencer.
@@ -133,23 +132,23 @@ class DeterministicScheduler : public Scheduler {
 //  socket_t* responses_out_[NUM_THREADS];
 //  socket_t* responses_in_;
   // The queue of fetched transactions
+  int num_threads;
 
   // Transactions that can be committed if all its previous txns have been local-committed
-  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* to_sc_txns_[num_threads];
+  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >** to_sc_txns_;
 
   // Transactions that can only resume execution after all its previous txns have been local-committed
-  priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>* pending_txns_[num_threads];
+  priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>** pending_txns_;
 
-  int num_suspend[num_threads];
 
-  AtomicQueue<MessageProto>* message_queues[num_threads];
+  AtomicQueue<MessageProto>** message_queues;
 
-  double block_time[num_threads];
-  int sc_block[num_threads];
-  int pend_block[num_threads];
-  int suspend_block[num_threads];
+  double* block_time;
+  int* sc_block;
+  int* pend_block;
+  int* suspend_block;
 
-  pair<int64, int64> latency[num_threads][LATENCY_SIZE];
+  pair<int64, int64>** latency;
   MyTuple<int64, int, StorageManager*>* sc_txn_list;
   pthread_mutex_t commit_tx_mutex;
 };

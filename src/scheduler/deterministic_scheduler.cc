@@ -85,11 +85,27 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	//pending_reads_ = new priority_queue<int64_t,  vector<int64_t>, std::greater<int64_t>>[NUM_THREADS];
 	//to_sc_txns_ = new pair<int64_t, int32_t>[TO_SC_NUM];
 	//pending_txns_ = new pair<int64_t, int32_t>[PEND_NUM];
+	uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
+	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
+
+	block_time = new double[num_threads];
+	sc_block = new int[num_threads];
+	pend_block = new int[num_threads];
+	suspend_block = new int[num_threads];
+	message_queues = new AtomicQueue<MessageProto>*[num_threads];
+
+	latency = new pair<int64, int64>*[num_threads];
+
+	to_sc_txns_ = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >*[num_threads];
+	pending_txns_ = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>*[num_threads];
+	threads_ = new pthread_t[num_threads];
+	thread_connections_ = new Connection*[num_threads];
+
 	for (int i = 0; i < num_threads; i++) {
+		latency[i] = new pair<int64, int64>[LATENCY_SIZE];
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >();
 		pending_txns_[i] = new priority_queue<MyTuple<int64_t, int64_t, bool>,  vector<MyTuple<int64_t, int64_t, bool> >, CompareTuple>();
-		num_suspend[i] = 0;
 
 		block_time[i] = 0;
 		sc_block[i] = 0;
@@ -99,9 +115,9 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
 	Spin(2);
 
-	uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
-	sc_txn_list = new MyTuple<int64, int, StorageManager*>[max_sc+2*NUM_THREADS];
-	for(uint i = 0; i< max_sc+2*NUM_THREADS; ++i)
+
+	sc_txn_list = new MyTuple<int64, int, StorageManager*>[max_sc+2*num_threads];
+	for(uint i = 0; i< max_sc+2*num_threads; ++i)
 		sc_txn_list[i] = MyTuple<int64, int, StorageManager*>(NO_TXN, TRY_COMMIT, NULL);
 	pthread_mutex_init(&commit_tx_mutex, NULL);
 
@@ -177,9 +193,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   int this_node = scheduler->configuration_->this_node_id;
 
   //uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
-  int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
+  //int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
-  int sc_array_size = max_sc + 2*NUM_THREADS;
+  int num_threads = scheduler->num_threads;
+  int sc_array_size = max_sc + 2*num_threads;
 
   double last_blocked = 0;
   bool if_blocked = false;
@@ -263,7 +280,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node
 						  ,sc_array_size) == false){
 					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->num_aborted_, manager));
-					  --scheduler->num_suspend[thread];
+					  //--scheduler->num_suspend[thread];
 				  }
 				  //AGGRLOG(to_wait_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
 			  }
@@ -287,7 +304,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  AGGRLOG(-1, "To abort txn is "<< to_abort_txn.first);
 			  StorageManager* manager = active_l_tids[to_abort_txn.first];
 			  if (manager && manager->ShouldRestart(to_abort_txn.second)){
-				  scheduler->num_suspend[thread] -= manager->is_suspended_;
+				  //scheduler->num_suspend[thread] -= manager->is_suspended_;
 				  ++Sequencer::num_aborted_;
 				  manager->Abort();
 				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node, sc_array_size) == false){
@@ -397,11 +414,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  else{
 		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, false,
-				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+				  0, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
 
 		  if(out_counter1 & 67108864){
 			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<
-					  ", num suspend is "<<scheduler->num_suspend[thread]);
+					  ", num suspend is "<<0);
 			  if(my_to_sc_txns->size())
 				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
 			  out_counter1 = 0;
@@ -446,7 +463,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 		if (result == SUSPEND){
 			AGGRLOG(txn->txn_id(),  " suspended");
 			active_l_tids[txn->local_txn_id()] = manager;
-			++num_suspend[thread];
+			//++num_suspend[thread];
 			return true;
 		}
 		else if (result == SUSPEND_SHOULD_SEND){
