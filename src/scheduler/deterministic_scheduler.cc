@@ -186,13 +186,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   int out_counter1 = 0;
   int sample_count = 0, latency_count = 0;
   pair<int64, int64>* latency_array = scheduler->latency[thread];
+  int64_t prev_txn = 0, prev_prev_txn = 0;
 
   while (!terminated_) {
 	  if (scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
 		  // Try to commit txns one by one
 		  MyTuple<int64_t, int, StorageManager*> to_commit_tx = scheduler->sc_txn_list[num_lc_txns_%sc_array_size];
-		  LOG(-1, " num lc is "<<num_lc_txns_<<", location is "<<num_lc_txns_%sc_array_size<<", "<<
+		  if(! (to_commit_tx.first == prev_txn && prev_txn == prev_prev_txn))
+			  LOG(-1, " num lc is "<<num_lc_txns_<<", location is "<<num_lc_txns_%sc_array_size<<", "<<
 				  to_commit_tx.first<<"is the first one in queue, status is "<<to_commit_tx.second);
+		  prev_prev_txn = prev_txn;
+		  prev_txn = to_commit_tx.first;
 		  while(true){
 			  // -1 means this txn should be committed; otherwise, it is the last_restarted number of the txn, which wishes to send confirm
 			  if(to_commit_tx.first == num_lc_txns_){
