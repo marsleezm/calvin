@@ -230,7 +230,7 @@ class StorageManager {
   inline void AddReadConfirm(int node_id, int num_aborted){
 	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
 		  if(latest_aborted_num[i].first == node_id){
-			  if(latest_aborted_num[i].second == num_aborted) {
+			  if(latest_aborted_num[i].second == num_aborted || num_aborted == 0) {
 				  --num_unconfirmed_read;
 				  AGGRLOG(txn_->txn_id(), "done confirming read from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
 			  }
