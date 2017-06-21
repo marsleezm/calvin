@@ -225,6 +225,8 @@ class StorageManager {
 
   inline TxnProto* get_txn(){ return txn_; }
   inline TPCCArgs* get_args() { return tpcc_args;}
+  inline void put_inlist() { in_list = true; }
+  inline bool if_inlist() { return in_list;}
 
   void Abort();
   void ApplyChange(bool is_committing);
@@ -232,7 +234,7 @@ class StorageManager {
   inline void AddReadConfirm(int node_id, int num_aborted){
 	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
 		  if(latest_aborted_num[i].first == node_id){
-			  if(latest_aborted_num[i].second == num_aborted) {
+			  if(latest_aborted_num[i].second == num_aborted || num_aborted == 0) {
 				  --num_unconfirmed_read;
 				  AGGRLOG(txn_->txn_id(), "done confirming read from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
 			  }
@@ -309,6 +311,7 @@ class StorageManager {
 
   /****** For statistics ********/
   bool has_confirmed = false;
+  bool in_list = false;
 };
 
 #endif  // _DB_BACKEND_STORAGE_MANAGER_H_
