@@ -193,7 +193,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  // Try to commit txns one by one
 		  MyTuple<int64_t, int, StorageManager*> to_commit_tx = scheduler->sc_txn_list[num_lc_txns_%sc_array_size];
 		  if(! (to_commit_tx.first == prev_txn && prev_txn == prev_prev_txn))
-			  LOG(-1, " num lc is "<<num_lc_txns_<<", location is "<<num_lc_txns_%sc_array_size<<", "<<
+			  LOG(-1, " num lc is "<<num_lc_txns_<<", prev txn is  "<<prev_txn<<", prev prev is "<<prev_prev_txn<<", "<<
 				  to_commit_tx.first<<"is the first one in queue, status is "<<to_commit_tx.second);
 		  prev_prev_txn = prev_txn;
 		  prev_txn = to_commit_tx.first;
