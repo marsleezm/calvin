@@ -43,12 +43,11 @@ double worker_end[SAMPLES];
 double scheduler_unlock[SAMPLES];
 #endif
 
-int64_t Sequencer::num_committed=0;
+atomic<int64_t> Sequencer::num_committed(0);
 //int64_t Sequencer::max_commit_ts=-1;
 //int64_t Sequencer::num_c_txns_=0;
 atomic<int64_t> Sequencer::num_aborted_(0);
 atomic<int64_t> Sequencer::num_pend_txns_(0);
-atomic<int64_t> Sequencer::num_sc_txns_(0);
 
 void* Sequencer::RunSequencerWriter(void *arg) {
   reinterpret_cast<Sequencer*>(arg)->RunWriter();
@@ -449,7 +448,6 @@ void Sequencer::RunReader() {
       			<< " txns/sec, "
       			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
       			<< " txns/sec aborted, "
-      			<< num_sc_txns_ << " spec-committed, "
       			//<< test<< " for drop speed , "
       			//<< executing_txns << " executing, "
       			<< num_pend_txns_ << " pending, time is "<<second<<"\n" << std::flush;
@@ -502,7 +500,6 @@ void Sequencer::RunLoader(){
 			<< " txns/sec, "
 			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
 			<< " txns/sec aborted, "
-			<< num_sc_txns_ << " spec-committed, "
 			//<< test<< " for drop speed , "
 			//<< executing_txns << " executing, "
 			<< num_pend_txns_ << " pending\n" << std::flush;
