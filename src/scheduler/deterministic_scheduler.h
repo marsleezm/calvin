@@ -88,6 +88,12 @@ class DeterministicScheduler : public Scheduler {
       ++sample_count;
   }
 
+  inline void put_to_sclist(MyTuple<int64, int, StorageManager*>& loc, int64_t tx_id, int sign, StorageManager* mgr){
+	  loc.third = mgr;
+	  loc.second = sign;
+	  loc.first = tx_id;
+  }
+
   bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
 		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array, int this_node, int sc_array_size);
