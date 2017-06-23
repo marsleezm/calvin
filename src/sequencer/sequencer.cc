@@ -566,7 +566,8 @@ void Sequencer::output(DeterministicScheduler* scheduler){
     myfile << "LATENCY" << '\n';
     count = 0;
 	while(scheduler->latency[count].first != 0 && count < LATENCY_SIZE){
-		myfile << scheduler->latency[count].first<<", "<<scheduler->latency[count].second << '\n';
+		myfile << scheduler->latency[count].first<<", "<<scheduler->latency[count].second
+				<<", "<<scheduler->latency[count].third<< '\n';
 		++count;
 	}
     myfile.close();

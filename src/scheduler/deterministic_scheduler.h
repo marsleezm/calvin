@@ -14,8 +14,8 @@
 #include <pthread.h>
 
 #include <deque>
-#define LATENCY_SIZE 2000
-#define SAMPLE_RATE 200
+#define LATENCY_SIZE 10000
+#define SAMPLE_RATE 50
 #define THROUGHPUT_SIZE 500
 
 #include "scheduler/scheduler.h"
@@ -128,7 +128,7 @@ class DeterministicScheduler : public Scheduler {
 
   public:
   	  bool deconstructor_invoked_ = false;
-  	  pair<int64, int64>* latency;
+  	  MyTuple<int, int64, int64>* latency;
       double throughput[THROUGHPUT_SIZE];
       double abort[THROUGHPUT_SIZE];
 

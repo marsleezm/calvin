@@ -101,6 +101,7 @@ struct Status {
   }
 };
 
+
 // Returns the number of seconds since midnight according to local system time,
 // to the nearest microsecond.
 static inline double GetTime() {
@@ -339,6 +340,22 @@ class ReadLock {
   // DISALLOW_COPY_AND_ASSIGN
   ReadLock(const ReadLock&);
   ReadLock& operator=(const ReadLock&);
+};
+
+template<typename T1, typename T2, typename T3>
+class MyTuple{
+public:
+    T1 first;
+    T2 second;
+    T3 third;
+
+    MyTuple(T1 t1, T2 t2, T3 t3){
+        first = t1;
+        second = t2;
+        third = t3;
+    }
+
+    MyTuple(){}
 };
 
 class WriteLock {

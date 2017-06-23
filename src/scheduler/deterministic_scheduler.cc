@@ -79,7 +79,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	message_queues = new AtomicQueue<MessageProto>*[num_threads];
 	threads_ = new pthread_t[num_threads];
 	thread_connections_ = new Connection*[num_threads];
-	latency = new pair<int64, int64>[LATENCY_SIZE*num_threads];
+	latency = new MyTuple<int, int64, int64>[LATENCY_SIZE];
 
 	pthread_mutex_init(&recon_mutex_, NULL);
     lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
@@ -121,8 +121,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     	string channel("scheduler");
     	channel.append(IntToString(i));
     	thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
-        for (int j = 0; j<LATENCY_SIZE*num_threads; ++j)
-        	latency[j] = make_pair(0, 0);
+        for (int j = 0; j<LATENCY_SIZE; ++j)
+        	latency[j] = MyTuple<int, int64_t, int64_t>(0, 0, 0);
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
@@ -193,15 +193,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if (manager->ReadyToExecute()) {
 			  LOG(txn->txn_id(), " start executing txn of type "<<txn->txn_type());
 			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+				  LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 				  delete manager;
 				  // Respond to scheduler;
 				  scheduler->done_queue->Push(txn);
-				  //LOG(txn->txn_id(), " finish executing txn!");
+				  LOG(txn->txn_id(), " finish executing txn!");
 			  }
 			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
 			  else{
-				  //LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+				  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
 				  delete manager;
 
 				  txn->set_status(TxnProto::ABORTED);
@@ -211,7 +211,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  } else {
 			  LOG(txn->txn_id(), " is not ready yet");
 			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
-			  //LOG(txn->txn_id(), " waiting for remote");
+			  LOG(txn->txn_id(), " waiting for remote");
 			  active_txns[IntToString(txn->txn_id())] = manager;
 		  }
 	  }
@@ -238,11 +238,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  manager->HandleReadResult(message);
 			  if (manager->ReadyToExecute()) {
 				  // Execute and clean up.
-				  //LOG(StringToInt(message.destination_channel()), " ready to execute!");
+				  LOG(StringToInt(message.destination_channel()), " ready to execute!");
 				  TxnProto* txn = manager->txn_;
 				  // If successfully finished
 				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
-					  //LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+					  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
 					  txn->set_status(TxnProto::ABORTED);
 				  }
 
@@ -328,7 +328,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  manager->Setup(txn);
 		  }
 
-		  //LOG(txn->txn_id(), " recon txn is being executed");
+		  LOG(txn->txn_id(), " recon txn is being executed");
 		  int result = scheduler->application_->ReconExecute(txn, manager);
 		  if(result == RECON_SUCCESS){
 			  delete manager;
@@ -360,7 +360,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // a batch of reconnainssance message
 	  else if(scheduler->recon_queue_->Pop(&message))
 	  {
-		  //LOG(-1, " got new recon batch: "<<message.batch_number());
+		  LOG(-1, " got new recon batch: "<<message.batch_number());
 		  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
 		  for (int i = 0; i < message.data_size(); i++) {
 	          TxnProto* txn = new TxnProto();
@@ -463,6 +463,8 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     			abort_number++;
     			done_txn->set_status(TxnProto::ACTIVE);
     			done_txn->clear_pred_read_write_set();
+    			done_txn->clear_pred_read_set();
+    			done_txn->clear_pred_write_set();
 
     			bytes txn_data;
     			done_txn->SerializeToString(&txn_data);
@@ -480,10 +482,10 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     			txns++;
                 if (sample_count == SAMPLE_RATE)
                 {
-                    if(latency_count == LATENCY_SIZE*scheduler->num_threads)
+                    if(latency_count == LATENCY_SIZE)
                         latency_count = 0;
                     int64 now_time = GetUTime();
-                    scheduler->latency[latency_count] = make_pair(now_time - done_txn->start_time(), now_time- done_txn->seed());
+                    scheduler->latency[latency_count] = MyTuple<int, int64_t, int64_t>(done_txn->txn_type(), now_time - done_txn->start_time(), now_time- done_txn->seed());
                     ++latency_count;
                     sample_count = 0;
                 }
@@ -514,11 +516,11 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
           }
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
-          //LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+          LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
           if (txn->start_time() == 0)
         	  txn->set_start_time(GetUTime());
           batch_offset++;
-          //LOG(txn->txn_id(), " is being locked, batch is "<<batch_message->batch_number());
+          LOG(txn->txn_id(), " is being locked, batch is "<<batch_message->batch_number());
           scheduler->lock_manager_->Lock(txn);
           pending_txns++;
           //locked.insert((int)txn->txn_id());

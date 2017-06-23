@@ -624,8 +624,10 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	order_number = district.next_order_id();
 	district.set_next_order_id(order_number + 1);
 
-	if(district.smallest_order_id() == -1)
+	if(district.smallest_order_id() == -1){
 		district.set_smallest_order_id(order_number);
+		LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<order_number);
+	}
 	//LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.SerializeToString(district_val));
 
@@ -1258,7 +1260,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs tpcc_args;
 	tpcc_args.ParseFromString(txn->arg());
-	//LOG(txn->txn_id(), "Executing DELIVERY, is multipart? "<<txn->multipartition());
+	LOG(txn->txn_id(), "Executing DELIVERY, is multipart? "<<txn->multipartition());
 
 	int read_state = NORMAL;
 
@@ -1279,76 +1281,99 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 		snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key.c_str(), i);
 		Value* district_val = storage->ReadObject(district_key);
 		District district;
-		//LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+		LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 		assert(district.ParseFromString(*district_val));
 		// Only update the value of district after performing all orderline updates
-		district.set_smallest_order_id(district.smallest_order_id()+1);
-		//assert(district.SerializeToString(val));
-		storage->ModifyToBuffer(district_val, district.SerializeAsString());
+		if(district.smallest_order_id() == -1 || district.smallest_order_id() >= district.next_order_id())
+			continue;
+		else{
+			LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<district.smallest_order_id());
+			//assert(district.SerializeToString(val));
+			storage->ModifyToBuffer(district_val, district.SerializeAsString());
 
-		char order_key[128];
-		Order order;
-		snprintf(order_key, sizeof(order_key), "%so%d", district_key, district.smallest_order_id());
-		if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(order_key) == 0){
-			Value* order_val = storage->ReadObject(order_key);
+			char order_key[128];
+			Order order;
+			snprintf(order_key, sizeof(order_key), "%so%d", district_key, district.smallest_order_id());
+			if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(order_key) == 0){
+				Value* order_val = storage->ReadObject(order_key);
 
-			assert(order.ParseFromString(*order_val));
-			order.set_carrier_id(i);
-			//assert(order.SerializeToString(val));
-			storage->WriteToBuffer(order_key, order.SerializeAsString());
-		}
-		else
-			return FAILURE;
-
-
-
-		char new_order_key[128];
-		snprintf(new_order_key, sizeof(new_order_key), "%sn%s", district_key, order_key);
-		if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(new_order_key) == 0){
-			storage->DeleteToBuffer(new_order_key);
-		}
-		else
-			return FAILURE;
-
-
-		// Update order by setting its carrier id
-		Key customer_key;
-		order_line_count = order.order_line_count();
-		customer_key = order.customer_id();
-
-
-		double total_amount = 0;
-	    for(int j = 0; j < order_line_count; j++) {
-	    	snprintf(order_line_key, sizeof(order_line_key), "%sol%d", order_key, j);
-	    	if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(order_line_key) == 0){
-	    		Value* order_line_val = storage->ReadObject(order_line_key);
-				OrderLine order_line;
-				assert(order_line.ParseFromString(*order_line_val));
-				order_line.set_delivery_date(txn->seed());
-				//assert(order_line.SerializeToString(val));
-				storage->WriteToBuffer(order_line_key, order_line.SerializeAsString());
-				total_amount += order_line.amount();
-	    	}
-	    	else
-	    		return FAILURE;
-
-	    }
-
-	    if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(customer_key) == 0){
-	    	Value* customer_val = storage->ReadObject(customer_key);
-			if (read_state == SUSPENDED) return SUSPENDED;
-			else{
-				Customer customer;
-				assert(customer.ParseFromString(*customer_val));
-				customer.set_balance(customer.balance() + total_amount);
-				customer.set_delivery_count(customer.delivery_count() + 1);
-				//assert(customer.SerializeToString(val));
-				storage->ModifyToBuffer(customer_val, customer.SerializeAsString());
+				assert(order.ParseFromString(*order_val));
+				order.set_carrier_id(i);
+				//assert(order.SerializeToString(val));
+				storage->WriteToBuffer(order_key, order.SerializeAsString());
 			}
-	    }
-	    else
-	    	return FAILURE;
+			else{
+				if(txn->pred_read_write_set_size() > pred_wr_count)
+					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count<<", pred order key is "<<
+						txn->pred_read_write_set(pred_wr_count-1)<<", order key is "<<order_key);
+				else
+					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
+				return FAILURE;
+			}
 
+
+			char new_order_key[128];
+			snprintf(new_order_key, sizeof(new_order_key), "%sn%s", district_key, order_key);
+			if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(new_order_key) == 0){
+				storage->DeleteToBuffer(new_order_key);
+			}
+			else{
+				if(txn->pred_read_write_set_size() > pred_wr_count)
+					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count<<", pred new order key is "<<
+						txn->pred_read_write_set(pred_wr_count-1)<<", order key is "<<new_order_key);
+				else
+					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
+				return FAILURE;
+			}
+
+			// Update order by setting its carrier id
+			Key customer_key;
+			order_line_count = order.order_line_count();
+			customer_key = order.customer_id();
+
+
+			double total_amount = 0;
+			for(int j = 0; j < order_line_count; j++) {
+				snprintf(order_line_key, sizeof(order_line_key), "%sol%d", order_key, j);
+				if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(order_line_key) == 0){
+					Value* order_line_val = storage->ReadObject(order_line_key);
+					OrderLine order_line;
+					assert(order_line.ParseFromString(*order_line_val));
+					order_line.set_delivery_date(txn->seed());
+					//assert(order_line.SerializeToString(val));
+					storage->WriteToBuffer(order_line_key, order_line.SerializeAsString());
+					total_amount += order_line.amount();
+				}
+				else{
+					if(txn->pred_read_write_set_size() > pred_wr_count)
+						LOG(txn->txn_id(), "pred orderline key is "<<txn->pred_read_write_set(pred_wr_count-1)<<", order line key is "<<order_line_key);
+					else
+									LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
+					return FAILURE;
+				}
+			}
+
+			if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(customer_key) == 0){
+				Value* customer_val = storage->ReadObject(customer_key);
+				if (read_state == SUSPENDED) return SUSPENDED;
+				else{
+					Customer customer;
+					assert(customer.ParseFromString(*customer_val));
+					customer.set_balance(customer.balance() + total_amount);
+					customer.set_delivery_count(customer.delivery_count() + 1);
+					//assert(customer.SerializeToString(val));
+					storage->ModifyToBuffer(customer_val, customer.SerializeAsString());
+				}
+			}
+			else{
+				if(txn->pred_read_write_set_size() > pred_wr_count)
+					LOG(txn->txn_id(), "pred orderline key is "<<txn->pred_read_write_set(pred_wr_count-1)<<", order line key is "<<customer_key);
+				else
+					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
+				return FAILURE;
+			}
+			district.set_smallest_order_id(district.smallest_order_id()+1);
+		}
 	}
 
 	storage->ApplyChange();
@@ -1361,7 +1386,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	//TPCCArgs* tpcc_args = storage->get_args();
-	//LOG(txn->txn_id(), " Recon-Executing DELIVERY RECON, is multipart? "<<txn->multipartition());
+	LOG(txn->txn_id(), " Recon-Executing DELIVERY RECON, size of my pred rw is "<<txn->pred_read_write_set_size());
 	storage->Init();
 
 	int read_state = NORMAL, retry_cnt = 0;
@@ -1388,9 +1413,13 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 
 		char order_key[128];
 		snprintf(order_key, sizeof(order_key), "%so%d", district_key, district.smallest_order_id());
-		if(district.smallest_order_id() == -1 || district.smallest_order_id() >= district.next_order_id())
+		if(district.smallest_order_id() == -1 || district.smallest_order_id() >= district.next_order_id()){
+			LOG(txn->txn_id(), " not adding "<<district_key<<", because its smallest order is "<<district.smallest_order_id()<<","
+					"next order is "<<district.next_order_id());
 			continue;
+		}
 		else{
+			LOG(txn->txn_id(), " adding to rw set "<<order_key);
 			txn->add_pred_read_write_set(order_key);
 
 			Value* order_val = storage->ReadObject(order_key, read_state);
@@ -1401,6 +1430,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 			snprintf(new_order_key, sizeof(new_order_key), "%sn%s", district_key, order_key);
 			// TODO: In this SUSPENDED context, deleting in this way is safe. Should implement a more general solution.
 			txn->add_pred_read_write_set(new_order_key);
+			LOG(txn->txn_id(), " adding to rw set "<<new_order_key);
 
 			// Update order by setting its carrier id
 			order_line_count = order.order_line_count();
@@ -1414,13 +1444,15 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 			}
 
 			txn->add_pred_read_write_set(order.customer_id());
+			LOG(txn->txn_id(), " adding to rw set "<<order.customer_id());
 			Value* customer_val = storage->ReadObject(order.customer_id(), read_state);
 			Customer customer;
 			customer.ParseFromString(*customer_val);
 		}
-  }
+	}
+	LOG(txn->txn_id(), " finished, size of my pred rw is "<<txn->pred_read_write_set_size());
 
-  return RECON_SUCCESS;
+	return RECON_SUCCESS;
 }
 
 // The initialize function is executed when an initialize transaction comes
