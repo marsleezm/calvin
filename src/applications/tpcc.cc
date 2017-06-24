@@ -669,7 +669,9 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		order.set_all_items_local(!txn->multipartition());
 		Value* order_value = new Value();
 		assert(order.SerializeToString(order_value));
+		LOG(txn->txn_id(), " before trying to write order "<<order_key<<", "<<reinterpret_cast<int64>(order_value));
 		storage->PutObject(order_key, order_value);
+
 		//storage->WriteToBuffer(order_key, order.SerializeAsString());
 	//}
 	//else
@@ -1424,6 +1426,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 
 			Value* order_val = storage->ReadObject(order_key, read_state);
 			Order order;
+			LOG(txn->txn_id(), " before trying to read order "<<order_key<<", "<<reinterpret_cast<int64>(order_val));
 			try_until(order.ParseFromString(*order_val), retry_cnt);
 
 			char new_order_key[128];
