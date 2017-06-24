@@ -1289,7 +1289,6 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 		else{
 			LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<district.smallest_order_id());
 			//assert(district.SerializeToString(val));
-			storage->ModifyToBuffer(district_val, district.SerializeAsString());
 
 			char order_key[128];
 			Order order;
@@ -1373,6 +1372,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				return FAILURE;
 			}
 			district.set_smallest_order_id(district.smallest_order_id()+1);
+			storage->ModifyToBuffer(district_val, district.SerializeAsString());
 		}
 	}
 
