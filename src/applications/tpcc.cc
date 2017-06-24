@@ -544,7 +544,7 @@ int TPCC::NewOrderReconTransaction(ReconStorageManager* storage) const {
 			return SUSPENDED;
 		else {
 			District district;
-			//LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+			LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 			try_until(district.ParseFromString(*district_val), retry_cnt);
 			//LOG(txn->txn_id(), " done trying to read district"<<district_key);
 			order_number = district.next_order_id();
@@ -1282,7 +1282,6 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 		snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key.c_str(), i);
 		Value* district_val = storage->ReadObject(district_key);
 		District district;
-		LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 		assert(district.ParseFromString(*district_val));
 		// Only update the value of district after performing all orderline updates
 		if(district.smallest_order_id() == -1 || district.smallest_order_id() >= district.next_order_id())
@@ -1371,6 +1370,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
 				return FAILURE;
 			}
+			LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 			district.set_smallest_order_id(district.smallest_order_id()+1);
 			storage->ModifyToBuffer(district_val, district.SerializeAsString());
 		}
