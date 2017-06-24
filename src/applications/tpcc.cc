@@ -1288,7 +1288,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 		if(district.smallest_order_id() == -1 || district.smallest_order_id() >= district.next_order_id())
 			continue;
 		else{
-			LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<district.smallest_order_id());
+			//LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<district.smallest_order_id());
 			//assert(district.SerializeToString(val));
 
 			char order_key[128];
@@ -1407,7 +1407,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 		snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key.c_str(), i);
 		Value* district_val = storage->ReadObject(district_key, read_state);
 		District district;
-		//LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+		LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 		try_until(district.ParseFromString(*district_val), retry_cnt);
 		//LOG(txn->txn_id(), " done trying to read district"<<district_key);
 
@@ -1419,7 +1419,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 			continue;
 		}
 		else{
-			LOG(txn->txn_id(), " adding to rw set "<<order_key);
+			//LOG(txn->txn_id(), " adding to rw set "<<order_key);
 			txn->add_pred_read_write_set(order_key);
 
 			Value* order_val = storage->ReadObject(order_key, read_state);
@@ -1430,7 +1430,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 			snprintf(new_order_key, sizeof(new_order_key), "%sn%s", district_key, order_key);
 			// TODO: In this SUSPENDED context, deleting in this way is safe. Should implement a more general solution.
 			txn->add_pred_read_write_set(new_order_key);
-			LOG(txn->txn_id(), " adding to rw set "<<new_order_key);
+			//LOG(txn->txn_id(), " adding to rw set "<<new_order_key);
 
 			// Update order by setting its carrier id
 			order_line_count = order.order_line_count();
@@ -1444,7 +1444,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 			}
 
 			txn->add_pred_read_write_set(order.customer_id());
-			LOG(txn->txn_id(), " adding to rw set "<<order.customer_id());
+			//LOG(txn->txn_id(), " adding to rw set "<<order.customer_id());
 			Value* customer_val = storage->ReadObject(order.customer_id(), read_state);
 			Customer customer;
 			customer.ParseFromString(*customer_val);
