@@ -204,7 +204,7 @@ void DeterministicLockManager::Release(const Key& key, TxnProto* txn) {
   }
 
   if(it1 == key_requests->end()){
-	  LOG(txn->txn_id(), " trying to release lock twice for "<<key);
+	  //LOG(txn->txn_id(), " trying to release lock twice for "<<key);
 	  return;
   }
   else{

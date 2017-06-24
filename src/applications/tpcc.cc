@@ -626,9 +626,9 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 
 	if(district.smallest_order_id() == -1){
 		district.set_smallest_order_id(order_number);
-		LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<order_number);
+		//LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<order_number);
 	}
-	//LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+	LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.SerializeToString(district_val));
 
 	// Next, we get the order line count, system time, and other args from the
@@ -952,7 +952,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	District district;
 	assert(district.ParseFromString(*district_val));
 	district.set_year_to_date(district.year_to_date() + amount);
-	//LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+	LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.SerializeToString(district_val));
 
 	// Read & update the customer
@@ -1137,6 +1137,7 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	Key district_key = txn->read_set(1);
 	int latest_order_number;
 	Value* district_val = storage->ReadObject(district_key);
+	LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.ParseFromString(*district_val));
 	latest_order_number = district.next_order_id()-1;
 
@@ -1310,7 +1311,6 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				return FAILURE;
 			}
 
-
 			char new_order_key[128];
 			snprintf(new_order_key, sizeof(new_order_key), "%sn%s", district_key, order_key);
 			if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(new_order_key) == 0){
@@ -1414,8 +1414,8 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 		char order_key[128];
 		snprintf(order_key, sizeof(order_key), "%so%d", district_key, district.smallest_order_id());
 		if(district.smallest_order_id() == -1 || district.smallest_order_id() >= district.next_order_id()){
-			LOG(txn->txn_id(), " not adding "<<district_key<<", because its smallest order is "<<district.smallest_order_id()<<","
-					"next order is "<<district.next_order_id());
+			//LOG(txn->txn_id(), " not adding "<<district_key<<", because its smallest order is "<<district.smallest_order_id()<<","
+			//		"next order is "<<district.next_order_id());
 			continue;
 		}
 		else{

@@ -193,7 +193,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if (manager->ReadyToExecute()) {
 			  LOG(txn->txn_id(), " start executing txn of type "<<txn->txn_type());
 			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-				  LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 				  delete manager;
 				  // Respond to scheduler;
 				  scheduler->done_queue->Push(txn);
@@ -209,9 +209,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 
 		  } else {
-			  LOG(txn->txn_id(), " is not ready yet");
+			  //LOG(txn->txn_id(), " is not ready yet");
 			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
-			  LOG(txn->txn_id(), " waiting for remote");
+			  //LOG(txn->txn_id(), " waiting for remote");
 			  active_txns[IntToString(txn->txn_id())] = manager;
 		  }
 	  }
@@ -220,7 +220,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  // If I get read_result when executing a transaction
 		  if (message.type() == MessageProto::READ_RESULT) {
 			  // Remote read result.
-			  LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
+			  //LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
 
 			  StorageManager* manager;
 			  if(active_txns.count(message.destination_channel()) == 0){
@@ -238,11 +238,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  manager->HandleReadResult(message);
 			  if (manager->ReadyToExecute()) {
 				  // Execute and clean up.
-				  LOG(StringToInt(message.destination_channel()), " ready to execute!");
+				  //LOG(StringToInt(message.destination_channel()), " ready to execute!");
 				  TxnProto* txn = manager->txn_;
 				  // If successfully finished
 				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
-					  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+					  //LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
 					  txn->set_status(TxnProto::ABORTED);
 				  }
 
@@ -328,7 +328,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  manager->Setup(txn);
 		  }
 
-		  LOG(txn->txn_id(), " recon txn is being executed");
+		  //LOG(txn->txn_id(), " recon txn is being executed");
 		  int result = scheduler->application_->ReconExecute(txn, manager);
 		  if(result == RECON_SUCCESS){
 			  delete manager;
@@ -360,7 +360,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // a batch of reconnainssance message
 	  else if(scheduler->recon_queue_->Pop(&message))
 	  {
-		  LOG(-1, " got new recon batch: "<<message.batch_number());
+		  //LOG(-1, " got new recon batch: "<<message.batch_number());
 		  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
 		  for (int i = 0; i < message.data_size(); i++) {
 	          TxnProto* txn = new TxnProto();
@@ -446,7 +446,7 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     bool got_it = scheduler->done_queue->Pop(&done_txn);
     if (got_it == true) {
     	// We have received a finished transaction back, release the lock
-    	LOG(done_txn->txn_id(), " unlock txn");
+    	//LOG(done_txn->txn_id(), " unlock txn");
     	scheduler->lock_manager_->Release(done_txn);
     	executing_txns--;
 
@@ -516,11 +516,11 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
           }
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
-          LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+          //LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
           if (txn->start_time() == 0)
         	  txn->set_start_time(GetUTime());
           batch_offset++;
-          LOG(txn->txn_id(), " is being locked, batch is "<<batch_message->batch_number());
+          //LOG(txn->txn_id(), " is being locked, batch is "<<batch_message->batch_number());
           scheduler->lock_manager_->Lock(txn);
           pending_txns++;
           //locked.insert((int)txn->txn_id());
@@ -532,7 +532,7 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     // Start executing any and all ready transactions to get them off our plate
     while (!scheduler->ready_txns_->empty()) {
       TxnProto* txn = scheduler->ready_txns_->front();
-      LOG(batch_number, " adding to ready queue "<<txn->txn_id());
+      //LOG(batch_number, " adding to ready queue "<<txn->txn_id());
       scheduler->ready_txns_->pop_front();
       pending_txns--;
       executing_txns++;
