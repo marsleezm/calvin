@@ -1302,11 +1302,11 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				storage->WriteToBuffer(order_key, order.SerializeAsString());
 			}
 			else{
-				if(txn->pred_read_write_set_size() > pred_wr_count)
-					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count<<", pred order key is "<<
-						txn->pred_read_write_set(pred_wr_count-1)<<", order key is "<<order_key);
-				else
-					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
+				//if(txn->pred_read_write_set_size() > pred_wr_count)
+				//	LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count<<", pred order key is "<<
+				//		txn->pred_read_write_set(pred_wr_count-1)<<", order key is "<<order_key);
+				//else
+				//	LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
 				return FAILURE;
 			}
 
@@ -1316,11 +1316,11 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				storage->DeleteToBuffer(new_order_key);
 			}
 			else{
-				if(txn->pred_read_write_set_size() > pred_wr_count)
-					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count<<", pred new order key is "<<
-						txn->pred_read_write_set(pred_wr_count-1)<<", order key is "<<new_order_key);
-				else
-					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
+				//if(txn->pred_read_write_set_size() > pred_wr_count)
+				//	LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count<<", pred new order key is "<<
+				//		txn->pred_read_write_set(pred_wr_count-1)<<", order key is "<<new_order_key);
+				//else
+				//	LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
 				return FAILURE;
 			}
 
@@ -1343,10 +1343,10 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 					total_amount += order_line.amount();
 				}
 				else{
-					if(txn->pred_read_write_set_size() > pred_wr_count)
-						LOG(txn->txn_id(), "pred orderline key is "<<txn->pred_read_write_set(pred_wr_count-1)<<", order line key is "<<order_line_key);
-					else
-									LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
+					//if(txn->pred_read_write_set_size() > pred_wr_count)
+					//	LOG(txn->txn_id(), "pred orderline key is "<<txn->pred_read_write_set(pred_wr_count-1)<<", order line key is "<<order_line_key);
+					//else
+					//				LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
 					return FAILURE;
 				}
 			}
@@ -1364,10 +1364,10 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				}
 			}
 			else{
-				if(txn->pred_read_write_set_size() > pred_wr_count)
-					LOG(txn->txn_id(), "pred orderline key is "<<txn->pred_read_write_set(pred_wr_count-1)<<", order line key is "<<customer_key);
-				else
-					LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
+				//if(txn->pred_read_write_set_size() > pred_wr_count)
+				//	LOG(txn->txn_id(), "pred orderline key is "<<txn->pred_read_write_set(pred_wr_count-1)<<", order line key is "<<customer_key);
+				//else
+				//	LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
 				return FAILURE;
 			}
 			LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
