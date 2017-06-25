@@ -751,6 +751,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 			// Finally, we write the order line to storage
 			Value* order_line_val = new Value();
 			assert(order_line.SerializeToString(order_line_val));
+			LOG(txn->txn_id(), " before trying to write orderline "<<order_line_key<<", "<<reinterpret_cast<int64>(order_line_val));
 			storage->PutObject(order_line_key, order_line_val);
 			//storage->WriteToBuffer(order_line_key, order_line.SerializeAsString());
 		//}
@@ -1245,6 +1246,7 @@ int TPCC::StockLevelReconTransaction(ReconStorageManager* storage) const {
 
 			OrderLine order_line;
 			Value* order_line_val = storage->ReadObject(order_line_key, read_state);
+			LOG(txn->txn_id(), " before trying to read orderline "<<order_line_key<<", "<<reinterpret_cast<int64>(order_line_val));
 			try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
 
 			string item = order_line.item_id();
@@ -1342,6 +1344,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(order_line_key) == 0){
 					Value* order_line_val = storage->ReadObject(order_line_key);
 					OrderLine order_line;
+					LOG(txn->txn_id(), " before trying to write orderline "<<order_line_key<<", "<<reinterpret_cast<int64>(order_line_val));
 					assert(order_line.ParseFromString(*order_line_val));
 					order_line.set_delivery_date(txn->seed());
 					//assert(order_line.SerializeToString(val));
@@ -1448,6 +1451,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 				Value* order_line_val = storage->ReadObject(order_line_key, read_state);
 				OrderLine order_line;
 				txn->add_pred_read_write_set(order_line_key);
+				LOG(txn->txn_id(), " before trying to read orderline "<<order_line_key<<", "<<reinterpret_cast<int64>(order_line_val));
 				try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
 			}
 
