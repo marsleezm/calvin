@@ -904,6 +904,8 @@ int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
 		district_val = storage->ReadObject(district_key, read_state);
 		if (read_state == SUSPENDED)
 			return SUSPENDED;
+		else
+			district_val += 1;
 		//else {
 		//	District district;
 		//	district.ParseFromString(*district_val);
@@ -919,6 +921,8 @@ int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
 		customer_val = storage->ReadObject(customer_key, read_state);
 		if (read_state == SUSPENDED)
 			return SUSPENDED;
+		else
+			customer_val += 1;
 		//else {
 		//	Customer customer;
 		//	customer.ParseFromString(*customer_val);
@@ -1120,6 +1124,7 @@ int TPCC::OrderStatusReconTransaction(ReconStorageManager* storage) const {
 		snprintf(order_line_key, sizeof(order_line_key), "%sol%d", customer.last_order().c_str(), i);
 		Value* order_line_val = storage->ReadObject(order_line_key, read_state);
 		txn->add_pred_read_set(order_line_key);
+		order_line_val += 1;
 		//OrderLine order_line;
 		//try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
 	}
@@ -1257,6 +1262,7 @@ int TPCC::StockLevelReconTransaction(ReconStorageManager* storage) const {
 
 			Stock stock;
 			Value* stock_val = storage->ReadObject(stock_key, read_state);
+			stock_val+=1;
 			//stock.ParseFromString(*stock_val);
 		 }
 	}
