@@ -620,6 +620,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	Key district_key = txn->read_write_set(0);
 	Value* district_val = storage->ReadObject(district_key);
 	District district;
+	LOG(txn->txn_id(), " before trying to reading district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.ParseFromString(*district_val));
 	order_number = district.next_order_id();
 	district.set_next_order_id(order_number + 1);
@@ -958,6 +959,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	Key district_key = txn->read_write_set(1);
 	Value* district_val = storage->ReadObject(district_key);
 	District district;
+	LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.ParseFromString(*district_val));
 	district.set_year_to_date(district.year_to_date() + amount);
 	LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
@@ -1029,6 +1031,7 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 	//District district;
 	Value* district_val = storage->ReadObject(txn->read_set(1));
 	District district;
+	LOG(txn->txn_id(), " before trying to read district "<<txn->read_set(1)<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.ParseFromString(*district_val));
 
 	Customer customer;
