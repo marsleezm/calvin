@@ -1469,7 +1469,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 				OrderLine order_line;
 				txn->add_pred_read_write_set(order_line_key);
 				LOG(txn->txn_id(), " before trying to read orderline "<<order_line_key<<", "<<reinterpret_cast<int64>(order_line_val));
-				//try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
+				try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
 			}
 
 			txn->add_pred_read_write_set(order.customer_id());
@@ -1477,7 +1477,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 			Value* customer_val = storage->ReadObject(order.customer_id(), read_state);
 			LOG(txn->txn_id(), " before trying to read customer "<<order.customer_id()<<", value is "<<reinterpret_cast<int64>(customer_val));
 			Customer customer;
-			//customer.ParseFromString(*customer_val);
+			try_until(customer.ParseFromString(*customer_val), retry_cnt);
 		}
 	}
 	LOG(txn->txn_id(), " finished, size of my pred rw is "<<txn->pred_read_write_set_size());
