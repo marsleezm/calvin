@@ -54,11 +54,11 @@ using std::tr1::unordered_map;
 
 #define try_until(expr, retry_cnt)	\
 	retry_cnt = 0; \
-	while(retry_cnt++ <5) {\
+	while(retry_cnt++ <1000) {\
 		if(expr) \
 	  	  	  break; \
 	}\
-	if( retry_cnt == 5) return FAILURE;
+	if( retry_cnt == 1000) return FAILURE;
 
 #define try_until_n(expr, n) \
   n = 0; \
