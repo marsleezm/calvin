@@ -544,7 +544,7 @@ int TPCC::NewOrderReconTransaction(ReconStorageManager* storage) const {
 			return SUSPENDED;
 		else {
 			District district;
-			//LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+			LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 			try_until(district.ParseFromString(*district_val), retry_cnt);
 			//LOG(txn->txn_id(), " done trying to read district"<<district_key);
 			order_number = district.next_order_id();
@@ -628,7 +628,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		district.set_smallest_order_id(order_number);
 		//LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<order_number);
 	}
-	//LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+	LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.SerializeToString(district_val));
 
 	// Next, we get the order line count, system time, and other args from the
@@ -956,7 +956,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	District district;
 	assert(district.ParseFromString(*district_val));
 	district.set_year_to_date(district.year_to_date() + amount);
-	//LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+	LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.SerializeToString(district_val));
 
 	// Read & update the customer
@@ -1088,7 +1088,7 @@ int TPCC::OrderStatusReconTransaction(ReconStorageManager* storage) const {
 	//District district;
 	Value* district_val = storage->ReadObject(txn->read_set(1), read_state);
 	District district;
-	//LOG(txn->txn_id(), " before trying to read district"<<txn->read_set(1)<<", "<<reinterpret_cast<int64>(district_val));
+	LOG(txn->txn_id(), " before trying to read district"<<txn->read_set(1)<<", "<<reinterpret_cast<int64>(district_val));
 	try_until(district.ParseFromString(*district_val), retry_cnt);
 	//LOG(txn->txn_id(), " done trying to read district"<<txn->read_set(1));
 
@@ -1143,7 +1143,7 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	Key district_key = txn->read_set(1);
 	int latest_order_number;
 	Value* district_val = storage->ReadObject(district_key);
-	//LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+	LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	assert(district.ParseFromString(*district_val));
 	latest_order_number = district.next_order_id()-1;
 
@@ -1214,7 +1214,7 @@ int TPCC::StockLevelReconTransaction(ReconStorageManager* storage) const {
 	Key district_key = txn->read_set(1);
 	int latest_order_number;
 	Value* district_val = storage->ReadObject(district_key, read_state);
-	//LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+	LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 	try_until(district.ParseFromString(*district_val), retry_cnt);
 	//LOG(txn->txn_id(), " done trying to read district"<<district_key);
 	latest_order_number = district.next_order_id()-1;
@@ -1290,6 +1290,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 		snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key.c_str(), i);
 		Value* district_val = storage->ReadObject(district_key);
 		District district;
+		LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 		assert(district.ParseFromString(*district_val));
 		// Only update the value of district after performing all orderline updates
 		if(district.smallest_order_id() == -1 || district.smallest_order_id() >= district.next_order_id())
@@ -1380,7 +1381,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				//	LOG(txn->txn_id(), " pred rw set size is "<<txn->pred_read_write_set_size()<<", but I got "<<pred_wr_count);
 				return FAILURE;
 			}
-			//LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+			LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 			district.set_smallest_order_id(district.smallest_order_id()+1);
 			storage->ModifyToBuffer(district_val, district.SerializeAsString());
 		}
@@ -1417,7 +1418,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 		snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key.c_str(), i);
 		Value* district_val = storage->ReadObject(district_key, read_state);
 		District district;
-		//LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
+		LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 		try_until(district.ParseFromString(*district_val), retry_cnt);
 		//LOG(txn->txn_id(), " done trying to read district"<<district_key);
 
