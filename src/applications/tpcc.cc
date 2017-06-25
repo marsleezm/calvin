@@ -266,7 +266,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
          for(int i = 0; i < DISTRICTS_PER_WAREHOUSE; i++) {
         	 snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key, i);
-        	 txn->add_read_set(district_key);
+        	 txn->add_read_write_set(district_key);
          }
          txn->add_readers(config->this_node_id);
          txn->add_writers(config->this_node_id);
