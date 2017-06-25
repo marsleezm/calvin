@@ -1320,7 +1320,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 			snprintf(order_key, sizeof(order_key), "%so%d", district_key, district.smallest_order_id());
 			if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(order_key) == 0){
 				Value* order_val = storage->ReadObject(order_key);
-				LOG(txn->txn_id(), " before trying to read order "<<order_key<<", value is "<<reinterpret_cast<int64>(order_val));
+				LOG(txn->txn_id(), " before trying to read and write order "<<order_key<<", value is "<<reinterpret_cast<int64>(order_val));
 				assert(order.ParseFromString(*order_val));
 				order.set_carrier_id(i);
 				//assert(order.SerializeToString(val));
