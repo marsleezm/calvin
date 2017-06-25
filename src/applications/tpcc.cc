@@ -981,7 +981,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 				 warehouse_key.c_str(), amount, customer.data().c_str());
 		customer.set_data(new_information);
 	}
-	LOG(txn_->txn_id(), " before trying to write customer "<<customer_key<<", value is "<<reinterpret_cast<int64>(customer_val));
+	LOG(txn->txn_id(), " before trying to write customer "<<customer_key<<", value is "<<reinterpret_cast<int64>(customer_val));
 	assert(customer.SerializeToString(customer_val));
 
 	// Finally, we create a history object and update the data
@@ -1044,7 +1044,7 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 	if(txn->pred_read_set_size()>0 && txn->pred_read_set(0).compare(customer.last_order()) == 0){
 		Value* order_val = storage->ReadObject(customer.last_order());
 		Order order;
-		LOG(txn_->txn_id(), " before trying to read order "<<order_key<<", value is "<<reinterpret_cast<int64>(order_val));
+		LOG(txn->txn_id(), " before trying to read order "<<customer.last_order()<<", value is "<<reinterpret_cast<int64>(order_val));
 		assert(order.ParseFromString(*order_val));
 		order_line_count = order.order_line_count();
 
@@ -1230,7 +1230,7 @@ int TPCC::StockLevelReconTransaction(ReconStorageManager* storage) const {
 		while(order_val == NULL){
 			order_val = storage->ReadObject(order_key, read_state);
 		}
-		LOG(txn_->txn_id(), " before trying to read order "<<order_key<<", value is "<<reinterpret_cast<int64>(order_val));
+		LOG(txn->txn_id(), " before trying to read order "<<order_key<<", value is "<<reinterpret_cast<int64>(order_val));
 		try_until(order.ParseFromString(*order_val), retry_cnt);
 		txn->add_pred_read_set(order_key);
 
@@ -1300,7 +1300,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 			snprintf(order_key, sizeof(order_key), "%so%d", district_key, district.smallest_order_id());
 			if(txn->pred_read_write_set_size() > pred_wr_count && txn->pred_read_write_set(pred_wr_count++).compare(order_key) == 0){
 				Value* order_val = storage->ReadObject(order_key);
-				LOG(txn_->txn_id(), " before trying to read order "<<order_key<<", value is "<<reinterpret_cast<int64>(order_val));
+				LOG(txn->txn_id(), " before trying to read order "<<order_key<<", value is "<<reinterpret_cast<int64>(order_val));
 				assert(order.ParseFromString(*order_val));
 				order.set_carrier_id(i);
 				//assert(order.SerializeToString(val));
@@ -1452,7 +1452,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 			txn->add_pred_read_write_set(order.customer_id());
 			//LOG(txn->txn_id(), " adding to rw set "<<order.customer_id());
 			Value* customer_val = storage->ReadObject(order.customer_id(), read_state);
-			LOG(txn_->txn_id(), " before trying to read customer "<<order.customer_id()<<", value is "<<reinterpret_cast<int64>(customer_val));
+			LOG(txn->txn_id(), " before trying to read customer "<<order.customer_id()<<", value is "<<reinterpret_cast<int64>(customer_val));
 			Customer customer;
 			customer.ParseFromString(*customer_val);
 		}
