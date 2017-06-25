@@ -66,6 +66,15 @@ class ReconStorageManager {
 
   Value* ReadObject(const Key& key, int& read_state);
 
+  void AddObject(const Key& key, string value){
+	  if (read_set_.count(key) == 0 && message_){
+		  message_->add_keys(key);
+		  message_->add_values(value);
+		  message_has_value_ = true;
+		  //read_set_[key] = &value;
+	  }
+  }
+
   // Some transactions may have this kind of behavior: read a value, if some condition is satisfied, update the
   // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,
   // previous operations will not be triggered again and such the exec_counter will be wrong.

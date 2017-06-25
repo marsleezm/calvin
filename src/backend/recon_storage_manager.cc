@@ -103,12 +103,12 @@ Value* ReconStorageManager::ReadObject(const Key& key, int& read_state) {
 			//LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
 			//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
 			read_set_[key] = result;
-			if (message_){
-				//LOG(txn_->txn_id(), "Adding to msg: "<<key);
-				message_->add_keys(key);
-				message_->add_values(result == NULL ? "" : *result);
-				message_has_value_ = true;
-			}
+//			if (message_){
+//				//LOG(txn_->txn_id(), "Adding to msg: "<<key);
+//				message_->add_keys(key);
+//				message_->add_values(result == NULL ? "" : *result);
+//				message_has_value_ = true;
+//			}
 			return result;
 		}
 		else{

@@ -531,7 +531,8 @@ int TPCC::NewOrderReconTransaction(ReconStorageManager* storage) const {
 			return SUSPENDED;
 		else {
 			Warehouse warehouse;
-			warehouse.ParseFromString(*warehouse_val);
+			try_until(warehouse.ParseFromString(*warehouse_val), retry_cnt);
+			storage->AddObject(warehouse_key, warehouse.SerializeAsString());
 		}
 	}
 
@@ -546,6 +547,7 @@ int TPCC::NewOrderReconTransaction(ReconStorageManager* storage) const {
 			District district;
 			LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 			try_until(district.ParseFromString(*district_val), retry_cnt);
+			storage->AddObject(district_key, district.SerializeAsString());
 			//LOG(txn->txn_id(), " done trying to read district"<<district_key);
 			order_number = district.next_order_id();
 			tpcc_args->set_lastest_order_number(order_number);;
@@ -568,6 +570,7 @@ int TPCC::NewOrderReconTransaction(ReconStorageManager* storage) const {
 		else if(read_state == NORMAL){
 	    	Customer customer;
 	    	customer.ParseFromString(*customer_val);
+	    	storage->AddObject(customer_key, customer.SerializeAsString());
 			//customer.set_last_order(order_key);
 			//assert(customer.SerializeToString(val));
 		}
@@ -596,6 +599,7 @@ int TPCC::NewOrderReconTransaction(ReconStorageManager* storage) const {
 			else{
 				Stock stock;
 				stock.ParseFromString(*stock_val);
+				storage->AddObject(stock_key, stock.SerializeAsString());
 			}
 		}
 	}
@@ -895,6 +899,7 @@ int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
 		else {
 			Warehouse warehouse;
 			warehouse.ParseFromString(*warehouse_val);
+			storage->AddObject(warehouse_key, warehouse.SerializeAsString());
 		}
 	}
 
@@ -905,12 +910,13 @@ int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
 		district_val = storage->ReadObject(district_key, read_state);
 		if (read_state == SUSPENDED)
 			return SUSPENDED;
-		else
-			district_val += 1;
-		//else {
-		//	District district;
-		//	district.ParseFromString(*district_val);
-		//}
+		//else
+		//	district_val += 1;
+		else {
+			District district;
+			district.ParseFromString(*district_val);
+			storage->AddObject(district_key, district.SerializeAsString());
+		}
 	}
 
 	// Read & update the customer
@@ -922,12 +928,13 @@ int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
 		customer_val = storage->ReadObject(customer_key, read_state);
 		if (read_state == SUSPENDED)
 			return SUSPENDED;
-		else
-			customer_val += 1;
-		//else {
-		//	Customer customer;
-		//	customer.ParseFromString(*customer_val);
-		//}
+		//else
+		//	customer_val += 1;
+		else {
+			Customer customer;
+			customer.ParseFromString(*customer_val);
+			storage->AddObject(customer_key, customer.SerializeAsString());
+		}
 	}
 
 	return RECON_SUCCESS;

@@ -308,8 +308,10 @@ int Microbenchmark::ReconExecute(TxnProto* txn, ReconStorageManager* storage) co
 			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
 			if(storage->ShouldExec()){
 				Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
-				if(read_state == NORMAL)
+				if(read_state == NORMAL){
 					txn->add_pred_read_write_set(*val);
+					storage->AddObject(txn->read_write_set(i), *val);
+				}
 				else
 					return SUSPENDED;
 			}
@@ -321,9 +323,11 @@ int Microbenchmark::ReconExecute(TxnProto* txn, ReconStorageManager* storage) co
 			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
 			if(storage->ShouldExec()){
 				Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
-				val += 1;
 				if(read_state != NORMAL)
 					return SUSPENDED;
+				else{
+					storage->AddObject(txn->read_write_set(i), *val);
+				}
 			}
 		}
 	}
