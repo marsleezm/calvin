@@ -904,10 +904,10 @@ int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
 		district_val = storage->ReadObject(district_key, read_state);
 		if (read_state == SUSPENDED)
 			return SUSPENDED;
-		else {
-			District district;
-			district.ParseFromString(*district_val);
-		}
+		//else {
+		//	District district;
+		//	district.ParseFromString(*district_val);
+		//}
 	}
 
 	// Read & update the customer
@@ -919,10 +919,10 @@ int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
 		customer_val = storage->ReadObject(customer_key, read_state);
 		if (read_state == SUSPENDED)
 			return SUSPENDED;
-		else {
-			Customer customer;
-			customer.ParseFromString(*customer_val);
-		}
+		//else {
+		//	Customer customer;
+		//	customer.ParseFromString(*customer_val);
+		//}
 	}
 
 	return RECON_SUCCESS;
@@ -1120,8 +1120,8 @@ int TPCC::OrderStatusReconTransaction(ReconStorageManager* storage) const {
 		snprintf(order_line_key, sizeof(order_line_key), "%sol%d", customer.last_order().c_str(), i);
 		Value* order_line_val = storage->ReadObject(order_line_key, read_state);
 		txn->add_pred_read_set(order_line_key);
-		OrderLine order_line;
-		try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
+		//OrderLine order_line;
+		//try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
 	}
 
 	return RECON_SUCCESS;
@@ -1257,7 +1257,7 @@ int TPCC::StockLevelReconTransaction(ReconStorageManager* storage) const {
 
 			Stock stock;
 			Value* stock_val = storage->ReadObject(stock_key, read_state);
-			stock.ParseFromString(*stock_val);
+			//stock.ParseFromString(*stock_val);
 		 }
 	}
 
@@ -1453,7 +1453,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 				OrderLine order_line;
 				txn->add_pred_read_write_set(order_line_key);
 				LOG(txn->txn_id(), " before trying to read orderline "<<order_line_key<<", "<<reinterpret_cast<int64>(order_line_val));
-				try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
+				//try_until(order_line.ParseFromString(*order_line_val), retry_cnt);
 			}
 
 			txn->add_pred_read_write_set(order.customer_id());
@@ -1461,7 +1461,7 @@ int TPCC::DeliveryReconTransaction(ReconStorageManager* storage) const {
 			Value* customer_val = storage->ReadObject(order.customer_id(), read_state);
 			LOG(txn->txn_id(), " before trying to read customer "<<order.customer_id()<<", value is "<<reinterpret_cast<int64>(customer_val));
 			Customer customer;
-			customer.ParseFromString(*customer_val);
+			//customer.ParseFromString(*customer_val);
 		}
 	}
 	LOG(txn->txn_id(), " finished, size of my pred rw is "<<txn->pred_read_write_set_size());
