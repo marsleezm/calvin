@@ -650,6 +650,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	assert(customer.ParseFromString(*customer_val));
 	customer.set_last_order(order_key);
 	//LOG(txn->txn_id(), " last of customer "<<customer_key<<" is "<<customer.last());
+	LOG(txn->txn_id(), " before trying to write customer "<<customer_key<<", value is "<<reinterpret_cast<int64>(customer_val));
 	assert(customer.SerializeToString(customer_val));
 	//storage->WriteToBuffer(customer_key, customer.SerializeAsString());
 
@@ -1365,6 +1366,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 					customer.set_balance(customer.balance() + total_amount);
 					customer.set_delivery_count(customer.delivery_count() + 1);
 					//assert(customer.SerializeToString(val));
+					LOG(txn->txn_id(), " before trying to write customer "<<customer_key<<", value is "<<reinterpret_cast<int64>(customer_val));
 					storage->ModifyToBuffer(customer_val, customer.SerializeAsString());
 				}
 			}
