@@ -80,7 +80,7 @@ inline void log(const char *file,int line, int tx_id, const LogData<List> &data)
 }
 
 //#define LOCKLOGGING
-//#define ALLLOGGING
+#define ALLLOGGING
 #define DOASSERT
 
 #ifdef DOASSERT
