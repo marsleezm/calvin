@@ -359,6 +359,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
+			  	  if(txn->multipartition())
+			  		  active_g_tids[txn->txn_id()] = manager;
 			  else{
 				  manager = active_g_tids[txn->txn_id()];
 				  manager->SetupTxn(txn);
