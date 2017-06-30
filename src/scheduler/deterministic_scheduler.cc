@@ -410,10 +410,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  txn->set_start_time(GetUTime());
 			  // Create manager.
 			  StorageManager* manager;
-			  if (active_g_tids.count(txn->txn_id()) == 0)
+			  if (active_g_tids.count(txn->txn_id()) == 0){
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
+				  if(txn->multipartition())
+					  active_g_tids[txn->txn_id()] = manager;
+			  }
 			  else{
 				  manager = active_g_tids[txn->txn_id()];
 				  manager->SetupTxn(txn);
