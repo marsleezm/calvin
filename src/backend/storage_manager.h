@@ -274,8 +274,6 @@ class StorageManager {
   unordered_map<Key, ValuePair> read_set_;
   unordered_map<Key, Value> remote_objects_;
 
-  // The message containing read results that should be sent to remote nodes
-  MessageProto* message_;
 
 
   // Counting how many transaction steps the current tranasction is executing
@@ -289,7 +287,7 @@ class StorageManager {
 
   TPCCArgs* tpcc_args;
 
-  // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
+  // Hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
   // in my transaction
   bool after_local_node;
   int* affecting_readers;
@@ -300,6 +298,9 @@ class StorageManager {
   vector<pair<int, int>> pending_read_confirm;
 
  public:
+  // The message containing read results that should be sent to remote nodes
+  MessageProto* message_;
+
   // Indicate whether the message contains any value that should be sent
   bool message_has_value_;
   bool is_suspended_;

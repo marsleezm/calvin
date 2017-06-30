@@ -181,7 +181,8 @@ void StorageManager::ApplyChange(bool is_committing){
 // TODO: add logic to delete keys that do not exist
 int StorageManager::HandleReadResult(const MessageProto& message) {
   ASSERT(message.type() == MessageProto::READ_RESULT);
-  LOG(txn_->txn_id(), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read);
+  if(txn_)
+	  LOG(txn_->txn_id(), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read);
   int source_node = message.source_node();
   if (message.confirmed()){
 	  // TODO: if the transaction has old data, should abort the transaction
@@ -202,6 +203,8 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 					  return DO_NOTHING;
 			  }
 			  else{
+				  //If I receive a message containing updated read results, if these read results may affect my execution, I need to abort.
+				  //For TPC-C and micro-bench, this is actually never the case: the value of parts in different partitions are somehow parallel.
 				  for(int i = 0; i< node_count; ++i){
 					  //std::cout<<" My affecting nodes has "<<affecting_readers[i]<<", source node is "<<source_node<<std::endl;
 					  if (source_node == affecting_readers[i]){

@@ -131,7 +131,7 @@ class TClient : public Client {
   TClient(Configuration* config, double mp) : config_(config), percent_mp_(mp*100) {}
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
-    TPCC tpcc;
+    TPCC tpcc(config_->this_node_id);
     *txn = new TxnProto();
     if (abs(rand())%10000 < percent_mp_)
         (*txn)->set_multipartition(true);
@@ -255,7 +255,7 @@ int main(int argc, char** argv) {
 		Microbenchmark(config.all_nodes.size(), config.this_node_id).InitializeStorage(storage, &config);
 	} else {
 		std::cout<<"TPC-C benchmark. No extra parameters."<<std::endl;
-		TPCC().InitializeStorage(storage, &config);
+		TPCC(config.this_node_id).InitializeStorage(storage, &config);
 	}
 
 	Connection* batch_connection = multiplexer.NewConnection("scheduler_"),
@@ -281,7 +281,7 @@ int main(int argc, char** argv) {
     								 batch_connection,
                                      storage,
 									 sequencer.GetTxnsQueue(), client,
-                                     new TPCC(), queue_mode);
+                                     new TPCC(config.this_node_id), queue_mode);
 
 	sequencer.SetScheduler(scheduler);
 

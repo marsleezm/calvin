@@ -13,7 +13,7 @@
 #include "common/configuration.h"
 #include "proto/tpcc.pb.h"
 #include "proto/tpcc_args.pb.h"
-
+#include "common/config_reader.h"
 // High conflict
 //#define WAREHOUSES_PER_NODE 4
 //#define DISTRICTS_PER_WAREHOUSE 2
@@ -47,6 +47,10 @@ class TPCC : public Application {
 	DELIVERY = 4,
 	STOCK_LEVEL = 5,
 	};
+
+  TPCC(int node_id) {
+    this_node_id = node_id;
+  }
 
   virtual ~TPCC() {}
 
@@ -118,6 +122,12 @@ class TPCC : public Application {
   // payment transaction, returning a 1 for success or 0 for failure.
   int PaymentTransaction(StorageManager* storage) const;
 
+  int NewOrderParallelTransaction(StorageManager* storage) const;
+
+  // A Payment call takes a set of args as the parameter and performs the
+  // payment transaction, returning a 1 for success or 0 for failure.
+  int PaymentParallelTransaction(StorageManager* storage) const;
+
   int OrderStatusTransaction(StorageManager* storage) const;
   int OrderStatusTransactionFast(StorageManager* storage) const;
 
@@ -129,6 +139,9 @@ class TPCC : public Application {
   // The following are implementations of retrieval and writing for local items
   Value* GetItem(Key key) const;
   void SetItem(Key key, Value* value) const;
+
+  bool parallel_multi_part = atoi(ConfigReader::Value("parallel_multi_part").c_str());
+  int this_node_id;
 };
 
 #endif // _DB_APPLICATIONS_TPCC_H_

@@ -51,11 +51,14 @@ class Microbenchmark : public Application {
   int kRWSetSize = atoi(ConfigReader::Value("rw_set_size").c_str());
   int indexAccessNum = atoi(ConfigReader::Value("index_num").c_str());
   int kDBSize = atoi(ConfigReader::Value("total_key").c_str());
+  bool parallel_multi_part = atoi(ConfigReader::Value("parallel_multi_part").c_str());
 
   virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
 
  private:
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
+                     int key_limit, int part, Rand* rand) const;
+  void AccumulateRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part, Rand* rand) const;
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part) const;

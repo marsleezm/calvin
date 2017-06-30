@@ -34,6 +34,19 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
   }
 }
 
+void Microbenchmark::AccumulateRandomKeys(set<int>* keys, int num_keys, int key_start,
+                                   int key_limit, int part, Rand* rand) const {
+  ASSERT(key_start % nparts == 0);
+  for (int i = 0; i < num_keys; i++) {
+    // Find a key not already in '*keys'.
+    int key;
+    do {
+    	key = RandomLocalKey(key_start, key_limit, part, rand);
+    } while (keys->count(key));
+    keys->insert(key);
+  }
+}
+
 void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                                    int key_limit, int part, Rand* rand) const {
   ASSERT(key_start % nparts == 0);
@@ -119,6 +132,7 @@ TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_
 
 void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 	set<int> keys;
+	set<int> myown_keys;
 
 	switch (txn->txn_type()) {
 		case MICROTXN_SP:
@@ -177,40 +191,104 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 			int avg_key_per_part = (kRWSetSize - indexAccessNum)/txn->readers_size(),
 					key_first_part = (kRWSetSize - indexAccessNum)- avg_key_per_part*(txn->readers_size()-1);
 
-			GetRandomKeys(&keys,
-						index_first_part,
-						nparts * 0,
-						nparts * index_records,
-						txn->readers(0), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				txn->add_read_write_set(IntToString(*it));
-			}
-
-			GetRandomKeys(&keys,
-					key_first_part,
-						nparts * index_records,
-						nparts * kDBSize,
-						txn->readers(0), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				txn->add_read_write_set(IntToString(*it));
-			}
-
-			for(int i = 1; i<txn->readers_size(); ++i){
+			LOG(txn->txn_id(), " is MCROTXN_MP, parallel multi is "<<parallel_multi_part<<", first reader is "<<txn->readers(0)
+					<<", first node is "<<this_node_id);
+			if(!parallel_multi_part || txn->readers(0) == this_node_id){
+				LOG(txn->txn_id(), " trying to generate keys normally");
 				GetRandomKeys(&keys,
-							  avg_index_per_part,
-							  nparts * 0,
-							  nparts * index_records,
-							  txn->readers(i), rand);
-				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
-					txn->add_read_write_set(IntToString(*it));
-
-				GetRandomKeys(&keys,
-							  avg_key_per_part,
-							  nparts * index_records,
-							  nparts * kDBSize,
-							  txn->readers(i), rand);
+							index_first_part,
+							nparts * 0,
+							nparts * index_records,
+							txn->readers(0), rand);
 				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-					//std::cout<<"Adding key "<<*it<<std::endl;
+					//LOG(txn->txn_id(), " Adding key "<<*it);
+					txn->add_read_write_set(IntToString(*it));
+				}
+
+				GetRandomKeys(&keys,
+						key_first_part,
+							nparts * index_records,
+							nparts * kDBSize,
+							txn->readers(0), rand);
+				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+					//LOG(txn->txn_id(), " Adding key "<<*it);
+					txn->add_read_write_set(IntToString(*it));
+				}
+
+				for(int i = 1; i<txn->readers_size(); ++i){
+					GetRandomKeys(&keys,
+								  avg_index_per_part,
+								  nparts * 0,
+								  nparts * index_records,
+								  txn->readers(i), rand);
+					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+						//LOG(txn->txn_id(), " Adding key "<<*it);
+						txn->add_read_write_set(IntToString(*it));
+					}
+
+					GetRandomKeys(&keys,
+								  avg_key_per_part,
+								  nparts * index_records,
+								  nparts * kDBSize,
+								  txn->readers(i), rand);
+					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+						//LOG(txn->txn_id(), " Adding key "<<*it);
+						txn->add_read_write_set(IntToString(*it));
+					}
+				}
+			}
+			else{
+				LOG(txn->txn_id(), " trying to generate keys with mine first");
+
+				AccumulateRandomKeys(&keys,
+							index_first_part,
+							nparts * 0,
+							nparts * index_records,
+							txn->readers(0), rand);
+
+				AccumulateRandomKeys(&keys,
+							key_first_part,
+							nparts * index_records,
+							nparts * kDBSize,
+							txn->readers(0), rand);
+
+
+				for(int i = 1; i<txn->readers_size(); ++i){
+					if(txn->readers(i) != this_node_id){
+						AccumulateRandomKeys(&keys,
+									  avg_index_per_part,
+									  nparts * 0,
+									  nparts * index_records,
+									  txn->readers(i), rand);
+
+						AccumulateRandomKeys(&keys,
+									  avg_key_per_part,
+									  nparts * index_records,
+									  nparts * kDBSize,
+									  txn->readers(i), rand);
+					}
+					else
+					{
+						AccumulateRandomKeys(&myown_keys,
+									  avg_index_per_part,
+									  nparts * 0,
+									  nparts * index_records,
+									  txn->readers(i), rand);
+
+						AccumulateRandomKeys(&myown_keys,
+									  avg_key_per_part,
+									  nparts * index_records,
+									  nparts * kDBSize,
+									  txn->readers(i), rand);
+					}
+				}
+				for (set<int>::iterator it = myown_keys.begin(); it != myown_keys.end(); ++it){
+					//LOG(txn->txn_id(), " adding my own key "<<*it);
+					txn->add_read_write_set(IntToString(*it));
+				}
+
+				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+					//LOG(txn->txn_id(), " adding remote key "<<*it);
 					txn->add_read_write_set(IntToString(*it));
 				}
 			}
@@ -218,10 +296,12 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		break;
 		case MICROTXN_DEP_MP:
 		{
+
 			set<int> keys;
 			int avg_index_per_part = indexAccessNum/txn->readers_size();
 			int index_first_part = indexAccessNum- avg_index_per_part*(txn->readers_size()-1);
 
+			LOG(txn->txn_id(), " is MCROTXN_DEP_MP");
 			GetRandomKeys(&keys,
 						index_first_part,
 		                nparts * 0,

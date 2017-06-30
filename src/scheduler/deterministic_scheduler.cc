@@ -193,8 +193,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  // Try to commit txns one by one
 		  MyTuple<int64_t, int, StorageManager*> to_commit_tx = scheduler->sc_txn_list[num_lc_txns_%sc_array_size];
 		  //if(! (to_commit_tx.first == prev_txn && prev_txn == prev_prev_txn))
-		  LOG(-1, " num lc is "<<num_lc_txns_<<", prev txn is  "<<prev_txn<<", prev prev is "<<prev_prev_txn<<", "<<
-				  to_commit_tx.first<<"is the first one in queue, status is "<<to_commit_tx.second);
+		  //LOG(-1, " num lc is "<<num_lc_txns_<<", prev txn is  "<<prev_txn<<", prev prev is "<<prev_prev_txn<<", "<<
+		//		  to_commit_tx.first<<"is the first one in queue, status is "<<to_commit_tx.second);
 		  //prev_prev_txn = prev_txn;
 		  //prev_txn = to_commit_tx.first;
 		  while(true){
@@ -328,17 +328,19 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	    		  scheduler->thread_connections_[thread]->Send(new_msg);
 	    	  }
 	    	  int txn_id = atoi(message.destination_channel().c_str());
-			  StorageManager* manager = active_g_tids[txn_id];
-			  if (manager == NULL){
+			  StorageManager* manager;
+			  if (active_g_tids.count(txn_id) == 0){
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue);
+				  LOG(txn_id, " just started, mgr is "<<reinterpret_cast<int64>(manager));
 				  // The transaction has not started, so I do not need to abort even if I am receiving different values than before
 				  manager->HandleReadResult(message);
 				  active_g_tids[txn_id] = manager;
-				  LOG(txn_id, " already starting, mgr is "<<reinterpret_cast<int64>(manager));
 			  }
 			  else {
+				  manager = active_g_tids[txn_id];
+				  LOG(txn_id, " already started, mgr is "<<reinterpret_cast<int64>(manager));
 				  // Handle read result is correct, e.g. I can continue execution
 				  int result = manager->HandleReadResult(message);
 				  if(result == SUCCESS){
@@ -400,9 +402,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
 				  LOG(txn->txn_id(), " starting, manager is "<<reinterpret_cast<int64>(manager));
+				  if(txn->multipartition())
+					  active_g_tids[txn->txn_id()] = manager;
 			  }
 			  else{
 				  manager = active_g_tids[txn->txn_id()];
+				  LOG(txn->txn_id(), " starting, using manager "<<reinterpret_cast<int64>(manager));
 				  manager->SetupTxn(txn);
 			  }
 			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, active_l_tids, sample_count, latency_count, latency_array, this_node, sc_array_size) == false){
@@ -480,7 +485,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				manager->put_inlist();
 				// Have to put in this way to ensure atomicity
 				put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), manager->num_aborted_, manager);
-				AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list, addr is "<<reinterpret_cast<int64>(manager));
+				AGGRLOG(txn->txn_id(), " added to list for confirm "<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list, addr is "<<reinterpret_cast<int64>(manager));
 				//AGGRLOG(txn->txn_id(), "after pushing first is "<<pending_confirm.top().second);
 				manager->SendLocalReads(false);
 			}
@@ -550,7 +555,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			}
 			else{
 				LOG(txn->txn_id(),  " spec-committing");
-				if (manager->message_has_value_){
+				if (manager->message_){
 					//pending_confirm.push(MyTuple<int64, int64, int>(txn->txn_id(), txn->local_txn_id(),
 					//	manager->num_aborted_));
 					manager->put_inlist();
@@ -558,7 +563,8 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					//sc_txn_list[txn->local_txn_id()%sc_array_size] = MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->num_aborted_, manager);
 					//AGGRLOG(txn->txn_id(),  " just pushed, now first queue is "<<pending_confirm.top().second);
 					LOG(txn->local_txn_id(), " is added to sc list, addr is "<<reinterpret_cast<int64>(manager));
-					manager->SendLocalReads(false);
+					if(manager->message_has_value_)
+						manager->SendLocalReads(false);
 				}
 				else{
 					//LOG(-1, " before adding "<<txn->local_txn_id()<<", org local is "<<sc_txn_list[txn->local_txn_id()%scheduler->sc_array_size].first<<", num loc is "<<num_lc_txns_);

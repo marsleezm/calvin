@@ -95,21 +95,21 @@ inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data
 #else
 
 #ifdef LOCKLOGGING
-#define LOG(txid, x)
+#define LOG(txid, x) ;
 #define LOCKLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
-#define PLOG(x)
-#define AGGRLOG(txid, x)
+#define PLOG(x) ;
+#define AGGRLOG(txid, x) ;
 #else
 #ifdef AGGRLOGGING
-#define LOG(txid, x)
+#define LOG(txid, x) ;
 #define AGGRLOG(txid, x) (log(__FILE__,__LINE__, txid, LogData<None>() << x))
-#define PLOG(x)
-#define LOCKLOG(txid, x)
+#define PLOG(x) ;
+#define LOCKLOG(txid, x) ;
 #else
-#define LOG(txid, x)
-#define LOCKLOG(txid, x)
-#define PLOG(x)
-#define AGGRLOG(txid, x)
+#define LOG(txid, x) ;
+#define LOCKLOG(txid, x) ;
+#define PLOG(x) ;
+#define AGGRLOG(txid, x) ;
 #endif
 #endif
 #endif
