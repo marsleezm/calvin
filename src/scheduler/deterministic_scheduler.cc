@@ -79,7 +79,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	message_queues = new AtomicQueue<MessageProto>*[num_threads];
 	threads_ = new pthread_t[num_threads];
 	thread_connections_ = new Connection*[num_threads];
-	latency = new MyTuple<int, int64, int64>[LATENCY_SIZE];
 
 	pthread_mutex_init(&recon_mutex_, NULL);
     lock_manager_ = new DeterministicLockManager(ready_txns_, configuration_);
@@ -121,8 +120,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     	string channel("scheduler");
     	channel.append(IntToString(i));
     	thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
-        for (int j = 0; j<LATENCY_SIZE; ++j)
-        	latency[j] = MyTuple<int, int64_t, int64_t>(0, 0, 0);
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
@@ -425,7 +422,6 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
   int batch_number = 0;
   int test = 0;
   int abort_number = 0;
-	int latency_count = 0;
 	int sample_count = 0;
 
 	int zero_duration = 0;
@@ -480,13 +476,13 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     		// WTF is this magic code doing???
     		if(done_txn->writers_size() == 0 || done_txn->writers(0) == scheduler->configuration_->this_node_id) {
     			txns++;
-                if (sample_count == SAMPLE_RATE)
+                if (sample_count == 2)
                 {
-                    if(latency_count == LATENCY_SIZE)
-                        latency_count = 0;
                     int64 now_time = GetUTime();
-                    scheduler->latency[latency_count] = MyTuple<int, int64_t, int64_t>(done_txn->txn_type(), now_time - done_txn->start_time(), now_time- done_txn->seed());
-                    ++latency_count;
+                    //scheduler->latency[latency_count] = MyTuple<int, int64_t, int64_t>(done_txn->txn_type(), now_time - done_txn->start_time(), now_time- done_txn->seed());
+                    scheduler->process_lat += now_time - done_txn->start_time();
+                    scheduler->total_lat += now_time- done_txn->seed();
+                    scheduler->latency_cnt += 1;
                     sample_count = 0;
                 }
                 ++sample_count;
