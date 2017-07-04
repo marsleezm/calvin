@@ -101,6 +101,19 @@ class Sequencer {
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
 
+  int64 inline increment_counter(int& mybatch, int& offset, int max_batch_size){
+	  if (offset == max_batch_size - 1){
+		  offset = 0;
+		  mybatch += 1;
+		  return (mybatch-1)*max_batch_size + max_batch_size-1;
+	  }
+	  else{
+		  offset += 1;
+		  return mybatch*max_batch_size+offset-1;
+	  }
+  }
+
+
   inline void add_readers_writers(TxnProto* txn){
   	  set<int> readers, writers;
         for (int i = 0; i < txn->read_set_size(); i++)

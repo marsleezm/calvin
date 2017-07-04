@@ -235,119 +235,70 @@ void Sequencer::RunWriter() {
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
 
-  vector<string> recon_txn_queue;
-
+  int txn_batch_number = configuration_->this_node_id;
+  int txn_id_offset = 0;
   for (int batch_number = configuration_->this_node_id;
        !deconstructor_invoked_;
        batch_number += configuration_->all_nodes.size()) {
-    // Begin epoch.
-    double epoch_start = GetTime();
-    batch.set_batch_number(batch_number);
-    batch.clear_data();
-    // Collect txn requests for this epoch.
-    int txn_id_offset = 0;
-    while (!deconstructor_invoked_ &&
-           GetTime() < epoch_start + epoch_duration_) {
-      // Add next txn request to batch.
-      if (txn_id_offset < max_batch_size && batch.data_size() < max_batch_size) {
-        TxnProto* txn;
-        string txn_string;
-        MessageProto recv_message;
+	  // Begin epoch.
+	  double epoch_start = GetTime();
+	  batch.set_batch_number(batch_number);
+	  batch.clear_data();
+	  // Collect txn requests for this epoch.
+	  string txn_string;
+	  TxnProto* txn;
+	  int org_cnt = txn_id_offset;
+	  int org_batch = txn_batch_number;
+	  while (!deconstructor_invoked_ &&
+           GetTime() < epoch_start + epoch_duration_ && !(txn_batch_number == org_batch+1 && org_cnt == txn_id_offset)) {
+		  // Add next txn request to batch.
+		  client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, max_batch_size));
+		  if(txn->txn_type() & RECON_MASK){
+			  bytes txn_data;
+			  txn->SerializeToString(&txn_data);
+			  google::protobuf::RepeatedField<int>::const_iterator  it;
 
-        if (message_queues->Pop(&recv_message)) {
-        	// Receive the result of depedent transaction query
-          if (recv_message.type() == MessageProto::RECON_INDEX_REPLY) {
-        	  for(int i = 0; i<recv_message.data_size(); ++i){
-        		  TxnProto tmp_txn;
-        		  tmp_txn.ParseFromString(recv_message.data(i));
-        		  //LOG(0, " got recon index reply, adding data to data batch: "<<batch.batch_number()<<", adding txn with id "<<tmp_txn.txn_id());
-        		  batch.add_data(recv_message.data(i));
-        	  }
-          }
-        }
-        else {
-            // Restart aborted dependent transactions if there are still any
-        	if(recon_txn_queue.size()){
-        		vector<string>::iterator qit = recon_txn_queue.begin();
-        		while(qit!=recon_txn_queue.end() && txn_id_offset < max_batch_size){
-        			TxnProto txn;
-        			string txn_data = *qit;
-					txn.ParseFromString(txn_data);
-					txn.set_txn_id(batch_number * max_batch_size + txn_id_offset);
-					txn_id_offset++;
-					txn.SerializeToString(&txn_data);
+			  for (it = txn->readers().begin(); it != txn->readers().end(); ++it){
+				  //LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
+				  recon_msgs[*it].add_data(txn_data);
+			  }
+			  delete txn;
+		  }
+		  else{
+			  txn->SerializeToString(&txn_string);
+			  batch.add_data(txn_string);
+			  delete txn;
+		  }
+	  }
 
-					google::protobuf::RepeatedField<int>::const_iterator  it;
-					for (it = txn.readers().begin(); it != txn.readers().end(); ++it){
-						recon_msgs[*it].add_data(txn_data);
-					}
-					qit = recon_txn_queue.erase(qit);
-        		}
-        	}
-        	else if(restart_queues->Size()){
-            	restart_queues->Pop(&recv_message);
-                assert(recv_message.type() == MessageProto::TXN_RESTART);
-                for(int i =0; i<recv_message.data_size(); ++i){
+	  MessageProto recv_message;
+	  while (!deconstructor_invoked_ && GetTime() < epoch_start + epoch_duration_) {
+		  if (message_queues->Pop(&recv_message)) {
+			// Receive the result of depedent transaction query
+			  if (recv_message.type() == MessageProto::RECON_INDEX_REPLY) {
+				  for(int i = 0; i<recv_message.data_size(); ++i){
+					  TxnProto tmp_txn;
+					  tmp_txn.ParseFromString(recv_message.data(i));
+					  //LOG(0, " got recon index reply, adding data to data batch: "<<batch.batch_number()<<", adding txn with id "<<tmp_txn.txn_id());
+					  batch.add_data(recv_message.data(i));
+				  }
+			  }
+		  }
+		  if(restart_queues->Pop(&recv_message)){
+			  assert(recv_message.type() == MessageProto::TXN_RESTART);
+			  for(int i =0; i<recv_message.data_size(); ++i){
+				  string txn_data = recv_message.data(i);
+				  TxnProto txn;
+				  txn.ParseFromString(txn_data);
+				  txn.set_txn_id(increment_counter(txn_batch_number, txn_id_offset, max_batch_size));
+				  txn.SerializeToString(&txn_data);
 
-                	string txn_data = recv_message.data(i);
-                	if(txn_id_offset < max_batch_size){
-                		TxnProto txn;
-						txn.ParseFromString(txn_data);
-						txn.set_txn_id(batch_number * max_batch_size + txn_id_offset);
-						txn_id_offset++;
-						txn.SerializeToString(&txn_data);
-
-						google::protobuf::RepeatedField<int>::const_iterator  it;
-						for (it = txn.readers().begin(); it != txn.readers().end(); ++it){
-							recon_msgs[*it].add_data(txn_data);
-						}
-                	}
-                	else {
-                		recon_txn_queue.push_back(txn_data);
-                	}
-                }
-        	}
-            // Otherwise, just start new transactions
-            else{
-            	client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset);
-            	txn_id_offset++;
-            	//LOG(txn->txn_id(), " type is  "<<txn->txn_type());
-            	// If it's dependent transaction!!
-				if(txn->txn_type() & RECON_MASK){
-		            bytes txn_data;
-		            txn->SerializeToString(&txn_data);
-		            google::protobuf::RepeatedField<int>::const_iterator  it;
-
-		            for (it = txn->readers().begin(); it != txn->readers().end(); ++it){
-		            	//LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
-		            	recon_msgs[*it].add_data(txn_data);
-		            }
-		            delete txn;
-				}
-				else{
-					txn->SerializeToString(&txn_string);
-					batch.add_data(txn_string);
-					delete txn;
-				}
-            }
-          }
-      } else if (txn_id_offset >= max_batch_size && batch.data_size() < max_batch_size) {
-    	  MessageProto recv_message;
-
-    	  bool got_message = message_queues->Pop(&recv_message);
-    	  if(got_message == true) {
-    		  if (recv_message.type() == MessageProto::RECON_INDEX_REPLY) {
-            	  for(int i = 0; i<recv_message.data_size(); ++i){
-            		  TxnProto tmp_txn;
-            		  tmp_txn.ParseFromString(recv_message.data(i));
-            		  //LOG(0, " got recon index reply, adding data to data batch: "<<batch.batch_number()<<", adding txn with id "<<tmp_txn.txn_id());
-            		  //LOG(0, " got recon index reply, adding data to data batch: "<<batch.batch_number()<<", now size is "<<batch.data_size());
-            		  batch.add_data(recv_message.data(i));
-            	  }
-              }
-          }
-        }
-   }
+				  google::protobuf::RepeatedField<int>::const_iterator  it;
+				  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
+					  recon_msgs[*it].add_data(txn_data);
+			  }
+		  }
+	  }
 
     for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
          it != configuration_->all_nodes.end(); ++it) {
@@ -363,6 +314,8 @@ void Sequencer::RunWriter() {
 
     //LOG(0, " serializing batch #"<<batch.batch_number()<<" with size "<<batch.data_size());
     // Send this epoch's requests to Paxos service.
+
+    //std::cout<<"Batch size is "<<batch.data_size()<<std::endl;
     batch.SerializeToString(&batch_string);
 #ifdef PAXOS
     paxos.SubmitBatch(batch_string);

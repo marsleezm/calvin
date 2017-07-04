@@ -273,7 +273,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 				*next_val = IntToString(StringToInt(*next_val) +  txn->seed()% 100 -50);
 			}
 			else{
-				//LOG(txn->txn_id(), " prediction is wrong for "<<*index_val);
+				LOG(txn->txn_id(), " prediction is wrong for "<<*index_val);
 				return FAILURE;
 			}
 		}

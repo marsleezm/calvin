@@ -479,9 +479,12 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
                 if (sample_count == 2)
                 {
                     int64 now_time = GetUTime();
+                    //int64 old_total = scheduler->total_lat;
                     //scheduler->latency[latency_count] = MyTuple<int, int64_t, int64_t>(done_txn->txn_type(), now_time - done_txn->start_time(), now_time- done_txn->seed());
                     scheduler->process_lat += now_time - done_txn->start_time();
                     scheduler->total_lat += now_time- done_txn->seed();
+                    //if(scheduler->total_lat < old_total)
+                    //	std::cout<<"Overflow!!!" << std::endl;
                     scheduler->latency_cnt += 1;
                     sample_count = 0;
                 }

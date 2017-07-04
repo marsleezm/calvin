@@ -128,8 +128,8 @@ class DeterministicScheduler : public Scheduler {
 
   public:
   	  bool deconstructor_invoked_ = false;
-  	  int64_t process_lat = 0;
-  	  int64_t total_lat = 0;
+  	  bigint process_lat = 0;
+  	  bigint total_lat = 0;
   	  int latency_cnt = 0;
       double throughput[THROUGHPUT_SIZE];
       double abort[THROUGHPUT_SIZE];
