@@ -134,7 +134,7 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
     LOG(txn_->txn_id(), "Got read set now is "<<got_read_set<<", got key from "<<message.source_node());
   for (int i = 0; i < message.keys_size(); i++) {
     Value* val = new Value(message.values(i));
-    LOG(txn_->txn_id(), " adding key "<<message.values(i));
+    LOG(txn_->txn_id(), " adding key "<<message.keys(i));
     objects_[message.keys(i)] = val;
     remote_reads_.push_back(val);
   }

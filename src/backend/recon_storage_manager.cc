@@ -55,7 +55,7 @@ void ReconStorageManager::HandleReadResult(const MessageProto& message) {
   for (int i = 0; i < message.keys_size(); i++) {
     Value* val = new Value(message.values(i));
     remote_objects_[message.keys(i)] = val;
-    //LOG(txn_->txn_id(), " handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
+    LOG(txn_->txn_id(), " recon handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
   }
 }
 
