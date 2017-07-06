@@ -69,11 +69,13 @@ void StorageManager::Setup(TxnProto* txn){
 	  if (configuration_->LookupPartition(key) ==
 		  configuration_->this_node_id) {
 		Value* val = actual_storage_->ReadObject(key);
-		//LOG(txn_->txn_id(), " got "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
+		LOG(txn_->txn_id(), " got "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
 		objects_[key] = val;
 		message.add_keys(key);
 		message.add_values(val == NULL ? "" : *val);
 	  }
+      else
+		LOG(txn_->txn_id(), " skip remote key "<<key);
 	}
 	for (int i = 0; i < txn->pred_read_write_set_size(); i++) {
 	  const Key& key = txn->pred_read_write_set(i);
