@@ -176,14 +176,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if(active_txns.count(IntToString(txn->txn_id()))){
 			  manager = active_txns[IntToString(txn->txn_id())];
 			  manager->Setup(txn);
-			  //LOG(txn->txn_id(), " starting txn from before");
+			  LOG(txn->txn_id(), " starting txn from before");
 		  }
 		  else{
 			  manager =
 					 new StorageManager(scheduler->configuration_,
 								scheduler->thread_connections_[thread],
 								scheduler->storage_, txn);
-			  //LOG(txn->txn_id(), " starting txn from scratch");
+			  LOG(txn->txn_id(), " starting txn from scratch");
 		  }
 
 		  // Writes occur at this node.
@@ -225,11 +225,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  							scheduler->thread_connections_[thread],
 				  							scheduler->storage_);
 				  active_txns[message.destination_channel()] = manager;
-				  //LOG(StringToInt(message.destination_channel()), " got read result for uninitialized txn");
+				  LOG(StringToInt(message.destination_channel()), " got read result for uninitialized txn");
 			  }
 			  else{
 				  manager = active_txns[message.destination_channel()];
-				  //LOG(StringToInt(message.destination_channel()), " got read result for old txn");
+				  LOG(StringToInt(message.destination_channel()), " got read result for old txn");
 			  }
 
 			  manager->HandleReadResult(message);
