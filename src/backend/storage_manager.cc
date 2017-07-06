@@ -127,6 +127,7 @@ void StorageManager::ApplyChange(){
 void StorageManager::HandleReadResult(const MessageProto& message) {
   assert(message.type() == MessageProto::READ_RESULT);
   got_read_set += 1;
+    LOG(txn_->txn_id(), "Got read set now is "<<got_read_set<<", got key from "<<message.source_node());
   for (int i = 0; i < message.keys_size(); i++) {
     Value* val = new Value(message.values(i));
     objects_[message.keys(i)] = val;
@@ -142,6 +143,7 @@ void StorageManager::PrintObjects(){
 }
 
 bool StorageManager::ReadyToExecute() {
+    LOG(txn_->txn_id(), "reader size is "<<txn_->readers_size()<<", got read set is "<<got_read_set);
 	if(txn_){
 		// Can finish the transaction if I am not the writer or if I am the writer, I have received everything
 		return	got_read_set == txn_->readers_size();

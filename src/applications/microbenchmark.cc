@@ -289,7 +289,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 			Value* val = storage->ReadObject(txn->read_write_set(i));
 			//std::cout<<txn->txn_id()<<" trying to read "<<txn->read_write_set(i)<<std::endl;
             int value = NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id); 
-		    LOG(txn->txn_id(), " transactions is not dependent, key is "<<txn->read_write_set(i)<<", addr is "<<val<<", value is "<<value);
+		    LOG(txn->txn_id(), " transactions is not dependent, key is "<<txn->read_write_set(i)<<", addr is "<<reinterpret_cast<int64>(val)<<", value is "<<value);
 			*val = IntToString(value);
 			//*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 		}
