@@ -175,8 +175,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  StorageManager* manager;
 		  if(active_txns.count(IntToString(txn->txn_id()))){
 			  manager = active_txns[IntToString(txn->txn_id())];
-			  manager->Setup(txn);
 			  LOG(txn->txn_id(), " starting txn from before");
+			  manager->Setup(txn);
 		  }
 		  else{
 			  manager =
