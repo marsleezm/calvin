@@ -179,11 +179,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  manager->Setup(txn);
 		  }
 		  else{
+			  LOG(txn->txn_id(), " trying starting txn from scratch");
 			  manager =
 					 new StorageManager(scheduler->configuration_,
 								scheduler->thread_connections_[thread],
 								scheduler->storage_, txn);
-			  LOG(txn->txn_id(), " starting txn from scratch");
 		  }
 
 		  // Writes occur at this node.
@@ -221,21 +221,21 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 			  StorageManager* manager;
 			  if(active_txns.count(message.destination_channel()) == 0){
+				  LOG(StringToInt(message.destination_channel()), " got read result for uninitialized txn");
 				  manager = new StorageManager(scheduler->configuration_,
 				  							scheduler->thread_connections_[thread],
 				  							scheduler->storage_);
 				  active_txns[message.destination_channel()] = manager;
-				  LOG(StringToInt(message.destination_channel()), " got read result for uninitialized txn");
 			  }
 			  else{
-				  manager = active_txns[message.destination_channel()];
 				  LOG(StringToInt(message.destination_channel()), " got read result for old txn");
+				  manager = active_txns[message.destination_channel()];
 			  }
 
 			  manager->HandleReadResult(message);
 			  if (manager->ReadyToExecute()) {
 				  // Execute and clean up.
-				  //LOG(StringToInt(message.destination_channel()), " ready to execute!");
+				  LOG(StringToInt(message.destination_channel()), " ready to execute!");
 				  TxnProto* txn = manager->txn_;
 				  // If successfully finished
 				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
@@ -311,7 +311,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  TxnProto* txn = recon_txns.front();
           if (txn->start_time() == 0)
             txn->set_start_time(GetUTime());
-		  //LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
+		  LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
 		  recon_txns.pop();
 		  ReconStorageManager* manager;
 		  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
