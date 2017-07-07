@@ -237,9 +237,10 @@ void Sequencer::RunWriter() {
 
   int txn_batch_number = configuration_->this_node_id;
   int txn_id_offset = 0;
+  int all_nodes = configuration_->all_nodes.size();
   for (int batch_number = configuration_->this_node_id;
        !deconstructor_invoked_;
-       batch_number += configuration_->all_nodes.size()) {
+       batch_number += all_nodes) {
 	  // Begin epoch.
 	  double epoch_start = GetTime();
 	  batch.set_batch_number(batch_number);
@@ -252,7 +253,7 @@ void Sequencer::RunWriter() {
 	  while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_ && !(txn_batch_number == org_batch+1 && org_cnt == txn_id_offset)) {
 		  // Add next txn request to batch.
-		  client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, max_batch_size));
+		  client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
 		  if(txn->txn_type() & RECON_MASK){
 			  bytes txn_data;
 			  txn->SerializeToString(&txn_data);
@@ -290,7 +291,7 @@ void Sequencer::RunWriter() {
 				  string txn_data = recv_message.data(i);
 				  TxnProto txn;
 				  txn.ParseFromString(txn_data);
-				  txn.set_txn_id(increment_counter(txn_batch_number, txn_id_offset, max_batch_size));
+				  txn.set_txn_id(increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
 				  txn.SerializeToString(&txn_data);
 
 				  google::protobuf::RepeatedField<int>::const_iterator  it;
