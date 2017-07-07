@@ -29,7 +29,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 }
 
 void StorageManager::Setup(TxnProto* txn){
-    LOG(txn_->txn_id(), " trying to setup txn ");
+    LOG(txn_->txn_id(), " trying to setup txn, txn's rw size is "<<txn->read_write_set_size());
 	txn_ = txn;
 	MessageProto message;
 	bool reader = false;

@@ -131,6 +131,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 	// Set the transaction's standard attributes
 	txn->set_txn_id(txn_id);
 	txn->set_txn_type(MICROTXN_MP  | recon_mask);
+	LOG(txn_id, " generating txn");
 
 	// Add two hot keys to read/write set---one in each partition.
 	set<int> keys;
@@ -148,6 +149,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 	//std::cout<<"Index first part is "<<index_first_part<<", num parts are "<<num_parts<<std::endl;
 	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 		//std::cout<<"Adding first index "<<*it<<std::endl;
+		LOG(txn_id, " adding key "<<*it);
 		txn->add_read_write_set(IntToString(*it));
 	}
 
@@ -159,6 +161,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 	//std::cout<<"Key first part is "<< key_first_part <<std::endl;
 	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 		//std::cout<<"Adding first key "<<*it<<std::endl;
+		LOG(txn_id, " adding key "<<*it);
 		txn->add_read_write_set(IntToString(*it));
 	}
 
@@ -173,6 +176,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 					  parts[i]);
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 			//std::cout<<"Adding index "<<*it<<std::endl;
+			LOG(txn_id, " adding key "<<*it);
 			txn->add_read_write_set(IntToString(*it));
 		}
 
@@ -183,6 +187,7 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 					  parts[i]);
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 			//std::cout<<"Adding key "<<*it<<std::endl;
+			LOG(txn_id, " adding key "<<*it);
 			txn->add_read_write_set(IntToString(*it));
 		}
 		txn->add_readers(parts[i]);
