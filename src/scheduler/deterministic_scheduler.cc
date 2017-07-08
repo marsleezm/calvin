@@ -311,7 +311,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  TxnProto* txn = recon_txns.front();
           if (txn->start_time() == 0)
             txn->set_start_time(GetUTime());
-		  LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
+		  //LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
 		  recon_txns.pop();
 		  ReconStorageManager* manager;
 		  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
