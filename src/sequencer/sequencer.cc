@@ -250,8 +250,31 @@ void Sequencer::RunWriter() {
 	  TxnProto* txn;
 	  int org_cnt = txn_id_offset;
 	  int org_batch = txn_batch_number;
+      int this_batch_added = 0;
 	  MessageProto recv_message;
-	  while (!deconstructor_invoked_ && GetTime() < epoch_start + epoch_duration_) {
+	  while (!deconstructor_invoked_ &&
+           GetTime() < epoch_start + epoch_duration_ ) {
+		  // Add next txn request to batch.
+          if(this_batch_added < max_batch_size){
+              client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
+              this_batch_added++;
+              if(txn->txn_type() & RECON_MASK){
+                  bytes txn_data;
+                  txn->SerializeToString(&txn_data);
+                  google::protobuf::RepeatedField<int>::const_iterator  it;
+
+                  for (it = txn->readers().begin(); it != txn->readers().end(); ++it){
+                      //LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
+                      recon_msgs[*it].add_data(txn_data);
+                  }
+                  delete txn;
+              }
+              else{
+                  txn->SerializeToString(&txn_string);
+                  batch.add_data(txn_string);
+                  delete txn;
+		      }
+          }
 		  if (message_queues->Pop(&recv_message)) {
 			// Receive the result of depedent transaction query
 		      LOG(0, " got msg, type is "<<recv_message.type());
@@ -278,28 +301,6 @@ void Sequencer::RunWriter() {
 				  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
 					  recon_msgs[*it].add_data(txn_data);
 			  }
-		  }
-	  }
-
-	  while (!deconstructor_invoked_ &&
-           GetTime() < epoch_start + epoch_duration_ && !(txn_batch_number == org_batch+1 && org_cnt == txn_id_offset)) {
-		  // Add next txn request to batch.
-		  client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
-		  if(txn->txn_type() & RECON_MASK){
-			  bytes txn_data;
-			  txn->SerializeToString(&txn_data);
-			  google::protobuf::RepeatedField<int>::const_iterator  it;
-
-			  for (it = txn->readers().begin(); it != txn->readers().end(); ++it){
-				  //LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
-				  recon_msgs[*it].add_data(txn_data);
-			  }
-			  delete txn;
-		  }
-		  else{
-			  txn->SerializeToString(&txn_string);
-			  batch.add_data(txn_string);
-			  delete txn;
 		  }
 	  }
 
