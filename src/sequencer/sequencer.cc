@@ -248,8 +248,8 @@ void Sequencer::RunWriter() {
 	  // Collect txn requests for this epoch.
 	  string txn_string;
 	  TxnProto* txn;
-	  int org_cnt = txn_id_offset;
-	  int org_batch = txn_batch_number;
+	  //int org_cnt = txn_id_offset;
+	  //int org_batch = txn_batch_number;
       int this_batch_added = 0;
 	  MessageProto recv_message;
 	  while (!deconstructor_invoked_ &&
