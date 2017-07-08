@@ -253,7 +253,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 		  else{
 			  //LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
-			  //LOG(StringToInt(message.destination_channel()), " got recon read result");
+			  LOG(StringToInt(message.destination_channel()), " got recon read result");
 			  assert(message.type() == MessageProto::RECON_READ_RESULT);
 			  ReconStorageManager* manager;
 
@@ -269,13 +269,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  else{
 				  manager = recon_pending_txns[message.destination_channel()];
 				  if(manager->get_txn()){
-					  //LOG(StringToInt(message.destination_channel()), " handling recon read results");
+					  LOG(StringToInt(message.destination_channel()), " handling recon read results");
 					  manager->HandleReadResult(message);
 					  TxnProto* txn = manager->GetTxn();
 					  int result = scheduler->application_->ReconExecute(txn, manager);
 					  if(result == RECON_SUCCESS){
 						  // Clean up transaction
-						  //LOG(txn->txn_id(), " finished recon phase");
+						  LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
+                            scheduler->configuration_->this_node_id);
 						  delete manager;
 						  recon_pending_txns.erase(message.destination_channel());
 
@@ -293,10 +294,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 							    reply_recon_msg.clear_data();
 							    pthread_mutex_unlock(&scheduler->recon_mutex_);
                               }
+                              else
+                                LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
 						  }
 					  }
 					  else if(result == SUSPENDED){
-						  //LOG(txn->txn_id(), " suspended!");
+						  LOG(txn->txn_id(), " suspended!");
 						  continue;
 					  }
 					  else{
@@ -332,14 +335,16 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  int result = scheduler->application_->ReconExecute(txn, manager);
 		  if(result == RECON_SUCCESS){
 			  delete manager;
+		      LOG(txn->txn_id(), " recon txn has finished");
 			  recon_pending_txns.erase(IntToString(txn->txn_id()));
+              LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
+                scheduler->configuration_->this_node_id);
 
 			  // Only one of all receivers for a multi-part dependent txn replies RECON msg
 			  if(txn->readers(0) == scheduler->configuration_->this_node_id){
 				  string txn_data;
 				  txn->SerializeToString(&txn_data);
 				  reply_recon_msg.add_data(txn_data);
-		          LOG(txn->txn_id(), " recon txn has finished");
 				  // Resume the execution.
 
                   if(reply_recon_msg.data_size() > 20){
@@ -349,6 +354,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				    reply_recon_msg.clear_data();
 				    pthread_mutex_unlock(&scheduler->recon_mutex_);
                   }
+                  else
+                    LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
 			  }
 		  }
 		  else if(result == SUSPENDED){
