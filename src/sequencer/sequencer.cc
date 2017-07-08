@@ -260,7 +260,7 @@ void Sequencer::RunWriter() {
 			  google::protobuf::RepeatedField<int>::const_iterator  it;
 
 			  for (it = txn->readers().begin(); it != txn->readers().end(); ++it){
-				  //LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
+				  LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
 				  recon_msgs[*it].add_data(txn_data);
 			  }
 			  delete txn;
@@ -280,7 +280,7 @@ void Sequencer::RunWriter() {
 				  for(int i = 0; i<recv_message.data_size(); ++i){
 					  TxnProto tmp_txn;
 					  tmp_txn.ParseFromString(recv_message.data(i));
-					  //LOG(0, " got recon index reply, adding data to data batch: "<<batch.batch_number()<<", adding txn with id "<<tmp_txn.txn_id());
+					  LOG(tmp_txn.txn_id(), " got recon index reply, adding data to data batch: "<<batch.batch_number());
 					  batch.add_data(recv_message.data(i));
 				  }
 			  }
@@ -292,6 +292,7 @@ void Sequencer::RunWriter() {
 				  TxnProto txn;
 				  txn.ParseFromString(txn_data);
 				  txn.set_txn_id(increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
+				  LOG(txn.txn_id(), " add aborted txn ");
 				  txn.SerializeToString(&txn_data);
 
 				  google::protobuf::RepeatedField<int>::const_iterator  it;

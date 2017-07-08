@@ -311,7 +311,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  TxnProto* txn = recon_txns.front();
           if (txn->start_time() == 0)
             txn->set_start_time(GetUTime());
-		  //LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
+		  LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
 		  recon_txns.pop();
 		  ReconStorageManager* manager;
 		  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
@@ -325,7 +325,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  manager->Setup(txn);
 		  }
 
-		  //LOG(txn->txn_id(), " recon txn is being executed");
+		  LOG(txn->txn_id(), " recon txn is being executed");
 		  int result = scheduler->application_->ReconExecute(txn, manager);
 		  if(result == RECON_SUCCESS){
 			  delete manager;
@@ -336,6 +336,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  string txn_data;
 				  txn->SerializeToString(&txn_data);
 				  reply_recon_msg.add_data(txn_data);
+		          LOG(txn->txn_id(), " recon txn has finished");
 				  // Resume the execution.
 
 				  pthread_mutex_lock(&scheduler->recon_mutex_);
@@ -345,7 +346,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 		  else if(result == SUSPENDED){
-			  //LOG(txn->txn_id(), " recon suspend!");
+			  LOG(txn->txn_id(), " recon suspend!");
 			  recon_pending_txns[IntToString(txn->txn_id())] = manager;
 			  continue;
 		  }
