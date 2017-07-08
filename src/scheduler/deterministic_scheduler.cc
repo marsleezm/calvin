@@ -286,10 +286,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 							  reply_recon_msg.add_data(txn_data);
 							  // Resume the execution.
 
-							  pthread_mutex_lock(&scheduler->recon_mutex_);
-							  scheduler->recon_connection->SmartSend(reply_recon_msg);
-							  reply_recon_msg.clear_data();
-							  pthread_mutex_unlock(&scheduler->recon_mutex_);
+                              if(reply_recon_msg.data_size() > 20){
+		                        LOG(txn->txn_id(), " recon sending back msg");
+							    pthread_mutex_lock(&scheduler->recon_mutex_);
+							    scheduler->recon_connection->SmartSend(reply_recon_msg);
+							    reply_recon_msg.clear_data();
+							    pthread_mutex_unlock(&scheduler->recon_mutex_);
+                              }
 						  }
 					  }
 					  else if(result == SUSPENDED){
@@ -339,10 +342,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		          LOG(txn->txn_id(), " recon txn has finished");
 				  // Resume the execution.
 
-				  pthread_mutex_lock(&scheduler->recon_mutex_);
-				  scheduler->recon_connection->SmartSend(reply_recon_msg);
-				  reply_recon_msg.clear_data();
-				  pthread_mutex_unlock(&scheduler->recon_mutex_);
+                  if(reply_recon_msg.data_size() > 20){
+		            LOG(txn->txn_id(), " recon sending back msg");
+				    pthread_mutex_lock(&scheduler->recon_mutex_);
+				    scheduler->recon_connection->SmartSend(reply_recon_msg);
+				    reply_recon_msg.clear_data();
+				    pthread_mutex_unlock(&scheduler->recon_mutex_);
+                  }
 			  }
 		  }
 		  else if(result == SUSPENDED){
