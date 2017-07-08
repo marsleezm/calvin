@@ -254,6 +254,7 @@ void Sequencer::RunWriter() {
 	  while (!deconstructor_invoked_ && GetTime() < epoch_start + epoch_duration_) {
 		  if (message_queues->Pop(&recv_message)) {
 			// Receive the result of depedent transaction query
+		      LOG(tmp_txn.txn_id(), " got msg, type is "<<recv_message.type());
 			  if (recv_message.type() == MessageProto::RECON_INDEX_REPLY) {
 				  for(int i = 0; i<recv_message.data_size(); ++i){
 					  TxnProto tmp_txn;
