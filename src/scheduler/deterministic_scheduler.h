@@ -123,8 +123,8 @@ class DeterministicScheduler : public Scheduler {
   AtomicQueue<MessageProto>** message_queues;
   
   int queue_mode_;
-  int abort_batch_size;
   int num_threads;
+  int recon_batch_size = 200;
 
   public:
   	  bool deconstructor_invoked_ = false;

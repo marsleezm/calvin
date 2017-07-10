@@ -67,12 +67,16 @@ class ReconStorageManager {
   Value* ReadObject(const Key& key, int& read_state);
 
   void AddObject(const Key& key, string value){
-	  if (read_set_.count(key) == 0 && message_){
+	  if (message_){
+		  LOG(txn_->txn_id(), "Adding to msg: "<<key);
 		  message_->add_keys(key);
 		  message_->add_values(value);
 		  message_has_value_ = true;
 		  //read_set_[key] = &value;
 	  }
+	  //else{
+	//	  LOG(txn_->txn_id(), " WTF?? Is multipartition "<<txn_->multipartition()<<", count is "<<read_set_.count(key));
+	 // }
   }
 
   // Some transactions may have this kind of behavior: read a value, if some condition is satisfied, update the

@@ -71,10 +71,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
       storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode) {
 	ready_txns_ = new std::deque<TxnProto*>();
 
-	abort_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str())
-			*atoi(ConfigReader::Value("dependent_percent").c_str())/200;
-
-
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	message_queues = new AtomicQueue<MessageProto>*[num_threads];
 	threads_ = new pthread_t[num_threads];
@@ -206,7 +202,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 
 		  } else {
-			  //LOG(txn->txn_id(), " is not ready yet");
+			  LOG(txn->txn_id(), " is not ready yet");
 			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
 			  //LOG(txn->txn_id(), " waiting for remote");
 			  active_txns[IntToString(txn->txn_id())] = manager;
@@ -217,7 +213,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  // If I get read_result when executing a transaction
 		  if (message.type() == MessageProto::READ_RESULT) {
 			  // Remote read result.
-			  //LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
+			  LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
 
 			  StorageManager* manager;
 			  if(active_txns.count(message.destination_channel()) == 0){
@@ -253,7 +249,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 		  else{
 			  //LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
-			  LOG(StringToInt(message.destination_channel()), " got recon read result");
+			  //LOG(StringToInt(message.destination_channel()), " got recon read result");
 			  assert(message.type() == MessageProto::RECON_READ_RESULT);
 			  ReconStorageManager* manager;
 
@@ -269,14 +265,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  else{
 				  manager = recon_pending_txns[message.destination_channel()];
 				  if(manager->get_txn()){
-					  LOG(StringToInt(message.destination_channel()), " handling recon read results");
+					  //LOG(StringToInt(message.destination_channel()), " handling recon read results");
 					  manager->HandleReadResult(message);
 					  TxnProto* txn = manager->GetTxn();
 					  int result = scheduler->application_->ReconExecute(txn, manager);
 					  if(result == RECON_SUCCESS){
 						  // Clean up transaction
-						  LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
-                            scheduler->configuration_->this_node_id);
+						  //LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<scheduler->configuration_->this_node_id);
 						  delete manager;
 						  recon_pending_txns.erase(message.destination_channel());
 
@@ -287,19 +282,19 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 							  reply_recon_msg.add_data(txn_data);
 							  // Resume the execution.
 
-                              if(reply_recon_msg.data_size() > 20){
-		                        LOG(txn->txn_id(), " recon sending back msg");
+                              if(reply_recon_msg.data_size() > scheduler->recon_batch_size){
+		                        //LOG(txn->txn_id(), " recon sending back msg");
 							    pthread_mutex_lock(&scheduler->recon_mutex_);
 							    scheduler->recon_connection->SmartSend(reply_recon_msg);
 							    reply_recon_msg.clear_data();
 							    pthread_mutex_unlock(&scheduler->recon_mutex_);
                               }
-                              else
-                                LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
+                              //else
+                              //  LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
 						  }
 					  }
 					  else if(result == SUSPENDED){
-						  LOG(txn->txn_id(), " suspended!");
+						  //LOG(txn->txn_id(), " suspended!");
 						  continue;
 					  }
 					  else{
@@ -331,11 +326,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  manager->Setup(txn);
 		  }
 
-		  LOG(txn->txn_id(), " recon txn is being executed");
+		  //LOG(txn->txn_id(), " recon txn is being executed");
 		  int result = scheduler->application_->ReconExecute(txn, manager);
 		  if(result == RECON_SUCCESS){
 			  delete manager;
-		      LOG(txn->txn_id(), " recon txn has finished");
+		      //LOG(txn->txn_id(), " recon txn has finished");
 			  recon_pending_txns.erase(IntToString(txn->txn_id()));
               LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
                 scheduler->configuration_->this_node_id);
@@ -347,15 +342,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  reply_recon_msg.add_data(txn_data);
 				  // Resume the execution.
 
-                  if(reply_recon_msg.data_size() > 20){
-		            LOG(txn->txn_id(), " recon sending back msg");
+                  if(reply_recon_msg.data_size() > scheduler->recon_batch_size){
+		            //LOG(txn->txn_id(), " recon sending back msg");
 				    pthread_mutex_lock(&scheduler->recon_mutex_);
 				    scheduler->recon_connection->SmartSend(reply_recon_msg);
 				    reply_recon_msg.clear_data();
 				    pthread_mutex_unlock(&scheduler->recon_mutex_);
                   }
-                  else
-                    LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
+                  //else
+                  //  LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
 			  }
 		  }
 		  else if(result == SUSPENDED){
@@ -423,22 +418,23 @@ MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicSchedu
 }
 
 void* DeterministicScheduler::LockManagerThread(void* arg) {
-  DeterministicScheduler* scheduler = reinterpret_cast<DeterministicScheduler*>(arg);
+	DeterministicScheduler* scheduler = reinterpret_cast<DeterministicScheduler*>(arg);
 
-  // Run main loop.
-  MessageProto message;
-  MessageProto* batch_message = NULL;
-  int txns = 0;
-  double time = GetTime();
-  int executing_txns = 0;
-  int pending_txns = 0;
-  int batch_offset = 0;
-  int batch_number = 0;
-  int test = 0;
-  int abort_number = 0;
+	// Run main loop.
+	MessageProto message;
+	MessageProto* batch_message = NULL;
+	int txns = 0;
+	double time = GetTime();
+	int executing_txns = 0;
+	int pending_txns = 0;
+	int batch_offset = 0;
+	int batch_number = 0;
+	int second = 0;
+	int abort_number = 0;
 	int sample_count = 0;
 
-	int zero_duration = 0;
+	//int unpacked_txns = 0,
+	//	begin_batch = 0;
 
 	//map<TxnProto*, int> unfinished_txns;
 
@@ -467,10 +463,9 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     	if (done_txn->status() == TxnProto::ABORTED) {
     		// Must be a dependent transaction
     		assert(done_txn->txn_type() & DEPENDENT_MASK);
-    		int to_deal_node_id = done_txn->seed() % done_txn->readers_size();
     		// Make sure that only one node would add this transaction back to node.
-    		if (scheduler->configuration_->this_node_id == done_txn->readers(to_deal_node_id)) {
-    			abort_number++;
+    		if (scheduler->configuration_->this_node_id == done_txn->readers(0)) {
+    			++abort_number;
     			done_txn->set_status(TxnProto::ACTIVE);
     			done_txn->clear_pred_read_write_set();
     			done_txn->clear_pred_read_set();
@@ -479,7 +474,7 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     			bytes txn_data;
     			done_txn->SerializeToString(&txn_data);
     			restart_msg.add_data(txn_data);
-    			if(restart_msg.data_size() >= scheduler->abort_batch_size){
+    			if(restart_msg.data_size() >= 10){
     				scheduler->batch_connection_->SmartSend(restart_msg);
     				restart_msg.clear_data();
     			}
@@ -519,14 +514,18 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
         batch_number++;
         delete batch_message;
         batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
+      }
 
       // Current batch has remaining txns, grab up to 10.
-      } else if (executing_txns + pending_txns < 2000) {
-        for (int i = 0; i < 100; i++) {
+      if (executing_txns + pending_txns < 2000 && batch_message) {
+        for (int i = 0; i < 200; i++) {
           if (batch_offset >= batch_message->data_size()) {
             // Oops we ran out of txns in this batch. Stop adding txns for now.
             break;
           }
+
+          //++unpacked_txns;
+
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
           //LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
@@ -552,45 +551,29 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 
       //unfinished_txns[txn] = local_txn_cnt++;
       scheduler->txns_queue->Push(txn);
-      //locked.erase((int)txn->txn_id());
-      //executing.insert((int)txn->txn_id());
-      //scheduler->SendTxnPtr(scheduler->requests_out_, txn);
-
     }
 
     // Report throughput.
     if (GetTime() > time + 1) {
-      double total_time = GetTime() - time;
-      std::cout << "Completed " << (static_cast<double>(txns) / total_time)
+    	double total_time = GetTime() - time;
+    	std::cout << "Completed " << (static_cast<double>(txns) / total_time)
                 << " txns/sec, "
                 << abort_number<< " transaction restart, "
-                << test << "  second,  "
-                << executing_txns << " executing, "
-                << pending_txns << " pending \n"
+                << second << "  second,  "
+                << executing_txns << " executing \n"
+				//<< unpacked_txns <<" was unpacked, "
+                //<< pending_txns << " pending, from batch "
+				//<< begin_batch<<" to "<<batch_number<<" \n"
 				<< std::flush;
-      // Reset txn count.
-      if (txns == 0)
-    	  ++zero_duration;
-      else
-    	  zero_duration = 0;
-      //if(zero_duration >= 20){
-    //	  int min_count = 10000000;
-    //	  TxnProto* min_txn;
-    	  //for(map<TxnProto*, int>::iterator it = unfinished_txns.begin(); it != unfinished_txns.end(); ++it) {
-    	//	  if(it->second < min_count){
-    	//		  min_count = it->second;
-    	//		  min_txn = it->first;
-    	//	  }
-    	 // }
-    	  //if (min_txn)
-    	//	  LOG(min_txn->txn_id(), " is the smallest that was stuck!");
-      //}
-      scheduler->throughput[test] = (static_cast<double>(txns) / total_time);
-      scheduler->abort[test] = abort_number/total_time;
-      time = GetTime();
-      txns = 0;
-      abort_number = 0;
-      test++;
+    	// Reset txn count.
+    	//unpacked_txns = 0;
+    	//begin_batch = batch_number;
+    	scheduler->throughput[second] = (static_cast<double>(txns) / total_time);
+    	scheduler->abort[second] = abort_number/total_time;
+    	time = GetTime();
+    	txns = 0;
+    	abort_number = 0;
+    	second++;
     }
   }
   return NULL;

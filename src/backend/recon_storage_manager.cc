@@ -93,7 +93,7 @@ ReconStorageManager::~ReconStorageManager() {
 Value* ReconStorageManager::ReadObject(const Key& key, int& read_state) {
 	read_state = NORMAL;
 	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-		//LOG(txn_->txn_id(), "Trying to read local key "<<key);
+		LOG(txn_->txn_id(), "Trying to read local key "<<key);
 		if (read_set_.count(key) == 0){
 			Value* result = actual_storage_->ReadObject(key, txn_->txn_id());
 			while (result == NULL){
@@ -103,12 +103,12 @@ Value* ReconStorageManager::ReadObject(const Key& key, int& read_state) {
 			//LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
 			//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
 			read_set_[key] = result;
-//			if (message_){
-//				//LOG(txn_->txn_id(), "Adding to msg: "<<key);
-//				message_->add_keys(key);
-//				message_->add_values(result == NULL ? "" : *result);
-//				message_has_value_ = true;
-//			}
+			//if (message_){
+				//LOG(txn_->txn_id(), "Adding to msg: "<<key);
+			//	message_->add_keys(key);
+			//	message_->add_values(result == NULL ? "" : *result);
+			//	message_has_value_ = true;
+			//}
 			return result;
 		}
 		else{
@@ -117,7 +117,7 @@ Value* ReconStorageManager::ReadObject(const Key& key, int& read_state) {
 	}
 	else // The key is not replicated locally, the writer should wait
 	{
-		//LOG(txn_->txn_id(), "Trying to read non-local key "<<key<<", count is "<<remote_objects_.count(key));
+		LOG(txn_->txn_id(), "Trying to read non-local key "<<key<<", count is "<<remote_objects_.count(key));
 		if (remote_objects_.count(key) > 0){
 			return remote_objects_[key];
 		}
@@ -136,9 +136,9 @@ Value* ReconStorageManager::ReadObject(const Key& key, int& read_state) {
 
 
 void ReconStorageManager::SendLocalReads(){
-	for (int i = 0; i < txn_->writers().size(); i++) {
+	for (int i = 0; i < txn_->writers_size(); i++) {
 	  if (txn_->writers(i) != configuration_->this_node_id) {
-		  //LOG(txn_->txn_id()," sending reads to " << txn_->writers(i));
+		  LOG(txn_->txn_id()," sending reads to " << txn_->writers(i));
 		  message_->set_destination_node(txn_->writers(i));
 		  connection_->Send1(*message_);
 	  }
