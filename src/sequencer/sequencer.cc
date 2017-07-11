@@ -239,10 +239,11 @@ void Sequencer::RunWriter() {
   int txn_id_offset = 0;
   int all_nodes = configuration_->all_nodes.size();
 
-//  int new_count = 0,
-//	  indexed_count = 0,
-//	  aborted_count = 0,
-//	  begin_batch = 0;
+  int new_count = 0,
+	  indexed_count = 0,
+	  aborted_count = 0;
+	  //begin_batch = 0,
+	  //end_batch = 0;
   for (int batch_number = configuration_->this_node_id;
        !deconstructor_invoked_;
        batch_number += all_nodes) {
@@ -260,13 +261,29 @@ void Sequencer::RunWriter() {
 	  while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_ ) {
 		  // Add next txn request to batch.
+		  while(restart_queues->Pop(&recv_message)){
+			  assert(recv_message.type() == MessageProto::TXN_RESTART);
+			  for(int i =0; i<recv_message.data_size(); ++i){
+				  ++aborted_count;
+				  string txn_data = recv_message.data(i);
+				  TxnProto txn;
+				  txn.ParseFromString(txn_data);
+				  txn.set_txn_id(increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
+				  LOG(txn.txn_id(), " add aborted txn ");
+				  txn.SerializeToString(&txn_data);
+
+				  google::protobuf::RepeatedField<int>::const_iterator  it;
+				  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
+					  recon_msgs[*it].add_data(txn_data);
+			  }
+		  }
 
 		  while(message_queues->Pop(&recv_message)) {
 			// Receive the result of depedent transaction query
-			  LOG(-1, " got msg, type is "<<recv_message.type());
+		      LOG(-1, " got msg, type is "<<recv_message.type());
 			  if (recv_message.type() == MessageProto::RECON_INDEX_REPLY) {
 				  for(int i = 0; i<recv_message.data_size(); ++i){
-					  //++indexed_count;
+					  ++indexed_count;
 					  string txn_data;
 					  TxnProto tmp_txn;
 					  tmp_txn.ParseFromString(recv_message.data(i));
@@ -277,24 +294,6 @@ void Sequencer::RunWriter() {
 				  }
 			  }
 		  }
-
-		  while(restart_queues->Pop(&recv_message)){
-			  assert(recv_message.type() == MessageProto::TXN_RESTART);
-			  for(int i =0; i<recv_message.data_size(); ++i){
-				  //++aborted_count;
-				  string txn_data = recv_message.data(i);
-				  TxnProto txn;
-				  txn.ParseFromString(txn_data);
-				  txn.set_txn_id(increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
-				  //LOG(txn.txn_id(), " add aborted txn ");
-				  txn.SerializeToString(&txn_data);
-
-				  google::protobuf::RepeatedField<int>::const_iterator  it;
-				  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
-					  recon_msgs[*it].add_data(txn_data);
-			  }
-		  }
-
 
           if(this_batch_added < max_batch_size){
               client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
@@ -311,7 +310,7 @@ void Sequencer::RunWriter() {
                   delete txn;
               }
               else{
-            	  //++new_count;
+            	  ++new_count;
                   txn->SerializeToString(&txn_string);
                   batch.add_data(txn_string);
                   delete txn;
@@ -340,10 +339,9 @@ void Sequencer::RunWriter() {
 //                << " new txn, "
 //                << aborted_count<< " aborted txn, "
 //                << indexed_count << " indexed txn, from batch "
-//				<< begin_batch << " to "<< batch_number <<"\n"
+//				<< begin_batch << " to "<<end_batch <<"\n"
 //				<< std::flush;
 //    	// Reset txn count.
-//    	begin_batch = batch_number;
 //    	aborted_count = 0;
 //    	indexed_count = 0;
 //    	new_count = 0;

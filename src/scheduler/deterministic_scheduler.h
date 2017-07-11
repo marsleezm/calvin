@@ -124,7 +124,6 @@ class DeterministicScheduler : public Scheduler {
   
   int queue_mode_;
   int num_threads;
-  int recon_batch_size = 10;
 
   public:
   	  bool deconstructor_invoked_ = false;

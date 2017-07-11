@@ -604,6 +604,7 @@ int TPCC::NewOrderReconTransaction(ReconStorageManager* storage) const {
 		}
 	}
 
+	//std::cout<<"New order recon successed!"<<std::endl;
 	return RECON_SUCCESS;
 }
 
@@ -763,6 +764,8 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 		//else
 		//	return FAILURE;
 	}
+
+	//std::cout<<"New order successed!"<<std::endl;
     //storage->ApplyChange();
 	return SUCCESS;
 }
@@ -937,6 +940,7 @@ int TPCC::PaymentReconTransaction(ReconStorageManager* storage) const {
 		}
 	}
 
+	//std::cout<<"Payment recon successed!"<<std::endl;
 	return RECON_SUCCESS;
 }
 
@@ -1020,6 +1024,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	assert(history.SerializeToString(history_value));
 	storage->PutObject(txn->write_set(0), history_value);
 
+	//std::cout<<"Payment successed!"<<std::endl;
 	return SUCCESS;
 }
 
