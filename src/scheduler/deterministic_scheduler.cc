@@ -165,53 +165,80 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   reply_recon_msg.set_destination_channel("sequencer");
   reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
   while (!scheduler->deconstructor_invoked_) {
-	  if(scheduler->txns_queue->Pop(&txn)){
-		  // No remote read result found, start on next txn if one is waiting.
-		  // Create manager.
-		  StorageManager* manager;
-		  if(active_txns.count(IntToString(txn->txn_id()))){
-			  manager = active_txns[IntToString(txn->txn_id())];
-			  LOG(txn->txn_id(), " starting txn from before");
-			  manager->Setup(txn);
-		  }
-		  else{
-			  LOG(txn->txn_id(), " trying starting txn from scratch");
-			  manager =
-					 new StorageManager(scheduler->configuration_,
-								scheduler->thread_connections_[thread],
-								scheduler->storage_, txn);
-		  }
+	  if (scheduler->message_queues[thread]->Pop(&message)){
+		  // Try to handle recon_txns
+		  if(recon_txns.size()){
 
-		  // Writes occur at this node.
-		  if (manager->ReadyToExecute()) {
-			  LOG(txn->txn_id(), " start executing txn of type "<<txn->txn_type());
-			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
-				  delete manager;
-				  // Respond to scheduler;
-				  scheduler->done_queue->Push(txn);
-				  LOG(txn->txn_id(), " finish executing txn!");
+			  TxnProto* txn = recon_txns.front();
+	          if (txn->start_time() == 0)
+	            txn->set_start_time(GetUTime());
+			  LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
+			  recon_txns.pop();
+			  ReconStorageManager* manager;
+			  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
+				  manager = new ReconStorageManager(scheduler->configuration_,
+				  		  									scheduler->thread_connections_[thread],
+				  		  									scheduler->storage_, txn);
+				  recon_pending_txns[IntToString(txn->txn_id())] = manager;
 			  }
-			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
 			  else{
-				  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
-				  delete manager;
-
-				  txn->set_status(TxnProto::ABORTED);
-				  scheduler->done_queue->Push(txn);
+				  manager = recon_pending_txns[IntToString(txn->txn_id())];
+				  manager->Setup(txn);
 			  }
 
-		  } else {
-			  LOG(txn->txn_id(), " is not ready yet");
-			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
-			  //LOG(txn->txn_id(), " waiting for remote");
-			  active_txns[IntToString(txn->txn_id())] = manager;
-		  }
-	  }
-	  else if (scheduler->message_queues[thread]->Pop(&message)){
+			  //LOG(txn->txn_id(), " recon txn is being executed");
+			  int result = scheduler->application_->ReconExecute(txn, manager);
+			  if(result == RECON_SUCCESS){
+				  delete manager;
+			      //LOG(txn->txn_id(), " recon txn has finished");
+				  recon_pending_txns.erase(IntToString(txn->txn_id()));
+	              LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
+	                scheduler->configuration_->this_node_id);
 
+				  // Only one of all receivers for a multi-part dependent txn replies RECON msg
+				  if(txn->readers(0) == scheduler->configuration_->this_node_id){
+					  string txn_data;
+					  txn->SerializeToString(&txn_data);
+					  reply_recon_msg.add_data(txn_data);
+					  // Resume the execution.
+
+					  //Send recon result back as soon as possible
+	                  //if(reply_recon_msg.data_size() > scheduler->recon_batch_size){
+			            //LOG(txn->txn_id(), " recon sending back msg");
+					    pthread_mutex_lock(&scheduler->recon_mutex_);
+					    scheduler->recon_connection->SmartSend(reply_recon_msg);
+					    reply_recon_msg.clear_data();
+					    pthread_mutex_unlock(&scheduler->recon_mutex_);
+	                  //}
+	                  //else
+	                  //  LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
+				  }
+			  }
+			  else if(result == SUSPENDED){
+				  LOG(txn->txn_id(), " recon suspend!");
+				  recon_pending_txns[IntToString(txn->txn_id())] = manager;
+				  continue;
+			  }
+			  else {
+				  std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
+			  }
+		  }
+		  // If I need to execute some dependent txns to get its read/write set AND only if I am not processing
+		  // a batch of reconnainssance message
+		  else if(scheduler->recon_queue_->Pop(&message))
+		  {
+			  //LOG(-1, " got new recon batch: "<<message.batch_number());
+			  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
+			  for (int i = 0; i < message.data_size(); i++) {
+		          TxnProto* txn = new TxnProto();
+		          txn->ParseFromString(message.data(i));
+		          //LOG(txn->txn_id(), " is added as recon txn");
+		          recon_txns.push(txn);
+			  }
+			  //is_recon = true;
+		  }
 		  // If I get read_result when executing a transaction
-		  if (message.type() == MessageProto::READ_RESULT) {
+		  else if (message.type() == MessageProto::READ_RESULT) {
 			  // Remote read result.
 			  LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
 
@@ -306,76 +333,48 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 	  }
-	  // Try to handle recon_txns
-	  else if(recon_txns.size()){
-
-		  TxnProto* txn = recon_txns.front();
-          if (txn->start_time() == 0)
-            txn->set_start_time(GetUTime());
-		  LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
-		  recon_txns.pop();
-		  ReconStorageManager* manager;
-		  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
-			  manager = new ReconStorageManager(scheduler->configuration_,
-			  		  									scheduler->thread_connections_[thread],
-			  		  									scheduler->storage_, txn);
-			  recon_pending_txns[IntToString(txn->txn_id())] = manager;
-		  }
-		  else{
-			  manager = recon_pending_txns[IntToString(txn->txn_id())];
+	  else if(scheduler->txns_queue->Pop(&txn)){
+		  // No remote read result found, start on next txn if one is waiting.
+		  // Create manager.
+		  StorageManager* manager;
+		  if(active_txns.count(IntToString(txn->txn_id()))){
+			  manager = active_txns[IntToString(txn->txn_id())];
+			  LOG(txn->txn_id(), " starting txn from before");
 			  manager->Setup(txn);
 		  }
+		  else{
+			  LOG(txn->txn_id(), " trying starting txn from scratch");
+			  manager =
+					 new StorageManager(scheduler->configuration_,
+								scheduler->thread_connections_[thread],
+								scheduler->storage_, txn);
+		  }
 
-		  //LOG(txn->txn_id(), " recon txn is being executed");
-		  int result = scheduler->application_->ReconExecute(txn, manager);
-		  if(result == RECON_SUCCESS){
-			  delete manager;
-		      //LOG(txn->txn_id(), " recon txn has finished");
-			  recon_pending_txns.erase(IntToString(txn->txn_id()));
-              LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
-                scheduler->configuration_->this_node_id);
-
-			  // Only one of all receivers for a multi-part dependent txn replies RECON msg
-			  if(txn->readers(0) == scheduler->configuration_->this_node_id){
-				  string txn_data;
-				  txn->SerializeToString(&txn_data);
-				  reply_recon_msg.add_data(txn_data);
-				  // Resume the execution.
-
-				  //Send recon result back as soon as possible
-                  //if(reply_recon_msg.data_size() > scheduler->recon_batch_size){
-		            //LOG(txn->txn_id(), " recon sending back msg");
-				    pthread_mutex_lock(&scheduler->recon_mutex_);
-				    scheduler->recon_connection->SmartSend(reply_recon_msg);
-				    reply_recon_msg.clear_data();
-				    pthread_mutex_unlock(&scheduler->recon_mutex_);
-                  //}
-                  //else
-                  //  LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
+		  // Writes occur at this node.
+		  if (manager->ReadyToExecute()) {
+			  LOG(txn->txn_id(), " start executing txn of type "<<txn->txn_type());
+			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
+				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+				  delete manager;
+				  // Respond to scheduler;
+				  scheduler->done_queue->Push(txn);
+				  LOG(txn->txn_id(), " finish executing txn!");
 			  }
+			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
+			  else{
+				  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+				  delete manager;
+
+				  txn->set_status(TxnProto::ABORTED);
+				  scheduler->done_queue->Push(txn);
+			  }
+
+		  } else {
+			  LOG(txn->txn_id(), " is not ready yet");
+			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
+			  //LOG(txn->txn_id(), " waiting for remote");
+			  active_txns[IntToString(txn->txn_id())] = manager;
 		  }
-		  else if(result == SUSPENDED){
-			  LOG(txn->txn_id(), " recon suspend!");
-			  recon_pending_txns[IntToString(txn->txn_id())] = manager;
-			  continue;
-		  }
-		  else {
-			  std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
-		  }
-	  }
-	  // If I need to execute some dependent txns to get its read/write set AND only if I am not processing
-	  // a batch of reconnainssance message
-	  else if(scheduler->recon_queue_->Pop(&message))
-	  {
-		  //LOG(-1, " got new recon batch: "<<message.batch_number());
-		  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
-		  for (int i = 0; i < message.data_size(); i++) {
-	          TxnProto* txn = new TxnProto();
-	          txn->ParseFromString(message.data(i));
-	          //LOG(txn->txn_id(), " is added as recon txn");
-	          recon_txns.push(txn);
-		  }
-		  //is_recon = true;
 	  }
   }
   return NULL;
