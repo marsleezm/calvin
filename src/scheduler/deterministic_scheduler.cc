@@ -144,25 +144,37 @@ void UnfetchAll(Storage* storage, TxnProto* txn) {
 }
 
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
-  int thread =
-      reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->first;
-  DeterministicScheduler* scheduler =
-      reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
+  	int thread =
+      	reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->first;
+  	DeterministicScheduler* scheduler =
+      	reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
-  unordered_map<string, ReconStorageManager*> recon_pending_txns;
-  std::queue<TxnProto*> recon_txns;
+  	//bool is_recon = false;
+  	TxnProto* txn;
 
-  //bool is_recon = false;
-  TxnProto* txn;
+  	// Begin main loop.
+  	MessageProto message, reply_recon_msg;
+  	reply_recon_msg.set_type(MessageProto::RECON_INDEX_REPLY);
+  	reply_recon_msg.set_destination_channel("sequencer");
+  	reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
+  	while (!scheduler->deconstructor_invoked_) {
+	  	if(scheduler->txns_queue->Pop(&txn)){
+          // No remote read result found, start on next txn if one is waiting.
+          // Create manager.
+          	StorageManager* manager;
+          	if(active_txns.count(IntToString(txn->txn_id()))){
+              	manager = active_txns[IntToString(txn->txn_id())];
+              	LOG(txn->txn_id(), " starting txn from before");
+              	manager->Setup(txn);
+          	}
+          	else{
+              	LOG(txn->txn_id(), " trying starting txn from scratch");
+              	manager =
+                     new StorageManager(scheduler->configuration_,
+                                scheduler->thread_connections_[thread],
+                                scheduler->storage_, txn);
+          	}
 
-  // Begin main loop.
-  MessageProto message, reply_recon_msg;
-  reply_recon_msg.set_type(MessageProto::RECON_INDEX_REPLY);
-  reply_recon_msg.set_destination_channel("sequencer");
-  reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
-  while (!scheduler->deconstructor_invoked_) {
-			  }
-		  }
 		  else{
 			  //LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
 			  //LOG(StringToInt(message.destination_channel()), " got recon read result");
@@ -348,159 +360,54 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 	int batch_number = 0;
 	int second = 0;
 	int abort_number = 0;
-	int sample_count = 0;
 
-	int unpacked_txns = 0,
-		begin_batch = 0;
-
-  	unordered_map<string, StorageManager*> active_txns;
+    TxnProto* txn;
   	while (!scheduler->deconstructor_invoked_) {
-      	TxnProto* txn;
-	  	if(scheduler->txns_queue->Pop(&txn)){
-		  	// No remote read result found, start on next txn if one is waiting.
-		 	// Create manager.
-		  	StorageManager* manager;
-		 	if(active_txns.count(IntToString(txn->txn_id()))){
-			  	manager = active_txns[IntToString(txn->txn_id())];
-			  	LOG(txn->txn_id(), " starting txn from before");
-			  	manager->Setup(txn);
-		  	}
-		  	else{
-			  	LOG(txn->txn_id(), " trying starting txn from scratch");
-			 	 manager =
-					 new StorageManager(scheduler->configuration_,
-								scheduler->thread_connections_[thread],
-								scheduler->storage_, txn);
-		  	}
+      	// Have we run out of txns in our batch? Let's get some new ones.
+      	if (batch_message == NULL) {
+        	batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
+      	} else if (batch_offset >= batch_message->data_size()) {
+        	batch_offset = 0;
+        	batch_number++;
+        	delete batch_message;
+        	batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
+      	}
 
-		  	// Writes occur at this node.
-		  	if (manager->ReadyToExecute()) {
-			  	LOG(txn->txn_id(), " start executing txn of type "<<txn->txn_type());
-			  	if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-				  	//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
-				  	delete manager;
-				 	// Respond to scheduler;
-				  	scheduler->done_queue->Push(txn);
-				  	LOG(txn->txn_id(), " finish executing txn!");
-			  	}
-		  	} else {
-			  	LOG(txn->txn_id(), " is not ready yet");
-			  	scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
-			  	//LOG(txn->txn_id(), " waiting for remote");
-			  	active_txns[IntToString(txn->txn_id())] = manager;
-		  	}
-	  	}
-	  	else if (scheduler->message_queues[thread]->Pop(&message)){
+      	// Current batch has remaining txns, grab up to 10.
+      	if (scheduler->pending_txns < 2000 && batch_message) {
+        	for (int i = 0; i < 200; i++) {
+          		if (batch_offset >= batch_message->data_size()) 
+            		break;
+          		TxnProto* txn = new TxnProto();
+          		txn->ParseFromString(batch_message->data(batch_offset));
+          		//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+          		if (txn->start_time() == 0)
+        	  		txn->set_start_time(GetUTime());
+          		batch_offset++;
+      	  		scheduler->txns_queue->Push(txn);
+          		scheduler->pending_txns++;
+      		}
+      	}
 
-		  	// If I get read_result when executing a transaction
-		  	if (message.type() == MessageProto::READ_RESULT) {
-			  	// Remote read result.
-			  	LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
-
-			  StorageManager* manager;
-			  if(active_txns.count(message.destination_channel()) == 0){
-				  LOG(StringToInt(message.destination_channel()), " got read result for uninitialized txn");
-				  manager = new StorageManager(scheduler->configuration_,
-				  							scheduler->thread_connections_[thread],
-				  							scheduler->storage_);
-				  active_txns[message.destination_channel()] = manager;
-			  }
-			  else{
-				  LOG(StringToInt(message.destination_channel()), " got read result for old txn");
-				  manager = active_txns[message.destination_channel()];
-			  }
-
-			  manager->HandleReadResult(message);
-			  if (manager->ReadyToExecute()) {
-				  // Execute and clean up.
-				  LOG(StringToInt(message.destination_channel()), " ready to execute!");
-				  TxnProto* txn = manager->txn_;
-				  // If successfully finished
-				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
-					  //LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
-					  txn->set_status(TxnProto::ABORTED);
-				  }
-
-				  //LOG(txn->txn_id(), " finish executing remote");
-				  delete manager;
-				  scheduler->thread_connections_[thread]->UnlinkChannel(IntToString(txn->txn_id()));
-				  active_txns.erase(message.destination_channel());
-				  // Respond to scheduler;
-				  scheduler->done_queue->Push(txn);
-    		if(done_txn->writers_size() == 0 || done_txn->writers(0) == scheduler->configuration_->this_node_id) {
-    			txns++;
-                if (sample_count == 2)
-                {
-                    int64 now_time = GetUTime();
-                    //int64 old_total = scheduler->total_lat;
-                    //scheduler->latency[latency_count] = MyTuple<int, int64_t, int64_t>(done_txn->txn_type(), now_time - done_txn->start_time(), now_time- done_txn->seed());
-                    scheduler->process_lat += now_time - done_txn->start_time();
-                    scheduler->total_lat += now_time- done_txn->seed();
-                    //if(scheduler->total_lat < old_total)
-                    //	std::cout<<"Overflow!!!" << std::endl;
-                    scheduler->latency_cnt += 1;
-                    sample_count = 0;
-                }
-                ++sample_count;
-    		}
-		}
-
-    } else {
-      // Have we run out of txns in our batch? Let's get some new ones.
-      if (batch_message == NULL) {
-        batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
-      } else if (batch_offset >= batch_message->data_size()) {
-        batch_offset = 0;
-        batch_number++;
-        delete batch_message;
-        batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
-      }
-
-      // Current batch has remaining txns, grab up to 10.
-      if (executing_txns + pending_txns < 2000 && batch_message) {
-        for (int i = 0; i < 200; i++) {
-          if (batch_offset >= batch_message->data_size()) {
-            // Oops we ran out of txns in this batch. Stop adding txns for now.
-            break;
-          }
-
-
-          TxnProto* txn = new TxnProto();
-          txn->ParseFromString(batch_message->data(batch_offset));
-          //LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
-          if (txn->start_time() == 0)
-        	  txn->set_start_time(GetUTime());
-          batch_offset++;
-      	  scheduler->txns_queue->Push(txn);
-          pending_txns++;
-        }
-
-      }
-    }
-
-    // Report throughput.
-    if (GetTime() > time + 1) {
-    	double total_time = GetTime() - time;
-    	std::cout << "Completed " << (static_cast<double>(txns) / total_time)
+    	// Report throughput.
+    	if (GetTime() > time + 1) {
+    		double total_time = GetTime() - time;
+    		std::cout << "Completed " << (static_cast<double>(txns) / total_time)
                 << " txns/sec, "
                 << abort_number<< " transaction restart, "
                 << second << "  second,  "
-                << executing_txns << " executing, "
-				<< unpacked_txns <<" was unpacked, "
-                << pending_txns << " pending, from batch "
-				<< begin_batch<<" to "<<batch_number<<" \n"
+                << executing_txns << " executing \n"
 				<< std::flush;
-    	// Reset txn count.
-    	unpacked_txns = 0;
-    	begin_batch = batch_number;
-    	scheduler->throughput[second] = (static_cast<double>(txns) / total_time);
-    	scheduler->abort[second] = abort_number/total_time;
-    	time = GetTime();
-    	txns = 0;
-    	abort_number = 0;
-    	second++;
-    }
-  }
-  return NULL;
+
+    		// Reset txn count.
+    		scheduler->throughput[second] = (static_cast<double>(txns) / total_time);
+    		scheduler->abort[second] = abort_number/total_time;
+    		time = GetTime();
+    		txns = 0;
+    		abort_number = 0;
+    		second++;
+    	}
+  	}
+  	return NULL;
 }
 
