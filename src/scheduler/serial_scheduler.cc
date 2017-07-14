@@ -50,13 +50,9 @@ void SerialScheduler::Run(const Application& application) {
                                      storage_, &txn);
 
         // Execute txn if any writes occur at this node.
-        if (manager->writer) {
-          while (!manager->ReadyToExecute()) {
             if (connection_->GetMessage(&message))
               manager->HandleReadResult(message);
-          }
           application.Execute(&txn, manager);
-        }
         // Clean up the mess.
         delete manager;
         manager_connection->UnlinkChannel(IntToString(txn.txn_id()));

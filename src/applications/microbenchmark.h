@@ -16,7 +16,7 @@
 using std::set;
 using std::string;
 
-class ReconStorageManager;
+class StorageManager;
 
 class Microbenchmark : public Application {
  public:
@@ -29,18 +29,8 @@ class Microbenchmark : public Application {
 
 
   Microbenchmark(int nodecount, int node_id) {
-    nparts = nodecount;
-    this_node_id = node_id;
-    std::cout<<"All recon is "<<ConfigReader::Value("all_recon")<<std::endl;
-    if (ConfigReader::Value("all_recon").compare("true") == 0){
-    	std::cout<<"All recon passed"<<std::endl;
-    	recon_mask = RECON_MASK;
-    }
-    else{
-    	std::cout<<"All recon not passed"<<std::endl;
-    	assert(ConfigReader::Value("all_recon").compare("false") == 0);
-    	recon_mask = 0;
-    }
+	  nparts = nodecount;
+	  this_node_id = node_id;
   }
 
   virtual ~Microbenchmark() {}
@@ -48,7 +38,6 @@ class Microbenchmark : public Application {
   virtual void NewTxn(int64 txn_id, int txn_type,
                            Configuration* config = NULL, TxnProto* txn = NULL) const;
   virtual int Execute(TxnProto* txn, StorageManager* storage) const;
-  virtual int ReconExecute(TxnProto* txn, ReconStorageManager* storage) const;
 
   TxnProto* InitializeTxn();
   TxnProto* MicroTxnSP(int64 txn_id, int part);
@@ -63,7 +52,6 @@ class Microbenchmark : public Application {
   int kRWSetSize = atoi(ConfigReader::Value("rw_set_size").c_str());
   int indexAccessNum = atoi(ConfigReader::Value("index_num").c_str());
   int kDBSize = atoi(ConfigReader::Value("total_key").c_str());
-  int recon_mask;
 
   virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
 

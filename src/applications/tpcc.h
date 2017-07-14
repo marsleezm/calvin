@@ -43,12 +43,6 @@ class TPCC : public Application {
   };
 
   TPCC() {
-	  if (ConfigReader::Value("all_recon").compare("true") == 0)
-		  recon_mask = RECON_MASK;
-	  else{
-		  assert(ConfigReader::Value("all_recon").compare("false") == 0);
-		  recon_mask = 0;
-	  }
   }
 
   virtual ~TPCC() {}
@@ -95,7 +89,6 @@ class TPCC : public Application {
 
   // Simple execution of a transaction using a given storage
   virtual int Execute(TxnProto* txn, StorageManager* storage) const;
-  virtual int ReconExecute(TxnProto* txn, ReconStorageManager* storage) const;
 
 /* TODO(Thad): Uncomment once testing friend class exists
  private: */
@@ -126,20 +119,9 @@ class TPCC : public Application {
 
   int DeliveryTransaction(StorageManager* storage) const;
 
-  // Recon version. Maybe need to delete some old ones
-  int NewOrderReconTransaction(ReconStorageManager* storage) const;
-
-  int PaymentReconTransaction(ReconStorageManager* storage) const;
-
-  int OrderStatusReconTransaction(ReconStorageManager* storage) const;
-
-  int StockLevelReconTransaction(ReconStorageManager* storage) const;
-
-  int DeliveryReconTransaction(ReconStorageManager* storage) const;
   // The following are implementations of retrieval and writing for local items
   Value* GetItem(Key key) const;
   void SetItem(Key key, Value* value) const;
-  int recon_mask;
 };
 
 #endif  // _DB_APPLICATIONS_TPCC_H_

@@ -9,15 +9,15 @@
 
 #include <string>
 
+#include "../backend/storage_manager.h"
 #include "common/types.h"
-#include "backend/recon_storage_manager.h"
 
 using std::string;
 
 class Configuration;
 class Storage;
 class StorageManager;
-class ReconStorageManager;
+class StorageManager;
 class TxnProto;
 
 class Application {
@@ -33,9 +33,6 @@ class Application {
 
   // Execute a transaction's application logic given the input 'txn'.
   virtual int Execute(TxnProto* txn, StorageManager* storage) const = 0;
-
-  // Execute a transaction's application logic given the input 'txn'.
-  virtual int ReconExecute(TxnProto* txn, ReconStorageManager* storage) const = 0;
 
   // Storage initialization method.
   virtual void InitializeStorage(Storage* storage,

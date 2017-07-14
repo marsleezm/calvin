@@ -27,9 +27,10 @@
 #include "common/connection.h"
 #include "backend/storage.h"
 #include "backend/storage_manager.h"
-#include "backend/recon_storage_manager.h"
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
+
+#include "../backend/storage_manager.h"
 #include "scheduler/deterministic_lock_manager.h"
 #include "applications/tpcc.h"
 
@@ -68,12 +69,11 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 											   Client* client,
 											   int queue_mode)
     : configuration_(conf), batch_connection_(batch_connection),
-      storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode) {
+      storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode),
+	  committed(0), pending_txns(0) {
 
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
-	message_queues = new AtomicQueue<MessageProto>*[num_threads];
-
-	pthread_mutex_init(&recon_mutex_, NULL);
+	message_queue = new AtomicQueue<MessageProto>();
 
     txns_queue = new AtomicQueue<TxnProto*>();
 
@@ -82,7 +82,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
         abort[i] = -1;
     }
 
-    message_queues = new AtomicQueue<MessageProto>();
 
     Spin(2);
 
@@ -104,21 +103,20 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
     // Start all worker threads.
     string channel("scheduler");
-    thread_connections_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
+    thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	CPU_ZERO(&cpuset);
 	//if (i == 0 || i == 1)
 	CPU_SET(4, &cpuset);
-	std::cout << "Worker thread starts at core 5"<<<<std::endl;
+	std::cout << "Worker thread starts at core 4"<<std::endl;
 		//else
 		//CPU_SET(i+2, &cpuset);
 	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,
 					   reinterpret_cast<void*>(this));
-    }
 
 }
 
@@ -135,10 +133,8 @@ void UnfetchAll(Storage* storage, TxnProto* txn) {
 }
 
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
-  	int thread =
-      	reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->first;
   	DeterministicScheduler* scheduler =
-      	reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
+      	reinterpret_cast<DeterministicScheduler*>(arg);
 
   	//bool is_recon = false;
   	MessageProto message;
@@ -151,30 +147,34 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  // No remote read result found, start on next txn if one is waiting.
 			  // Create manager.
   				manager = new StorageManager(scheduler->configuration_,
-									scheduler->thread_connections_[thread],
+									scheduler->thread_connection_,
 									scheduler->storage_, txn);
 				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
 					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
-					++schduler->committed;
+					++scheduler->committed;
 					delete manager;
 					txn = NULL;
+					--scheduler->pending_txns;
 				}
   			}
   		}
   		else if (buffered_messages.count(txn->txn_id()) != 0){
-  			int result = manager->HandleReadResult(message);
-  			if(result == SUCCESS){
-				  if(scheduler->application_->Execute(txn, manager) == SUCCESS){
-					  ++scheduler->committed;
-					  delete manager;
-					  txn = NULL;
-				  }
-			  }
+  			message = buffered_messages[txn->txn_id()];
+  			buffered_messages.erase(txn->txn_id());
+  			manager->HandleReadResult(message);
+  			if(scheduler->application_->Execute(txn, manager) == SUCCESS){
+  				LOG(-1, " finished execution for "<<txn->txn_id());
+  				++scheduler->committed;
+  				delete manager;
+  				txn = NULL;
+  				--scheduler->pending_txns;
+  			}
   		}
-  		else if (scheduler->message_queues[thread]->Pop(&message)){
+  		else if (scheduler->message_queue->Pop(&message)){
 		  // If I get read_result when executing a transaction
+  			LOG(-1, " got READ_RESULT for "<<message.destination_channel());
   			assert(message.type() == MessageProto::READ_RESULT);
-  			buffered_messages[atoi(message.destination_channel())] = message;
+  			buffered_messages[atoi(message.destination_channel().c_str())] = message;
   		}
   }
   return NULL;
@@ -182,13 +182,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 DeterministicScheduler::~DeterministicScheduler() {
 	deconstructor_invoked_ = true;
-	for(int i = 0; i< num_threads; ++i){
-		pthread_join(threads_[i], NULL);
-		delete thread_connections_[i];
-	}
+	pthread_join(worker_thread_, NULL);
+	delete thread_connection_;
 	pthread_join(lock_manager_thread_, NULL);
-	delete[] threads_;
-	delete recon_connection;
 
 	std::cout<<"Scheduler deleted"<<std::endl;
 }
@@ -223,16 +219,13 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 	// Run main loop.
 	MessageProto message;
 	MessageProto* batch_message = NULL;
-	int txns = 0;
 	double time = GetTime();
-	int pending_txns = 0;
 	int batch_offset = 0;
 	int batch_number = 0;
 	int second = 0;
 	int abort_number = 0;
 	int last_committed = 0, now_committed = 0;
 
-    TxnProto* txn;
   	while (!scheduler->deconstructor_invoked_) {
       	// Have we run out of txns in our batch? Let's get some new ones.
       	if (batch_message == NULL) {
@@ -271,7 +264,7 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 				<< std::flush;
 
     		// Reset txn count.
-    		scheduler->throughput[second] = (static_cast<double>(committed) / total_time);
+    		scheduler->throughput[second] = (static_cast<double>(now_committed-last_committed) / total_time);
     		scheduler->abort[second] = abort_number/total_time;
     		time = GetTime();
     		last_committed = now_committed;

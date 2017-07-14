@@ -80,7 +80,7 @@ class DeterministicScheduler : public Scheduler {
 
   // Thread contexts and their associated Connection objects.
   pthread_t worker_thread_;
-  Connection* thread_connections_;
+  Connection* thread_connection_;
 
   pthread_t lock_manager_thread_;
   // Connection for receiving txn batches from sequencer.
@@ -97,7 +97,6 @@ class DeterministicScheduler : public Scheduler {
   // Client
   Client* client_;
 
-  pthread_mutex_t recon_mutex_;
 
   // The per-node lock manager tracks what transactions have temporary ownership
   // of what database objects, allowing the scheduler to track LOCAL conflicts
@@ -116,11 +115,12 @@ class DeterministicScheduler : public Scheduler {
   
   AtomicQueue<TxnProto*>* txns_queue;
 
-  AtomicQueue<MessageProto>* message_queues;
+  AtomicQueue<MessageProto>* message_queue;
   
   int queue_mode_;
   int num_threads;
-  atomic<int> committed;
+  int64 committed;
+  int pending_txns;
 
   public:
   	  bool deconstructor_invoked_ = false;

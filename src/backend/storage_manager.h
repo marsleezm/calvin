@@ -7,8 +7,8 @@
 // actual data objects, applications can be written without paying any attention
 // to partitioning at all.
 //
-// StorageManager use:
-//  - Each transaction execution creates a new StorageManager and deletes it
+// TxnManager use:
+//  - Each transaction execution creates a new TxnManager and deletes it
 //    upon completion.
 //  - No ReadObject call takes as an argument any value that depends on the
 //    result of a previous ReadObject call.
@@ -17,68 +17,103 @@
 //    values 'read' by earlier calls to ReadObject and (b) any calls to
 //    PutObject or DeleteObject.
 
-#ifndef _DB_BACKEND_STORAGE_MANAGER_H_
-#define _DB_BACKEND_STORAGE_MANAGER_H_
+#ifndef _DB_BACKEND_RECON_STORAGE_MANAGER_H_
+#define _DB_BACKEND_RECON_STORAGE_MANAGER_H_
 
 #include <ucontext.h>
+#include <common/utils.h>
 
 #include <tr1/unordered_map>
-//#include <unordered_map>
 #include <vector>
+#include <atomic>
 
+#include "backend/simple_storage.h"
 #include "common/types.h"
+#include "common/configuration.h"
+#include "proto/txn.pb.h"
+#include "proto/message.pb.h"
+#include "proto/tpcc_args.pb.h"
 
 using std::vector;
-using std::pair;
 using std::tr1::unordered_map;
-//using std::unordered_map;
 
 class Configuration;
 class Connection;
-class MessageProto;
 class Scheduler;
-class Storage;
+class LockedVersionedStorage;
 class TxnProto;
+class MessageProto;
+class Sequencer;
+
 
 class StorageManager {
  public:
   // TODO(alex): Document this class correctly.
   StorageManager(Configuration* config, Connection* connection,
-                 Storage* actual_storage, TxnProto* txn);
-  // In case the txn receives its remote before its txn manager is iniialized locally
-  StorageManager(Configuration* config, Connection* connection,
-                 Storage* actual_storage);
+		  Storage* actual_storage, TxnProto* txn);
 
-  void Setup(TxnProto* txn);
+  StorageManager(Configuration* config, Connection* connection,
+		  Storage* actual_storage);
 
   ~StorageManager();
 
-  Value* ReadObject(const Key& key);
-  inline void WriteToBuffer(const Key& key, const Value& value){
-	  write_set_[key] = value;
+  void SendLocalReads();
+
+  void SetupTxn(TxnProto* txn);
+
+  Value* ReadObject(const Key& key, int& read_state);
+
+  inline bool PutObject(const Key& key, Value* value){
+	  return actual_storage_->PutObject(key, value);
   }
-  inline void ModifyToBuffer(Value* value_addr, const Value value){
-	  buffered_modification.push_back(make_pair(value_addr, value));
-  }
-  inline void DeleteToBuffer(const Key& key){
-	  buffered_delete.push_back(key);
-  }
-  bool PutObject(const Key& key, Value* value);
-  bool DeleteObject(const Key& key);
+
+  // Some transactions may have this kind of behavior: read a value, if some condition is satisfied, update the
+  // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,
+  // previous operations will not be triggered again and such the exec_counter will be wrong.
 
   void HandleReadResult(const MessageProto& message);
-  bool ReadyToExecute();
 
   Storage* GetStorage() { return actual_storage_; }
-  TxnProto* get_txn(){ return txn_; }
+  inline TxnProto* GetTxn() { return txn_; }
+  inline TPCCArgs* get_args() { return tpcc_args;}
 
-  void ApplyChange();
-  void PrintObjects();
+  inline void Init(){
+	  exec_counter_ = 0;
+  }
 
+  inline bool ShouldExec()
+  {
+	  LOG(txn_->txn_id(), " should exec or not? Exec is "<<exec_counter_<<", max is "<<max_counter_);
+	  if (exec_counter_ == max_counter_){
+		++exec_counter_;
+		++max_counter_;
+		return true;
+	  }
+	  else{
+		  LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
+		  ++exec_counter_;
+		  return false;
+	  }
+  }
 
-  // Set by the constructor, indicating whether 'txn' involves any writes at
-  // this node.
-  bool writer;
+  inline bool DeleteObject(const Key& key) {
+	  // Delete object from storage if applicable.
+	  if (configuration_->LookupPartition(key) == configuration_->this_node_id)
+	    return actual_storage_->DeleteObject(key);
+	  else
+	    return true;  // Not this node's problem.
+  }
+
+  //void AddKeys(string* keys) {keys_ = keys;}
+  //vector<string> GetKeys() { return keys_;}
+
+  inline TxnProto* get_txn(){ return txn_; }
+
+  void Abort();
+  void ApplyChange(bool is_committing);
+  void Setup(TxnProto* txn);
+
+ private:
 
 // private:
   friend class DeterministicScheduler;
@@ -92,21 +127,28 @@ class StorageManager {
   // Storage layer that *actually* stores data objects on this node.
   Storage* actual_storage_;
 
-  // Transaction that corresponds to this instance of a StorageManager.
+  // Local copy of all data objects read/written by 'txn_', populated at
+  // TxnManager construction time.
+  //unordered_map<Key, ValuePair> write_set_;
+  unordered_map<Key, Value*> read_set_;
+  unordered_map<Key, Value*> remote_objects_;
+
+  // Transaction that corresponds to this instance of a TxnManager.
   TxnProto* txn_;
 
-  // Local copy of all data objects read/written by 'txn_', populated at
-  // StorageManager construction time.
-  //
-  // TODO(alex): Should these be pointers to reduce object copying overhead?
-  unordered_map<Key, Value*> objects_;
-  unordered_map<Key, Value> write_set_;
+  // The message containing read results that should be sent to remote nodes
+  MessageProto* message_;
 
-  vector<Value*> remote_reads_;
-  vector<pair<Value*, Value>> buffered_modification;
-  vector<Key> buffered_delete;
+  // Indicate whether the message contains any value that should be sent
+  bool message_has_value_;
 
-  int got_read_set;
+  // Counting how many transaction steps the current tranasction is executing
+  int exec_counter_;
+
+  // Counting how many transaction steps have been executed the last time
+  int max_counter_;
+
+  TPCCArgs* tpcc_args;
 
 };
 

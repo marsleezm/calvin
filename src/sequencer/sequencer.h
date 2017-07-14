@@ -12,6 +12,7 @@
 #include <queue>
 #include "pthread.h"
 #include "common/utils.h"
+#include <atomic>
 #include "proto/txn.pb.h"
 #include "common/configuration.h"
 #include "common/config_reader.h"

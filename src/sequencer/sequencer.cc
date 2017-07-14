@@ -173,10 +173,6 @@ double PrefetchAll(Storage* storage, TxnProto* txn) {
 
 
 
-
-//TODO: The implementation has bug. Ideally, after a transaction finishes its reconnaissance phase, it should be given a new TX_ID, as
-// the communication module may mess up the message for this transaction with the message it should receive when it was undergoing recon-phase.
-// However, this would make the batch txn generation more complicated, so it is not done yet.
 void Sequencer::RunWriter() {
   Spin(1);
 
@@ -216,18 +212,6 @@ void Sequencer::RunWriter() {
 
   // Set up batch messages for each system node.
 
-  int batch_number = configuration_->this_node_id;
-  unordered_map<int, MessageProto> recon_msgs;
-  for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
-       it != configuration_->all_nodes.end(); ++it) {
-	  recon_msgs[it->first].set_destination_channel("recon");
-	  recon_msgs[it->first].set_destination_node(it->first);
-	  recon_msgs[it->first].set_type(MessageProto::RECON_INDEX_REQUEST);
-	  recon_msgs[it->first].set_source_node(configuration_->this_node_id);
-	  recon_msgs[it->first].set_source_channel("sequencer");
-	  recon_msgs[it->first].set_batch_number(batch_number);
-  }
-
   MessageProto batch;
   batch.set_destination_channel("sequencer");
   batch.set_destination_node(-1);
@@ -239,11 +223,6 @@ void Sequencer::RunWriter() {
   int txn_id_offset = 0;
   int all_nodes = configuration_->all_nodes.size();
 
-  int new_count = 0,
-	  indexed_count = 0,
-	  aborted_count = 0;
-	  //begin_batch = 0,
-	  //end_batch = 0;
   for (int batch_number = configuration_->this_node_id;
        !deconstructor_invoked_;
        batch_number += all_nodes) {
@@ -261,92 +240,16 @@ void Sequencer::RunWriter() {
 	  while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_ ) {
 		  // Add next txn request to batch.
-		  while(restart_queues->Pop(&recv_message)){
-			  assert(recv_message.type() == MessageProto::TXN_RESTART);
-			  for(int i =0; i<recv_message.data_size(); ++i){
-				  ++aborted_count;
-				  string txn_data = recv_message.data(i);
-				  TxnProto txn;
-				  txn.ParseFromString(txn_data);
-				  txn.set_txn_id(increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
-				  LOG(txn.txn_id(), " add aborted txn ");
-				  txn.SerializeToString(&txn_data);
-
-				  google::protobuf::RepeatedField<int>::const_iterator  it;
-				  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
-					  recon_msgs[*it].add_data(txn_data);
-			  }
-		  }
-
-		  while(message_queues->Pop(&recv_message)) {
-			// Receive the result of depedent transaction query
-		      LOG(-1, " got msg, type is "<<recv_message.type());
-			  if (recv_message.type() == MessageProto::RECON_INDEX_REPLY) {
-				  for(int i = 0; i<recv_message.data_size(); ++i){
-					  ++indexed_count;
-					  string txn_data;
-					  TxnProto tmp_txn;
-					  tmp_txn.ParseFromString(recv_message.data(i));
-					  tmp_txn.set_txn_id(increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
-					  //LOG(tmp_txn.txn_id(), " got recon index reply, adding data to data batch: "<<batch.batch_number());
-					  tmp_txn.SerializeToString(&txn_data);
-					  batch.add_data(txn_data);
-				  }
-			  }
-		  }
 
           if(this_batch_added < max_batch_size){
               client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
               this_batch_added++;
-              if(txn->txn_type() & RECON_MASK){
-                  bytes txn_data;
-                  txn->SerializeToString(&txn_data);
-                  google::protobuf::RepeatedField<int>::const_iterator  it;
-
-                  for (it = txn->readers().begin(); it != txn->readers().end(); ++it){
-                      //LOG(txn->txn_id(), " is added to "<<*it<<", txn's read set size is "<<txn->readers_size());
-                      recon_msgs[*it].add_data(txn_data);
-                  }
-                  delete txn;
-              }
-              else{
-            	  ++new_count;
-                  txn->SerializeToString(&txn_string);
-                  batch.add_data(txn_string);
-                  delete txn;
-		      }
+			  txn->SerializeToString(&txn_string);
+			  batch.add_data(txn_string);
+			  delete txn;
           }
 	  }
 
-
-    for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
-         it != configuration_->all_nodes.end(); ++it) {
-    	int node_id = it->first;
-		if(recon_msgs[node_id].data_size() > 0){
-			//LOG(-1, " sending recon msg of batch "<<batch_number<<" to "<<node_id);
-			pthread_mutex_lock(&mutex_);
-			connection_->SmartSend(recon_msgs[node_id]);
-			pthread_mutex_unlock(&mutex_);
-		}
-		recon_msgs[node_id].set_batch_number(batch_number+configuration_->all_nodes.size());
-		recon_msgs[node_id].clear_data();
-    }
-
-
-    // Report throughput.
-//    if (GetTime() > time + 1) {
-//    	std::cout << "Added " << new_count
-//                << " new txn, "
-//                << aborted_count<< " aborted txn, "
-//                << indexed_count << " indexed txn, from batch "
-//				<< begin_batch << " to "<<end_batch <<"\n"
-//				<< std::flush;
-//    	// Reset txn count.
-//    	aborted_count = 0;
-//    	indexed_count = 0;
-//    	new_count = 0;
-//    	time = GetTime();
-//    }
 
     //LOG(0, " serializing batch #"<<batch.batch_number()<<" with size "<<batch.data_size());
     // Send this epoch's requests to Paxos service.
