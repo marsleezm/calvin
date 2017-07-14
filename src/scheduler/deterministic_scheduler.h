@@ -79,8 +79,8 @@ class DeterministicScheduler : public Scheduler {
   Configuration* configuration_;
 
   // Thread contexts and their associated Connection objects.
-  pthread_t* threads_;
-  Connection** thread_connections_;
+  pthread_t worker_thread_;
+  Connection* thread_connections_;
 
   pthread_t lock_manager_thread_;
   // Connection for receiving txn batches from sequencer.
@@ -115,15 +115,12 @@ class DeterministicScheduler : public Scheduler {
 //  socket_t* responses_in_;
   
   AtomicQueue<TxnProto*>* txns_queue;
-  AtomicQueue<TxnProto*>* done_queue;
-  
-  AtomicQueue<MessageProto>* recon_queue_;
-  Connection* recon_connection;
 
-  AtomicQueue<MessageProto>** message_queues;
+  AtomicQueue<MessageProto>* message_queues;
   
   int queue_mode_;
   int num_threads;
+  atomic<int> committed;
 
   public:
   	  bool deconstructor_invoked_ = false;
