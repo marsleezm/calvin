@@ -136,6 +136,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	DeterministicScheduler* scheduler =
       	reinterpret_cast<DeterministicScheduler*>(arg);
 
+  	int this_node = scheduler->configuration_->this_node_id;
   	//bool is_recon = false;
   	MessageProto message;
   	StorageManager* manager;
@@ -151,7 +152,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 									scheduler->storage_, txn);
 				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
 					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
-					++scheduler->committed;
+					if(txn->writers_size() == 0 || txn->writers(0) == this_node)
+						++scheduler->committed;
 					delete manager;
 					txn = NULL;
 					--scheduler->pending_txns;
@@ -164,7 +166,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			manager->HandleReadResult(message);
   			if(scheduler->application_->Execute(txn, manager) == SUCCESS){
   				LOG(-1, " finished execution for "<<txn->txn_id());
-  				++scheduler->committed;
+  				if(txn->writers_size() == 0 || txn->writers(0) == this_node)
+  					++scheduler->committed;
   				delete manager;
   				txn = NULL;
   				--scheduler->pending_txns;
