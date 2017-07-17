@@ -53,7 +53,7 @@ class DeterministicScheduler : public Scheduler {
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
   
-  static void* LockManagerThread(void* arg);
+  //static void* LockManagerThread(void* arg);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
   TxnProto* GetTxnPtr(socket_t* socket, zmq::message_t* msg);
@@ -82,7 +82,7 @@ class DeterministicScheduler : public Scheduler {
   pthread_t worker_thread_;
   Connection* thread_connection_;
 
-  pthread_t lock_manager_thread_;
+  //pthread_t lock_manager_thread_;
   // Connection for receiving txn batches from sequencer.
   Connection* batch_connection_;
 
@@ -112,8 +112,6 @@ class DeterministicScheduler : public Scheduler {
 //  socket_t* requests_in_;
 //  socket_t* responses_out_[NUM_THREADS];
 //  socket_t* responses_in_;
-  
-  AtomicQueue<TxnProto*>* txns_queue;
 
   AtomicQueue<MessageProto>* message_queue;
   

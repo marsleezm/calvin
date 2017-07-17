@@ -75,8 +75,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	message_queue = new AtomicQueue<MessageProto>();
 
-    txns_queue = new AtomicQueue<TxnProto*>();
-
     for(int i = 0; i < THROUGHPUT_SIZE; ++i){
         throughput[i] = -1;
         abort[i] = -1;
@@ -91,12 +89,12 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     pthread_attr_init(&attr1);
   //pthread_attr_setdetachstate(&attr1, PTHREAD_CREATE_DETACHED);
   
-    CPU_ZERO(&cpuset);
-    CPU_SET(3, &cpuset);
-    std::cout << "Central locking thread starts at 3"<<std::endl;
-    pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
-    pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
-                 reinterpret_cast<void*>(this));
+//    CPU_ZERO(&cpuset);
+//    CPU_SET(3, &cpuset);
+//    std::cout << "Central locking thread starts at 3"<<std::endl;
+//    pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
+//    pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
+//                 reinterpret_cast<void*>(this));
 
 
     //  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
@@ -132,66 +130,6 @@ void UnfetchAll(Storage* storage, TxnProto* txn) {
       storage->Unfetch(txn->write_set(i));
 }
 
-void* DeterministicScheduler::RunWorkerThread(void* arg) {
-  	DeterministicScheduler* scheduler =
-      	reinterpret_cast<DeterministicScheduler*>(arg);
-
-  	int this_node = scheduler->configuration_->this_node_id;
-  	//bool is_recon = false;
-  	MessageProto message;
-  	StorageManager* manager;
-  	TxnProto* txn = NULL;
-  	map<int64, MessageProto> buffered_messages;
-  	while (!scheduler->deconstructor_invoked_) {
-  		if (txn == NULL){
-  			if(scheduler->txns_queue->Pop(&txn)){
-			  // No remote read result found, start on next txn if one is waiting.
-			  // Create manager.
-  				manager = new StorageManager(scheduler->configuration_,
-									scheduler->thread_connection_,
-									scheduler->storage_, txn);
-				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
-					if(txn->writers_size() == 0 || txn->writers(0) == this_node)
-						++scheduler->committed;
-					delete manager;
-					txn = NULL;
-					--scheduler->pending_txns;
-				}
-  			}
-  		}
-  		else if (buffered_messages.count(txn->txn_id()) != 0){
-  			message = buffered_messages[txn->txn_id()];
-  			buffered_messages.erase(txn->txn_id());
-  			manager->HandleReadResult(message);
-  			if(scheduler->application_->Execute(txn, manager) == SUCCESS){
-  				LOG(-1, " finished execution for "<<txn->txn_id());
-  				if(txn->writers_size() == 0 || txn->writers(0) == this_node)
-  					++scheduler->committed;
-  				delete manager;
-  				txn = NULL;
-  				--scheduler->pending_txns;
-  			}
-  		}
-  		else if (scheduler->message_queue->Pop(&message)){
-		  // If I get read_result when executing a transaction
-  			LOG(-1, " got READ_RESULT for "<<message.destination_channel());
-  			assert(message.type() == MessageProto::READ_RESULT);
-  			buffered_messages[atoi(message.destination_channel().c_str())] = message;
-  		}
-  }
-  return NULL;
-}
-
-DeterministicScheduler::~DeterministicScheduler() {
-	deconstructor_invoked_ = true;
-	pthread_join(worker_thread_, NULL);
-	delete thread_connection_;
-	pthread_join(lock_manager_thread_, NULL);
-
-	std::cout<<"Scheduler deleted"<<std::endl;
-}
-
 // Returns ptr to heap-allocated
 unordered_map<int, MessageProto*> batches;
 MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicScheduler* scheduler) {
@@ -216,10 +154,17 @@ MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicSchedu
   }
 }
 
-void* DeterministicScheduler::LockManagerThread(void* arg) {
-	DeterministicScheduler* scheduler = reinterpret_cast<DeterministicScheduler*>(arg);
+void* DeterministicScheduler::RunWorkerThread(void* arg) {
+  	DeterministicScheduler* scheduler =
+      	reinterpret_cast<DeterministicScheduler*>(arg);
 
-	// Run main loop.
+  	int this_node = scheduler->configuration_->this_node_id;
+  	//bool is_recon = false;
+  	StorageManager* manager;
+  	TxnProto* txn = NULL;
+  	map<int64, MessageProto> buffered_messages;
+    AtomicQueue<TxnProto*>* txns_queue = new AtomicQueue<TxnProto*>();;
+
 	MessageProto message;
 	MessageProto* batch_message = NULL;
 	double time = GetTime();
@@ -227,54 +172,120 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 	int batch_number = 0;
 	int second = 0;
 	int abort_number = 0;
-	int last_committed = 0, now_committed = 0;
+	int last_committed = 0, now_committed = 0, pending_txns= 0;
 
   	while (!scheduler->deconstructor_invoked_) {
-      	// Have we run out of txns in our batch? Let's get some new ones.
-      	if (batch_message == NULL) {
-        	batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
-      	} else if (batch_offset >= batch_message->data_size()) {
-        	batch_offset = 0;
-        	batch_number++;
-        	delete batch_message;
-        	batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
-      	}
+  		if (txn == NULL){
+  			if(txns_queue->Pop(&txn)){
+			  // No remote read result found, start on next txn if one is waiting.
+			  // Create manager.
+  				manager = new StorageManager(scheduler->configuration_,
+									scheduler->thread_connection_,
+									scheduler->storage_, txn);
+				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
+					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+					if(txn->writers_size() == 0 || txn->writers(0) == this_node)
+						++scheduler->committed;
+					delete manager;
+					txn = NULL;
+					--pending_txns;
+				}
+  			}
+  		}
+  		else if (buffered_messages.count(txn->txn_id()) != 0){
+  			message = buffered_messages[txn->txn_id()];
+  			buffered_messages.erase(txn->txn_id());
+  			manager->HandleReadResult(message);
+  			if(scheduler->application_->Execute(txn, manager) == SUCCESS){
+  				LOG(-1, " finished execution for "<<txn->txn_id());
+  				if(txn->writers_size() == 0 || txn->writers(0) == this_node)
+  					++scheduler->committed;
+  				delete manager;
+  				txn = NULL;
+  				--pending_txns;
+  			}
+  		}
+  		else if (scheduler->message_queue->Pop(&message)){
+		  // If I get read_result when executing a transaction
+  			LOG(-1, " got READ_RESULT for "<<message.destination_channel());
+  			assert(message.type() == MessageProto::READ_RESULT);
+  			buffered_messages[atoi(message.destination_channel().c_str())] = message;
+  		}
 
-      	// Current batch has remaining txns, grab up to 10.
-      	if (scheduler->pending_txns < 2000 && batch_message) {
-        	for (int i = 0; i < 200; i++) {
-          		if (batch_offset >= batch_message->data_size()) 
-            		break;
-          		TxnProto* txn = new TxnProto();
-          		txn->ParseFromString(batch_message->data(batch_offset));
-          		//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
-          		if (txn->start_time() == 0)
-        	  		txn->set_start_time(GetUTime());
-          		batch_offset++;
-      	  		scheduler->txns_queue->Push(txn);
-          		scheduler->pending_txns++;
-      		}
-      	}
 
-    	// Report throughput.
-    	if (GetTime() > time + 1) {
-    		now_committed = scheduler->committed;
-    		double total_time = GetTime() - time;
-    		std::cout << "Completed " << (static_cast<double>(now_committed-last_committed) / total_time)
-                << " txns/sec, "
-                << abort_number<< " transaction restart, "
-                << second << "  second \n"
+  		if (batch_message == NULL) {
+			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
+		} else if (batch_offset >= batch_message->data_size()) {
+			batch_offset = 0;
+			batch_number++;
+			delete batch_message;
+			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
+		}
+
+		// Current batch has remaining txns, grab up to 10.
+		if (pending_txns < 2000 && batch_message) {
+			for (int i = 0; i < 200; i++) {
+				if (batch_offset >= batch_message->data_size())
+					break;
+				TxnProto* txn = new TxnProto();
+				txn->ParseFromString(batch_message->data(batch_offset));
+				//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+				if (txn->start_time() == 0)
+					txn->set_start_time(GetUTime());
+				batch_offset++;
+				txns_queue->Push(txn);
+				pending_txns++;
+			}
+		}
+
+		// Report throughput.
+		if (GetTime() > time + 1) {
+			now_committed = scheduler->committed;
+			double total_time = GetTime() - time;
+			std::cout << "Completed " << (static_cast<double>(now_committed-last_committed) / total_time)
+				<< " txns/sec, "
+				<< abort_number<< " transaction restart, "
+				<< second << "  second \n"
 				<< std::flush;
 
-    		// Reset txn count.
-    		scheduler->throughput[second] = (static_cast<double>(now_committed-last_committed) / total_time);
-    		scheduler->abort[second] = abort_number/total_time;
-    		time = GetTime();
-    		last_committed = now_committed;
-    		abort_number = 0;
-    		second++;
-    	}
-  	}
-  	return NULL;
+			// Reset txn count.
+			scheduler->throughput[second] = (static_cast<double>(now_committed-last_committed) / total_time);
+			scheduler->abort[second] = abort_number/total_time;
+			time = GetTime();
+			last_committed = now_committed;
+			abort_number = 0;
+			second++;
+		}
+  }
+  return NULL;
 }
+
+DeterministicScheduler::~DeterministicScheduler() {
+	deconstructor_invoked_ = true;
+	pthread_join(worker_thread_, NULL);
+	delete thread_connection_;
+	//pthread_join(lock_manager_thread_, NULL);
+
+	std::cout<<"Scheduler deleted"<<std::endl;
+}
+
+//void* DeterministicScheduler::LockManagerThread(void* arg) {
+//	DeterministicScheduler* scheduler = reinterpret_cast<DeterministicScheduler*>(arg);
+//
+//	// Run main loop.
+//	MessageProto message;
+//	MessageProto* batch_message = NULL;
+//	double time = GetTime();
+//	int batch_offset = 0;
+//	int batch_number = 0;
+//	int second = 0;
+//	int abort_number = 0;
+//	int last_committed = 0, now_committed = 0;
+//
+//  	while (!scheduler->deconstructor_invoked_) {
+//      	// Have we run out of txns in our batch? Let's get some new ones.
+//
+//  	}
+//  	return NULL;
+//}
 
