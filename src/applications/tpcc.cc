@@ -359,6 +359,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 				//LOG(txn->txn_id(), "for "<<district_key<<", setting smallest order id to be "<<order_number);
 			}
 			assert(district.SerializeToString(district_val));
+			storage->PutObject(district_key, district_val);
 		}
 	}
 	else
@@ -388,6 +389,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	    	customer.ParseFromString(*customer_val);
 	    	customer.set_last_order(order_key);
 	    	assert(customer.SerializeToString(customer_val));
+	    	storage->PutObject(customer_key, customer_val);
 		}
     }
 
@@ -455,6 +457,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 				else
 					stock.set_quantity(stock.quantity() - quantity + 91);
 				assert(stock.SerializeToString(stock_val));
+				storage->PutObject(stock_key, stock_val);
 			}
 		}
 
@@ -517,6 +520,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 			assert(warehouse.ParseFromString(*warehouse_val));
 			warehouse.set_year_to_date(warehouse.year_to_date() + amount);
 			assert(warehouse.SerializeToString(warehouse_val));
+			storage->PutObject(warehouse_key, warehouse_val);
 		}
 	}
 
@@ -534,6 +538,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 			assert(district.ParseFromString(*district_val));
 			district.set_year_to_date(district.year_to_date() + amount);
 			assert(district.SerializeToString(district_val));
+			storage->PutObject(district_key, district_val);
 		}
 	}
 
@@ -566,6 +571,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 				customer.set_data(new_information);
 			}
 			assert(customer.SerializeToString(customer_val));
+			storage->PutObject(customer_key, customer_val);
 		}
 	}
 
@@ -738,6 +744,8 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 			assert(order.ParseFromString(*order_val));
 			order.set_carrier_id(i);
 			assert(order.SerializeToString(order_val));
+			storage->PutObject(order_key, order_val);
+
 
 			char new_order_key[128];
 			snprintf(new_order_key, sizeof(new_order_key), "%sn%s", district_key, order_key);
@@ -760,6 +768,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 				assert(order_line.ParseFromString(*order_line_val));
 				order_line.set_delivery_date(txn->seed());
 				assert(order_line.SerializeToString(order_line_val));
+				storage->PutObject(order_line_key, order_line_val);
 				total_amount += order_line.amount();
 
 			}
@@ -770,11 +779,13 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 			customer.set_balance(customer.balance() + total_amount);
 			customer.set_delivery_count(customer.delivery_count() + 1);
 			assert(customer.SerializeToString(customer_val));
+			storage->PutObject(customer_key, customer_val);
 			//LOG(txn->txn_id(), " before trying to write customer "<<customer_key<<", value is "<<reinterpret_cast<int64>(customer_val));
 
 			//LOG(txn->txn_id(), " before trying to write district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
 			district.set_smallest_order_id(district.smallest_order_id()+1);
 			assert(district.SerializeToString(district_val));
+			storage->PutObject(district_key, district_val);
 		}
 	}
 

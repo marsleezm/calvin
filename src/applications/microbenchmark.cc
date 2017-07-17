@@ -259,10 +259,13 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 			if(storage->ShouldExec()){
 				Value* index_val = storage->ReadObject(txn->read_write_set(i), read_state), *next_val;
 				if(read_state == NORMAL){
+					Key indexed_key = *index_val;
 					next_val = storage->ReadObject(*index_val, read_state);
 					assert(read_state == NORMAL);
 					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
+					storage->PutObject(txn->read_write_set(i), index_val);
 					*next_val = IntToString(StringToInt(*next_val) +  txn->seed()% 100 -50);
+					storage->PutObject(indexed_key, next_val);
 				}
 				else
 					return SUSPENDED;
@@ -280,6 +283,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 				else{
 		            int value = NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id);
 				    *val = IntToString(value);
+				    storage->PutObject(txn->read_write_set(i), val);
 				}
 			}
 		}

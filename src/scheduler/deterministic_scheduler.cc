@@ -172,6 +172,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	int batch_number = 0;
 	int second = 0;
 	int abort_number = 0;
+	int sample_count = 0;
 	int last_committed = 0, now_committed = 0, pending_txns= 0;
 
   	while (!scheduler->deconstructor_invoked_) {
@@ -184,8 +185,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 									scheduler->storage_, txn);
 				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
 					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
-					if(txn->writers_size() == 0 || txn->writers(0) == this_node)
+					if(txn->writers_size() == 0 || txn->writers(0) == this_node){
+	  					if (sample_count == 2){
+	  						int64 now_time = GetUTime();
+	  						scheduler->process_lat += now_time - txn->start_time();
+	  						scheduler->total_lat += now_time - txn->seed();
+	  						scheduler->latency_cnt += 1;
+	  						sample_count = 0;
+	  					}
+	  					++sample_count;
 						++scheduler->committed;
+					}
 					delete manager;
 					txn = NULL;
 					--pending_txns;
@@ -198,8 +208,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			manager->HandleReadResult(message);
   			if(scheduler->application_->Execute(txn, manager) == SUCCESS){
   				LOG(-1, " finished execution for "<<txn->txn_id());
-  				if(txn->writers_size() == 0 || txn->writers(0) == this_node)
+  				if(txn->writers_size() == 0 || txn->writers(0) == this_node){
+  					if (sample_count == 2){
+  						int64 now_time = GetUTime();
+  						scheduler->process_lat += now_time - txn->start_time();
+  						scheduler->total_lat += now_time - txn->seed();
+  						scheduler->latency_cnt += 1;
+  						sample_count = 0;
+  					}
+  					++sample_count;
   					++scheduler->committed;
+  				}
   				delete manager;
   				txn = NULL;
   				--pending_txns;
