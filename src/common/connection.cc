@@ -257,7 +257,7 @@ void ConnectionMultiplexer::Run() {
      bool got_it = it->second->Pop(&message);
      if (got_it == true) {
        if (message.type() == MessageProto::LINK_CHANNEL) {
-    	   //LOG(-1, " linking channel: "<<message.channel_request());
+    	   LOG(-1, " linking channel: "<<message.channel_request());
     	   pthread_mutex_lock(&remote_result_mutex_);
     	   remote_result_[message.channel_request()] = remote_result_[it->first];
     	   pthread_mutex_unlock(&remote_result_mutex_);
@@ -297,12 +297,12 @@ void ConnectionMultiplexer::Send(const MessageProto& message) {
     if (remote_result_.count(message.destination_channel()) > 0) {
       remote_result_[message.destination_channel()]->Push(message);
       pthread_mutex_unlock(&remote_result_mutex_);
-      if(message.type() == MessageProto::READ_RESULT)
-    	  LOG(-1, " put message into queue: "<<message.type()<<" for "<<message.destination_channel());
+     // if(message.type() == MessageProto::READ_RESULT)
+      LOG(-1, " put message into queue: "<<message.type()<<" for "<<message.destination_channel());
     } else {
     	pthread_mutex_unlock(&remote_result_mutex_);
-    	if(message.type() == MessageProto::READ_RESULT)
-    		LOG(-1, " put message into undelivered: "<<message.type()<<" for "<<message.destination_channel());
+    	//if(message.type() == MessageProto::READ_RESULT)
+    	LOG(-1, " put message into undelivered: "<<message.type()<<" for "<<message.destination_channel());
     	undelivered_messages_[message.destination_channel()].push_back(message);
     }
   } else if (message.type() == MessageProto::TXN_RESTART) {
@@ -330,7 +330,7 @@ void ConnectionMultiplexer::Send(const MessageProto& message) {
       // Message is addressed to valid remote node. Channel validity will be
       // checked by the remote multiplexer.
       pthread_mutex_lock(&send_mutex_[message.destination_node()]);
-      //LOG(0, " trying to send msg "<<message.type()<<", batch is "<<message.batch_number());
+      LOG(0, " trying to send msg "<<message.type()<<", batch is "<<message.batch_number());
       remote_out_[message.destination_node()]->send(msg);
       pthread_mutex_unlock(&send_mutex_[message.destination_node()]);
     }

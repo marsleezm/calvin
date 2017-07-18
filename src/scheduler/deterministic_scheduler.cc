@@ -165,80 +165,76 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   reply_recon_msg.set_destination_channel("sequencer");
   reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
   while (!scheduler->deconstructor_invoked_) {
-	  if (scheduler->message_queues[thread]->Pop(&message)){
+	  if(recon_txns.size()){
+		  TxnProto* txn = recon_txns.front();
+		  if (txn->start_time() == 0)
+			txn->set_start_time(GetUTime());
+		  LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
+		  recon_txns.pop();
+		  ReconStorageManager* manager;
+		  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
+			  manager = new ReconStorageManager(scheduler->configuration_,
+														scheduler->thread_connections_[thread],
+														scheduler->storage_, txn);
+			  recon_pending_txns[IntToString(txn->txn_id())] = manager;
+		  }
+		  else{
+			  manager = recon_pending_txns[IntToString(txn->txn_id())];
+			  manager->Setup(txn);
+		  }
+
+		  //LOG(txn->txn_id(), " recon txn is being executed");
+		  int result = scheduler->application_->ReconExecute(txn, manager);
+		  if(result == RECON_SUCCESS){
+			  delete manager;
+			  //LOG(txn->txn_id(), " recon txn has finished");
+			  recon_pending_txns.erase(IntToString(txn->txn_id()));
+			  LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
+				scheduler->configuration_->this_node_id);
+
+			  // Only one of all receivers for a multi-part dependent txn replies RECON msg
+			  if(txn->readers(0) == scheduler->configuration_->this_node_id){
+				  string txn_data;
+				  txn->SerializeToString(&txn_data);
+				  reply_recon_msg.add_data(txn_data);
+				  // Resume the execution.
+
+				  //Send recon result back as soon as possible
+				  //if(reply_recon_msg.data_size() > scheduler->recon_batch_size){
+					//LOG(txn->txn_id(), " recon sending back msg");
+					pthread_mutex_lock(&scheduler->recon_mutex_);
+					scheduler->recon_connection->SmartSend(reply_recon_msg);
+					reply_recon_msg.clear_data();
+					pthread_mutex_unlock(&scheduler->recon_mutex_);
+				  //}
+				  //else
+				  //  LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
+			  }
+		  }
+		  else if(result == SUSPENDED){
+			  LOG(txn->txn_id(), " recon suspend!");
+			  recon_pending_txns[IntToString(txn->txn_id())] = manager;
+			  continue;
+		  }
+		  else
+			  std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
+  	  }
+	  else if(scheduler->recon_queue_->Pop(&message))
+	  {
+		  LOG(-1, " got new recon batch: "<<message.batch_number());
+		  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
+		  for (int i = 0; i < message.data_size(); i++) {
+			  TxnProto* txn = new TxnProto();
+			  txn->ParseFromString(message.data(i));
+			  LOG(txn->txn_id(), " is added as recon txn");
+			  recon_txns.push(txn);
+		  }
+		  //is_recon = true;
+	  }
+  	  else if (scheduler->message_queues[thread]->Pop(&message)){
 		  // Try to handle recon_txns
-		  if(recon_txns.size()){
-
-			  TxnProto* txn = recon_txns.front();
-	          if (txn->start_time() == 0)
-	            txn->set_start_time(GetUTime());
-			  LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
-			  recon_txns.pop();
-			  ReconStorageManager* manager;
-			  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
-				  manager = new ReconStorageManager(scheduler->configuration_,
-				  		  									scheduler->thread_connections_[thread],
-				  		  									scheduler->storage_, txn);
-				  recon_pending_txns[IntToString(txn->txn_id())] = manager;
-			  }
-			  else{
-				  manager = recon_pending_txns[IntToString(txn->txn_id())];
-				  manager->Setup(txn);
-			  }
-
-			  //LOG(txn->txn_id(), " recon txn is being executed");
-			  int result = scheduler->application_->ReconExecute(txn, manager);
-			  if(result == RECON_SUCCESS){
-				  delete manager;
-			      //LOG(txn->txn_id(), " recon txn has finished");
-				  recon_pending_txns.erase(IntToString(txn->txn_id()));
-	              LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
-	                scheduler->configuration_->this_node_id);
-
-				  // Only one of all receivers for a multi-part dependent txn replies RECON msg
-				  if(txn->readers(0) == scheduler->configuration_->this_node_id){
-					  string txn_data;
-					  txn->SerializeToString(&txn_data);
-					  reply_recon_msg.add_data(txn_data);
-					  // Resume the execution.
-
-					  //Send recon result back as soon as possible
-	                  //if(reply_recon_msg.data_size() > scheduler->recon_batch_size){
-			            //LOG(txn->txn_id(), " recon sending back msg");
-					    pthread_mutex_lock(&scheduler->recon_mutex_);
-					    scheduler->recon_connection->SmartSend(reply_recon_msg);
-					    reply_recon_msg.clear_data();
-					    pthread_mutex_unlock(&scheduler->recon_mutex_);
-	                  //}
-	                  //else
-	                  //  LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
-				  }
-			  }
-			  else if(result == SUSPENDED){
-				  LOG(txn->txn_id(), " recon suspend!");
-				  recon_pending_txns[IntToString(txn->txn_id())] = manager;
-				  continue;
-			  }
-			  else {
-				  std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
-			  }
-		  }
-		  // If I need to execute some dependent txns to get its read/write set AND only if I am not processing
-		  // a batch of reconnainssance message
-		  else if(scheduler->recon_queue_->Pop(&message))
-		  {
-			  //LOG(-1, " got new recon batch: "<<message.batch_number());
-			  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
-			  for (int i = 0; i < message.data_size(); i++) {
-		          TxnProto* txn = new TxnProto();
-		          txn->ParseFromString(message.data(i));
-		          //LOG(txn->txn_id(), " is added as recon txn");
-		          recon_txns.push(txn);
-			  }
-			  //is_recon = true;
-		  }
 		  // If I get read_result when executing a transaction
-		  else if (message.type() == MessageProto::READ_RESULT) {
+		  if (message.type() == MessageProto::READ_RESULT) {
 			  // Remote read result.
 			  LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
 
@@ -276,7 +272,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 		  else{
 			  //LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
-			  //LOG(StringToInt(message.destination_channel()), " got recon read result");
+			  LOG(StringToInt(message.destination_channel()), " got recon read result");
 			  assert(message.type() == MessageProto::RECON_READ_RESULT);
 			  ReconStorageManager* manager;
 
@@ -376,6 +372,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  active_txns[IntToString(txn->txn_id())] = manager;
 		  }
 	  }
+	  else{
+		  LOG(-1, "NOTHING TO DO,looping, recon batch size is "<<scheduler->recon_queue_->Size());
+	  }
   }
   return NULL;
 }
@@ -433,8 +432,8 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 	int abort_number = 0;
 	int sample_count = 0;
 
-	int unpacked_txns = 0,
-		begin_batch = 0;
+	//int unpacked_txns = 0,
+	//	begin_batch = 0;
 
 	//map<TxnProto*, int> unfinished_txns;
 
@@ -524,7 +523,7 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
             break;
           }
 
-          ++unpacked_txns;
+          //++unpacked_txns;
 
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
@@ -561,13 +560,13 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
                 << abort_number<< " transaction restart, "
                 << second << "  second,  "
                 << executing_txns << " executing, "
-				<< unpacked_txns <<" was unpacked, "
-                << pending_txns << " pending, from batch "
-				<< begin_batch<<" to "<<batch_number<<" \n"
+				//<< unpacked_txns <<" was unpacked, "
+                << pending_txns << " pending \n "
+				//<< begin_batch<<" to "<<batch_number<<" \n"
 				<< std::flush;
     	// Reset txn count.
-    	unpacked_txns = 0;
-    	begin_batch = batch_number;
+    	//unpacked_txns = 0;
+    	//begin_batch = batch_number;
     	scheduler->throughput[second] = (static_cast<double>(txns) / total_time);
     	scheduler->abort[second] = abort_number/total_time;
     	time = GetTime();

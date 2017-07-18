@@ -323,7 +323,7 @@ void Sequencer::RunWriter() {
          it != configuration_->all_nodes.end(); ++it) {
     	int node_id = it->first;
 		if(recon_msgs[node_id].data_size() > 0){
-			//LOG(-1, " sending recon msg of batch "<<batch_number<<" to "<<node_id);
+			LOG(-1, " sending recon msg of batch "<<batch_number<<" to "<<node_id);
 			pthread_mutex_lock(&mutex_);
 			connection_->SmartSend(recon_msgs[node_id]);
 			pthread_mutex_unlock(&mutex_);
