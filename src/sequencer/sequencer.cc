@@ -394,6 +394,7 @@ void Sequencer::RunReader() {
     for (map<int, MessageProto>::iterator it = batches.begin();
          it != batches.end(); ++it) {
     	it->second.set_batch_number(batch_number);
+		std::cout<<"Putting "<<batch_number<<" into queue at "<<GetUTime()<<std::endl;
     	//LOG(0, " before sending batch message! Msg's dest is "<<it->second.destination_node()<<", "<<it->second.destination_channel());
     	pthread_mutex_lock(&mutex_);
     	connection_->Send(it->second);
@@ -455,6 +456,8 @@ void Sequencer::output(DeterministicScheduler* scheduler){
         myfile << scheduler->throughput[count] << ", "<< abort << '\n';
         ++count;
     }
+	std::cout<<"My latency cnt is "<<scheduler->latency_cnt<<", total lat is "<<scheduler->total_lat<<", avg lat is "<<
+		scheduler->total_lat/scheduler->latency_cnt<<std::endl;
     myfile << "LATENCY" << '\n';
 	myfile << scheduler->process_lat/scheduler->latency_cnt<<", "<<scheduler->total_lat/scheduler->latency_cnt << '\n';
     myfile.close();

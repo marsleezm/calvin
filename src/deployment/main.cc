@@ -80,7 +80,9 @@ class MClient : public Client {
 
       (*txn)->set_multipartition(false);
     }
-    (*txn)->set_seed(GetUTime());
+	int64_t seed = GetUTime();
+	//std::cout<<(*txn)->txn_id()<<"txn setting seed "<<seed<<std::endl;
+    (*txn)->set_seed(seed);
   }
 
  private:
