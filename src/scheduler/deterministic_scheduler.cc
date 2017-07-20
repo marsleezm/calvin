@@ -188,8 +188,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node){
 	  					if (sample_count == 2){
 	  						int64 now_time = GetUTime();
-							std::cout<<txn->txn_id()<<" now is "<<now_time<<", seed is "<<txn->seed()<<", duration is "<<now_time-txn->seed()
-								<<std::endl;
 	  						scheduler->process_lat += now_time - txn->start_time();
 	  						scheduler->total_lat += now_time - txn->seed();
 	  						scheduler->latency_cnt += 1;
@@ -253,7 +251,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
 				if (txn->start_time() == 0){
 					int64 now_time = GetUTime();
-					std::cout<<txn->txn_id()<<" gets into queue at "<<now_time<<std::endl;
 					txn->set_start_time(now_time);
 				}
 				batch_offset++;

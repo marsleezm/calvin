@@ -291,58 +291,50 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 }
 
 void ConnectionMultiplexer::Send(const MessageProto& message) {
-  if (message.type() == MessageProto::READ_RESULT || message.type() == MessageProto::DEPENDENT  || message.type() == MessageProto::RECON_READ_RESULT
+	if (message.type() == MessageProto::READ_RESULT || message.type() == MessageProto::DEPENDENT  || message.type() == MessageProto::RECON_READ_RESULT
 		  || message.type() == MessageProto::RECON_INDEX_REQUEST || message.type() == MessageProto::RECON_INDEX_REPLY) {
-	  pthread_mutex_lock(&remote_result_mutex_);
-    if (remote_result_.count(message.destination_channel()) > 0) {
-      remote_result_[message.destination_channel()]->Push(message);
-      pthread_mutex_unlock(&remote_result_mutex_);
-      //if(message.type() == MessageProto::READ_RESULT)
-    	//  LOG(-1, " put message into queue: "<<message.type()<<" for "<<message.destination_channel());
-      if(message.type() == MessageProto::TXN_BATCH)
-	  	std::cout<<"Got message of batch "<<message.batch_number()<<" at "<<GetUTime()<<std::endl;
-    } else {
-    	pthread_mutex_unlock(&remote_result_mutex_);
-    	if(message.type() == MessageProto::READ_RESULT)
-    		LOG(-1, " put message into undelivered: "<<message.type()<<" for "<<message.destination_channel());
-    	undelivered_messages_[message.destination_channel()].push_back(message);
-    }
-  } else if (message.type() == MessageProto::TXN_RESTART) {
-    restart_queue->Push(message);
-  }else {
+		pthread_mutex_lock(&remote_result_mutex_);
+		if (remote_result_.count(message.destination_channel()) > 0) {
+			remote_result_[message.destination_channel()]->Push(message);
+			pthread_mutex_unlock(&remote_result_mutex_);
+			if(message.type() == MessageProto::READ_RESULT)
+				LOG(-1, " put message into queue: "<<message.type()<<" for "<<message.destination_channel());
+		} else {
+			pthread_mutex_unlock(&remote_result_mutex_);
+			if(message.type() == MessageProto::READ_RESULT)
+				LOG(-1, " put message into undelivered: "<<message.type()<<" for "<<message.destination_channel());
+			undelivered_messages_[message.destination_channel()].push_back(message);
+		}
+	} else if (message.type() == MessageProto::TXN_RESTART) {
+		restart_queue->Push(message);
+	}else {
 	  //|| message.type() == MessageProto::RECON_INDEX_REQUEST || message.type() == MessageProto::RECON_INDEX_REPLY
-    // Prepare message.
-    string* message_string = new string();
-    message.SerializeToString(message_string);
-    zmq::message_t msg(reinterpret_cast<void*>(
+		// Prepare message.
+		string* message_string = new string();
+		message.SerializeToString(message_string);
+		zmq::message_t msg(reinterpret_cast<void*>(
                        const_cast<char*>(message_string->data())),
                        message_string->size(),
                        DeleteString,
                        message_string);
 
-    // Send message.
-    if (message.destination_node() == configuration_->this_node_id) {
-      // Message is addressed to a local channel. If channel is valid, send the
-      // message on, else store it to be delivered if the channel is ever created.
-      if (inproc_out_.count(message.destination_channel()) > 0) {
-      	if(message.type() == MessageProto::TXN_BATCH)
-	  		std::cout<<"In proc batch "<<message.batch_number()<<" at "<<GetUTime()<<std::endl;
-        inproc_out_[message.destination_channel()]->send(msg);
-	  }
-      else{
-      	if(message.type() == MessageProto::TXN_BATCH)
-	  		std::cout<<"Undelivered batch "<<message.batch_number()<<" at "<<GetUTime()<<std::endl;
-        undelivered_messages_[message.destination_channel()].push_back(message);
-	  }
-    } else {
-      // Message is addressed to valid remote node. Channel validity will be
-      // checked by the remote multiplexer.
-      pthread_mutex_lock(&send_mutex_[message.destination_node()]);
-      //LOG(0, " trying to send msg "<<message.type()<<", batch is "<<message.batch_number());
-      remote_out_[message.destination_node()]->send(msg);
-      pthread_mutex_unlock(&send_mutex_[message.destination_node()]);
-    }
-  }
+		// Send message.
+		if (message.destination_node() == configuration_->this_node_id) {
+			// Message is addressed to a local channel. If channel is valid, send the
+			// message on, else store it to be delivered if the channel is ever created.
+			if (inproc_out_.count(message.destination_channel()) > 0)
+				inproc_out_[message.destination_channel()]->send(msg);
+			else
+				undelivered_messages_[message.destination_channel()].push_back(message);
+		} else {
+			// Message is addressed to valid remote node. Channel validity will be
+			// checked by the remote multiplexer.
+			pthread_mutex_lock(&send_mutex_[message.destination_node()]);
+			//LOG(0, " trying to send msg "<<message.type()<<", batch is "<<message.batch_number());
+			remote_out_[message.destination_node()]->send(msg);
+			pthread_mutex_unlock(&send_mutex_[message.destination_node()]);
+		}
+	}
 }
 
 Connection::~Connection() {
