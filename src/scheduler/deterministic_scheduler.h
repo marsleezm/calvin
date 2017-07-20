@@ -29,7 +29,7 @@
 #include "common/config_reader.h"
 
 #define LATENCY_SIZE 2000
-#define SAMPLE_RATE 1000
+#define SAMPLE_RATE 100
 //#define NUM_SC_TXNS 1000
 // Checking the number of pending txns to decide if start a new txn is not totally synchronized, so we allocate a little bit more space
 //#define SC_ARRAY_SIZE (NUM_SC_TXNS+NUM_THREADS*2)
@@ -78,11 +78,9 @@ class DeterministicScheduler : public Scheduler {
   inline static void AddLatency(int& sample_count, int& latency_count, pair<int64, int64>* array, TxnProto* txn){
       if (sample_count == SAMPLE_RATE)
       {
-          if(latency_count == LATENCY_SIZE)
-              latency_count = 0;
           int64 now_time = GetUTime();
           array[latency_count] = make_pair(now_time - txn->start_time(), now_time - txn->seed());
-          ++latency_count;
+          latency_count = (latency_count+1)%LATENCY_SIZE;
           sample_count = 0;
       }
       ++sample_count;

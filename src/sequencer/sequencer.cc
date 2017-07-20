@@ -210,7 +210,6 @@ void Sequencer::RunWriter() {
       synchronization_counter++;
     }
   }
-  started = true;
 
   // Set up batch messages for each system node.
   MessageProto batch;

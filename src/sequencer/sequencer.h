@@ -79,10 +79,6 @@ class Sequencer {
 	  scheduler_ = scheduler;
   }
 
-  void WaitForStart(){
-	  while(!started) ;
-  }
-
  public:
   static atomic<int64_t> num_committed;
   //static int64_t num_c_txns_;
@@ -181,9 +177,8 @@ class Sequencer {
   // Statistics
   int num_fetched_this_round;
 
+
   double throughput[THROUGHPUT_SIZE];
   double abort[THROUGHPUT_SIZE];
-
-  bool started = false;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
