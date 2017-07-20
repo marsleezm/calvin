@@ -485,7 +485,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				manager->put_inlist();
 				// Have to put in this way to ensure atomicity
 				put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), manager->num_aborted_, manager);
-				AGGRLOG(txn->txn_id(), " added to list for confirm "<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list, addr is "<<reinterpret_cast<int64>(manager));
+				AGGRLOG(txn->txn_id(), " added to list for confirm "<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list, aborted is "<<manager->num_aborted_);
 				//AGGRLOG(txn->txn_id(), "after pushing first is "<<pending_confirm.top().second);
 				manager->SendLocalReads(false);
 			}
@@ -547,8 +547,10 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					if (manager->message_has_value_)
 						manager->SendLocalReads(true);
 					to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
-					manager->put_inlist();
-					put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), TRY_COMMIT, manager);
+					if(manager->if_inlist() == false){
+						manager->put_inlist();
+						put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), TRY_COMMIT, manager);
+					}
 					active_l_tids[txn->local_txn_id()] = manager;
 					return true;
 				}
