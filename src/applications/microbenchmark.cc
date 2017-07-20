@@ -315,8 +315,8 @@ int Microbenchmark::ReconExecute(TxnProto* txn, ReconStorageManager* storage) co
 			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
 			if(storage->ShouldExec()){
 				Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
-				Value v = *val;
 				if(read_state == NORMAL){
+					Value v = *val;
 					txn->add_pred_read_write_set(v);
 					storage->AddObject(txn->read_write_set(i), v);
 				}
