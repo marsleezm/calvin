@@ -59,33 +59,17 @@ void* Sequencer::RunSequencerReader(void *arg) {
   return NULL;
 }
 
-void* Sequencer::RunSequencerLoader(void *arg) {
-  reinterpret_cast<Sequencer*>(arg)->RunLoader();
-  return NULL;
-}
 
 Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
                      Client* client, Storage* storage, int queue_mode)
     : epoch_duration_(0.01), configuration_(conf), multiplexer_(multiplexer),
       client_(client), storage_(storage), deconstructor_invoked_(false), queue_mode_(queue_mode), fetched_txn_num_(0) {
-  pthread_mutex_init(&mutex_, NULL);
-  // Start Sequencer main loops running in background thread.
 
-  cpu_set_t cpuset;
+	pthread_mutex_init(&mutex_, NULL);
 
-if(queue_mode == DIRECT_QUEUE){
-	CPU_ZERO(&cpuset);
-	CPU_SET(1, &cpuset);
-	std::cout << "Sequencer reader starts at core 1"<<std::endl;
-	pthread_attr_t simple_loader;
-	pthread_attr_init(&simple_loader);
-	pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
+	// Start Sequencer main loops running in background thread.
+	cpu_set_t cpuset;
 
-	pthread_create(&reader_thread_, &simple_loader, RunSequencerLoader,
-		  reinterpret_cast<void*>(this));
-	txns_queue_ = new AtomicQueue<TxnProto*>();
-}
-else{
 	message_queues = new AtomicQueue<MessageProto>();
 	restart_queues = new AtomicQueue<MessageProto>();
 	paxos_queues = new AtomicQueue<string>();
@@ -97,10 +81,7 @@ else{
 	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	CPU_ZERO(&cpuset);
-	//CPU_SET(4, &cpuset);
-	//CPU_SET(5, &cpuset);
 	CPU_SET(1, &cpuset);
-	//CPU_SET(7, &cpuset);
 	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
 	std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
@@ -111,9 +92,6 @@ else{
 		  reinterpret_cast<void*>(this));
 
 	CPU_ZERO(&cpuset);
-	//CPU_SET(4, &cpuset);
-	//CPU_SET(5, &cpuset);
-	//CPU_SET(6, &cpuset);
 	CPU_SET(2, &cpuset);
 	pthread_attr_t attr_reader;
 	pthread_attr_init(&attr_reader);
@@ -122,7 +100,6 @@ else{
 
 	  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
-	}
 }
 
 Sequencer::~Sequencer() {
@@ -188,34 +165,6 @@ void Sequencer::RunWriter() {
   multimap<double, TxnProto*> fetching_txns;
 #endif
 
-  std::cout << "Synchronization started.\n" << std::flush;
-  // Synchronization loadgen start with other sequencers.
-  MessageProto synchronization_message;
-  synchronization_message.set_type(MessageProto::EMPTY);
-  synchronization_message.set_destination_channel("sequencer");
-  for (uint32 i = 0; i < configuration_->all_nodes.size(); i++) {
-    synchronization_message.set_destination_node(i);
-    if (i != static_cast<uint32>(configuration_->this_node_id))
-    	pthread_mutex_lock(&mutex_);
-      connection_->Send(synchronization_message);
-      pthread_mutex_unlock(&mutex_);
-  }
-  uint32 synchronization_counter = 1;
-  while (synchronization_counter < configuration_->all_nodes.size()) {
-    synchronization_message.Clear();
-    if (connection_->GetMessage(&synchronization_message)) {
-      assert(synchronization_message.type() == MessageProto::EMPTY);
-      synchronization_counter++;
-    }
-  }
-
-  started = true;
-  std::cout << "Synchronization finished.\n" << std::flush;
-
-  //unordered_map<string, TxnProto*> pending_txns;
-
-  // Set up batch messages for each system node.
-
   int batch_number = configuration_->this_node_id;
   unordered_map<int, MessageProto> recon_msgs;
   for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
@@ -227,6 +176,31 @@ void Sequencer::RunWriter() {
 	  recon_msgs[it->first].set_source_channel("sequencer");
 	  recon_msgs[it->first].set_batch_number(batch_number);
   }
+
+  // Synchronization loadgen start with other sequencers.
+  MessageProto synchronization_message;
+  synchronization_message.set_type(MessageProto::EMPTY);
+  synchronization_message.set_destination_channel("sequencer");
+  for (uint32 i = 0; i < configuration_->all_nodes.size(); i++) {
+    synchronization_message.set_destination_node(i);
+    if (i != static_cast<uint32>(configuration_->this_node_id))
+      connection_->Send(synchronization_message);
+  }
+  uint32 synchronization_counter = 1;
+  while (synchronization_counter < configuration_->all_nodes.size()) {
+    synchronization_message.Clear();
+    if (connection_->GetMessage(&synchronization_message)) {
+      assert(synchronization_message.type() == MessageProto::EMPTY);
+      synchronization_counter++;
+    }
+  }
+
+  started = true;
+  //std::cout << "Synchronization finished.\n" << std::flush;
+
+  //unordered_map<string, TxnProto*> pending_txns;
+
+  // Set up batch messages for each system node.
 
   MessageProto batch;
   batch.set_destination_channel("sequencer");
@@ -522,25 +496,6 @@ void Sequencer::RunReader() {
   Spin(1);
 }
 
-void Sequencer::RunLoader(){
-  Spin(1);
-
-  while (!deconstructor_invoked_) {
-	  assert(queue_mode_ == DIRECT_QUEUE);
-	  if (txns_queue_->Size() < 1000){
-		  for (int i = 0; i < 1000; i++)
-		  {
-			  TxnProto* txn;
-			  srand(fetched_txn_num_);
-			  client_->GetTxn(&txn, fetched_txn_num_);
-			  add_readers_writers(txn);
-			  txns_queue_->Push(txn);
-			  ++fetched_txn_num_;
-		  }
-	  }
-  }
-  Spin(1);
-}
 
 void Sequencer::output(DeterministicScheduler* scheduler){
     ofstream myfile;
@@ -553,6 +508,11 @@ void Sequencer::output(DeterministicScheduler* scheduler){
         ++count;
     }
     myfile << "LATENCY" << '\n';
-	myfile << scheduler->process_lat/scheduler->latency_cnt<<", "<<scheduler->total_lat/scheduler->latency_cnt << '\n';
+	//myfile << scheduler->process_lat/scheduler->latency_cnt<<", "<<scheduler->total_lat/scheduler->latency_cnt << '\n';
+    count = 0;
+    while(scheduler->process_latency[count] != 0 && count < LATENCY_SIZE){
+			myfile << scheduler->process_latency[count]<<", "<<scheduler->total_latency[count] << '\n';
+			++count;
+    }
     myfile.close();
 }

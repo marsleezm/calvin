@@ -17,6 +17,7 @@
 //#define LATENCY_SIZE 10000
 //#define SAMPLE_RATE 50
 #define THROUGHPUT_SIZE 500
+#define LATENCY_SIZE 5000
 
 #include "scheduler/scheduler.h"
 #include "common/utils.h"
@@ -121,11 +122,14 @@ class DeterministicScheduler : public Scheduler {
   Connection* recon_connection;
 
   AtomicQueue<MessageProto>** message_queues;
-  
+
+
   int queue_mode_;
   int num_threads;
 
   public:
+  	  int64 total_latency[LATENCY_SIZE];
+  	  int64 process_latency[LATENCY_SIZE];
   	  bool deconstructor_invoked_ = false;
   	  bigint process_lat = 0;
   	  bigint total_lat = 0;

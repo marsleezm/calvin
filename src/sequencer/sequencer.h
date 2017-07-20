@@ -89,14 +89,12 @@ class Sequencer {
   void RunWriter();
   void RunPaxos();
   void RunReader();
-  void RunLoader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
-  static void* RunSequencerLoader(void *arg);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);

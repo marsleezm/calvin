@@ -432,6 +432,8 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 	int abort_number = 0;
 	int sample_count = 0;
 
+	int latency_index = 0;
+
 	//int unpacked_txns = 0,
 	//	begin_batch = 0;
 
@@ -484,19 +486,19 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     		// WTF is this magic code doing???
     		if(done_txn->writers_size() == 0 || done_txn->writers(0) == scheduler->configuration_->this_node_id) {
     			txns++;
-                if (sample_count == 2)
+                if (sample_count == 0)
                 {
                     int64 now_time = GetUTime();
                     //int64 old_total = scheduler->total_lat;
                     //scheduler->latency[latency_count] = MyTuple<int, int64_t, int64_t>(done_txn->txn_type(), now_time - done_txn->start_time(), now_time- done_txn->seed());
-                    scheduler->process_lat += now_time - done_txn->start_time();
-                    scheduler->total_lat += now_time- done_txn->seed();
+                    scheduler->process_latency[latency_index] = now_time - done_txn->start_time();
+                    scheduler->total_latency[latency_index] = now_time- done_txn->seed();
                     //if(scheduler->total_lat < old_total)
                     //	std::cout<<"Overflow!!!" << std::endl;
+                    latency_index = (latency_index + 1) % LATENCY_SIZE;
                     scheduler->latency_cnt += 1;
-                    sample_count = 0;
                 }
-                ++sample_count;
+                sample_count = (sample_count+1)%4;
     		}
     		delete done_txn;
     	}
