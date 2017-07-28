@@ -266,8 +266,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  max_restarted = max(max_restarted, pend_txn.third);
 			  LOG(pend_txn.first, " is popped out from pending "<<pend_txn.second);
 		  }
-		  LOG(pend_txn.first, " is got from pending queue, to send is "<<pend_txn.fourth<<", num restart is "<< max_restarted
-				  <<", abort is "<<pend_txn.fourth);
+		  LOG(pend_txn.first, " is got from pending queue, num restart is "<< max_restarted);
 
 		  // This pend request may have expired!
 		  if(pend_txn.second == Sequencer::num_lc_txns_  && max_restarted == active_g_tids[pend_txn.first]->abort_bit_)
@@ -349,19 +348,22 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  TxnProto* txn;
 		  got_it = scheduler->txns_queue_->Pop(&txn);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
-		  //LOCKLOG(txn->txn_id(), " before starting txn ");
+		  LOCKLOG(txn->txn_id(), " before starting txn ");
 
 		  if (got_it == true) {
 			  // Create manager.
+			  LOCKLOG(txn->txn_id(), " before starting txn here11 ");
 			  txn->set_start_time(GetUTime());
 			  StorageManager* manager;
-			  if (active_g_tids.count(txn->txn_id()) == 0)
+			  if (active_g_tids.count(txn->txn_id()) == 0){
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
 			  	  if(txn->multipartition())
 			  		  active_g_tids[txn->txn_id()] = manager;
+			  }
 			  else{
+				  LOCKLOG(txn->txn_id(), " before starting txn here22 ");
 				  manager = active_g_tids[txn->txn_id()];
 				  manager->SetupTxn(txn);
 			  }
