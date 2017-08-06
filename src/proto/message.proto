@@ -27,11 +27,9 @@ message MessageProto {
     UNLINK_CHANNEL = 5;  // [Connection implementation specific.]
     TXN_PTR = 6;
     MESSAGE_PTR = 7;
-    DEPENDENT = 8;
-    TXN_RESTART = 9;
-    RECON_INDEX_REQUEST = 10;
-    RECON_INDEX_REPLY = 11;
-    RECON_READ_RESULT = 12;
+    CLIENT_PROPOSAL = 8;
+    LEADER_PROPOSAL = 9;
+    LEARNER_ACCEPT = 10;
 
   };
   required MessageType type = 9;

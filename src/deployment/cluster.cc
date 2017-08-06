@@ -22,6 +22,7 @@
 
 #include "common/configuration.h"
 
+
 using std::map;
 using std::vector;
 
@@ -266,9 +267,10 @@ void Deploy(const Configuration& config, const char* exec) {
   }
 
   // use DeployOne to span components
-  for (map<int, Node*>::const_iterator it = config.all_nodes.begin();
-       it != config.all_nodes.end(); ++it)
-    DeployOne(it->first, it->second, exec, default_run_config_filename);
+  	for (map<int, Node*>::const_iterator it = config.all_nodes.begin();
+       	it != config.all_nodes.end(); ++it){
+   		DeployOne(it->first, it->second, exec, default_run_config_filename);
+	}
 
   // BLOCK A: Grab messages from all components, prepend node number, print.
   end_cluster = false;

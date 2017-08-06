@@ -22,6 +22,8 @@
 #include "proto/txn.pb.h"
 #include <fstream>
 
+#define PAXOS
+
 #ifdef PAXOS
 # include "paxos/paxos.h"
 #endif
@@ -49,11 +51,6 @@ void* Sequencer::RunSequencerWriter(void *arg) {
   return NULL;
 }
 
-void* Sequencer::RunSequencerPaxos(void *arg) {
-  reinterpret_cast<Sequencer*>(arg)->RunPaxos();
-  return NULL;
-}
-
 void* Sequencer::RunSequencerReader(void *arg) {
   reinterpret_cast<Sequencer*>(arg)->RunReader();
   return NULL;
@@ -70,10 +67,8 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
   	cpu_set_t cpuset;
 
 	message_queues = new AtomicQueue<MessageProto>();
-	restart_queues = new AtomicQueue<MessageProto>();
-	paxos_queues = new AtomicQueue<string>();
 
-	connection_ = multiplexer->NewConnection("sequencer", &message_queues, &restart_queues);
+	connection_ = multiplexer->NewConnection("sequencer", &message_queues);
 
 	pthread_attr_t attr_writer;
 	pthread_attr_init(&attr_writer);
@@ -87,9 +82,6 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 		 reinterpret_cast<void*>(this));
 
-	pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
-		  reinterpret_cast<void*>(this));
-
 	CPU_ZERO(&cpuset);
 	CPU_SET(2, &cpuset);
 	pthread_attr_t attr_reader;
@@ -99,6 +91,14 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 
 	pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
+	#ifdef PAXOS
+		std::cout<<"Using Paxos replication!"<<std::endl;
+		conf->InitInfo();
+		Connection* paxos_connection = multiplexer->NewConnection("paxos", &message_queues);
+		AtomicQueue<MessageProto>* paxos_queue = new AtomicQueue<MessageProto>();
+		paxos = new Paxos(conf->this_group, conf->this_node, paxos_connection, conf->this_node_id, 
+						conf->num_partitions, paxos_queue, &batch_queue_);
+	#endif
 }
 
 Sequencer::~Sequencer() {
@@ -108,7 +108,6 @@ Sequencer::~Sequencer() {
   pthread_join(writer_thread_, NULL);
   pthread_join(reader_thread_, NULL);
   pthread_join(paxos_thread_, NULL);
-  delete paxos_queues;
   delete connection_;
   std::cout<<"Sequencer done"<<std::endl;
 }
@@ -152,10 +151,6 @@ double PrefetchAll(Storage* storage, TxnProto* txn) {
 void Sequencer::RunWriter() {
   Spin(1);
 
-#ifdef PAXOS
-  Paxos paxos(ZOOKEEPER_CONF, false);
-#endif
-
 #ifdef PREFETCHING
   multimap<double, TxnProto*> fetching_txns;
 #endif
@@ -181,8 +176,7 @@ void Sequencer::RunWriter() {
   started = true;
 
   MessageProto batch;
-  batch.set_destination_channel("sequencer");
-  batch.set_destination_node(-1);
+  batch.set_destination_channel("paxos");
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
 
@@ -217,59 +211,19 @@ void Sequencer::RunWriter() {
 			  delete txn;
           }
 	  }
-    batch.SerializeToString(&batch_string);
 #ifdef PAXOS
-    paxos.SubmitBatch(batch_string);
+    paxos->SubmitBatch(batch);
 #else
-    paxos_queues->Push(batch_string);
-//    pthread_mutex_lock(&mutex_);
-//    batch_queue_.push(batch_string);
-//    pthread_mutex_unlock(&mutex_);
+    batch_queue_.Push(new MessageProto(batch));
 #endif
   }
 
   Spin(1);
 }
-
-
-void Sequencer::RunPaxos() {
-  pthread_setname_np(pthread_self(), "paxos");
-
-  queue<pair<int64, string>> paxos_msg;
-  int64 paxos_duration = atoi(ConfigReader::Value("paxos_delay").c_str())*1000;
-
-  while (!deconstructor_invoked_) {
-	  string result;
-	  int64 now_time = GetUTime();
-	  if(paxos_queues->Pop(&result)){
-		  //std::cout<<"Got mesasge from the queue, now time is "<<now_time<<", adding to queue with time "
-		//		  <<now_time+paxos_duration<<std::endl;
-		  paxos_msg.push(make_pair(now_time+paxos_duration, result));
-	  }
-	  while(paxos_msg.size()){
-		  if(paxos_msg.front().first <= now_time){
-			  //std::cout<<"Popping from queue, because now is "<<now_time<<", msg time is  "
-			//		  <<paxos_msg.front().first<<std::endl;
-			  pthread_mutex_lock(&mutex_);
-			  batch_queue_.push(paxos_msg.front().second);
-			  pthread_mutex_unlock(&mutex_);
-			  paxos_msg.pop();
-		  }
-		  else
-			  break;
-	  }
-	  Spin(0.001);
-  }
-  Spin(1);
-}
-
 
 
 void Sequencer::RunReader() {
   Spin(1);
-#ifdef PAXOS
-  Paxos paxos(ZOOKEEPER_CONF, true);
-#endif
 
   // Set up batch messages for each system node.
   map<int, MessageProto> batches;
@@ -291,28 +245,22 @@ void Sequencer::RunReader() {
 
   while (!deconstructor_invoked_) {
     // Get batch from Paxos service.
-    string batch_string;
-    MessageProto batch_message;
-#ifdef PAXOS
-    paxos.GetNextBatchBlocking(&batch_string);
-#else
+    //string batch_string;
+    MessageProto* batch_message;
     bool got_batch = false;
     do {
-      pthread_mutex_lock(&mutex_);
-      if (batch_queue_.size()) {
-        batch_string = batch_queue_.front();
-        batch_queue_.pop();
+      if (batch_queue_.Pop(&batch_message)) {
+        //batch_string = batch_queue_.front();
+		assert(batch_message->type() == MessageProto::TXN_BATCH);
         got_batch = true;
       }
-      pthread_mutex_unlock(&mutex_);
       if (!got_batch)
         Spin(0.001);
     } while (!deconstructor_invoked_ && !got_batch);
-#endif
-    batch_message.ParseFromString(batch_string);
-    for (int i = 0; i < batch_message.data_size(); i++) {
-      TxnProto txn;
-      txn.ParseFromString(batch_message.data(i));
+    //batch_message.ParseFromString(batch_string);
+    for (int i = 0; i < batch_message->data_size(); i++) {
+      	TxnProto txn;
+      	txn.ParseFromString(batch_message->data(i));
 
 #ifdef LATENCY_TEST
       if (txn.txn_id() % SAMPLE_RATE == 0)
@@ -320,20 +268,6 @@ void Sequencer::RunReader() {
 #endif
 
       // Compute readers & writers; store in txn proto.
-//      for (int i = 0; i < txn.read_set_size(); i++)
-//        readers.insert(configuration_->LookupPartition(txn.read_set(i)));
-//      for (int i = 0; i < txn.write_set_size(); i++)
-//        writers.insert(configuration_->LookupPartition(txn.write_set(i)));
-//      for (int i = 0; i < txn.read_write_set_size(); i++) {
-//        writers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
-//        readers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
-//      }
-//
-//      for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
-//        txn.add_readers(*it);
-//      for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
-//        txn.add_writers(*it);
-
       bytes txn_data;
       txn.SerializeToString(&txn_data);
 
@@ -351,6 +285,7 @@ void Sequencer::RunReader() {
 
       txn_count++;
     }
+	delete batch_message;
 
     // Send this epoch's requests to all schedulers.
     for (map<int, MessageProto>::iterator it = batches.begin();

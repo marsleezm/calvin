@@ -14,6 +14,7 @@
 #include "common/utils.h"
 #include <atomic>
 #include "proto/txn.pb.h"
+#include "paxos/paxos.h"
 #include "common/configuration.h"
 #include "common/config_reader.h"
 #include "scheduler/deterministic_scheduler.h"
@@ -88,13 +89,11 @@ class Sequencer {
   //
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
-  void RunPaxos();
   void RunReader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
-  static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
@@ -159,11 +158,10 @@ class Sequencer {
   bool deconstructor_invoked_;
 
   // Queue for sending batches from writer to reader if not in paxos mode.
-  queue<string> batch_queue_;
+  AtomicQueue<MessageProto*> batch_queue_;
   pthread_mutex_t mutex_;
 
   AtomicQueue<MessageProto>* message_queues;
-  AtomicQueue<MessageProto>* restart_queues;
   AtomicQueue<string>* paxos_queues;
 
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
@@ -174,5 +172,6 @@ class Sequencer {
 
   AtomicQueue<TxnProto*>* txns_queue_;
   bool started = false;
+	Paxos* paxos;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

@@ -749,6 +749,23 @@ public:
     MyTuple(){}
 };
 
+struct Node {
+  // Globally unique node identifier.
+  int node_id;
+  int replica_id;
+  int partition_id;
+
+  // IP address of this node's machine.
+  string host;
+
+  // Port on which to listen for messages from other nodes.
+  int port;
+
+  // Total number of cores available for use by this node.
+  // Note: Is this needed?
+  int cores;
+};
+
 class WriteLock {
  public:
   explicit WriteLock(MutexRW* mutex) : mutex_(mutex) {
