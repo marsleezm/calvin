@@ -25,12 +25,15 @@ Configuration::Configuration(int node_id, const string& filename)
 
 void Configuration::InitInfo(){
   	this_node_partition = all_nodes[this_node_id]->partition_id;
+  	this_dc_id = all_nodes[this_node_id]->replica_id;
   	this_node = all_nodes[this_node_id];
-  	vector<Node*> this_group;
 	set<int> all_partitions;
 	for(uint i = 0; i < all_nodes.size(); ++i){
 		if(all_nodes[i]->partition_id == this_node_partition){
 			this_group.push_back(all_nodes[i]);
+		}
+		if(all_nodes[i]->replica_id == this_dc_id){
+			this_dc.push_back(all_nodes[i]);
 		}
 		all_partitions.insert(all_nodes[i]->partition_id);
 	}

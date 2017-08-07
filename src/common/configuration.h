@@ -71,8 +71,10 @@ class Configuration {
   // This node's node_id.
   int this_node_id;
   int this_node_partition;
+  int this_dc_id;
   Node* this_node;
   vector<Node*> this_group;
+  vector<Node*> this_dc;
   int num_partitions;
 
   // Tracks the set of current active nodes in the system.

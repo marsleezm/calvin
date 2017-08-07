@@ -33,8 +33,7 @@ class Paxos {
   // zookeeper instance is read from the file whose path is identified by
   // 'zookeeper_conf_file'. If 'reader' is not set to true, GetNextBatch may
   // never be called on this Paxos object.
-  Paxos(vector<Node*> my_group, Node* myself_n, Connection* paxos_connection, int partition_id, int num_partitions, 
-		AtomicQueue<MessageProto>* queue, AtomicQueue<MessageProto*>* b_queue);
+  Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connection, int partition_id, int num_partitions, AtomicQueue<MessageProto*>* b_queue);
 
   // Deconstructor closes the connection with the zookeeper service.
   ~Paxos();
@@ -53,7 +52,10 @@ class Paxos {
   	void SubmitBatch(MessageProto& batch);
 
  	void SendMsgToAll(MessageProto& msg);
+ 	void SendMsgToAllOthers(MessageProto& msg);
 
+ private:
+	void HandleClientProposal(MessageProto& message, int& batch_to_prop);
 
 
  private:
@@ -64,7 +66,6 @@ class Paxos {
 	int num_partitions;
 	int partition_id;
 	Connection* connection;
-	AtomicQueue<MessageProto>* message_queue;
 	AtomicQueue<MessageProto*>* batch_queue;
 	map<int, pair<int, MessageProto*>> client_prop_map;
 	map<int, pair<int, MessageProto*>> leader_prop_map;

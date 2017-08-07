@@ -94,10 +94,8 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	#ifdef PAXOS
 		std::cout<<"Using Paxos replication!"<<std::endl;
 		conf->InitInfo();
-		Connection* paxos_connection = multiplexer->NewConnection("paxos", &message_queues);
-		AtomicQueue<MessageProto>* paxos_queue = new AtomicQueue<MessageProto>();
-		paxos = new Paxos(conf->this_group, conf->this_node, paxos_connection, conf->this_node_id, 
-						conf->num_partitions, paxos_queue, &batch_queue_);
+		Connection* paxos_connection = multiplexer->NewConnection("paxos");
+		paxos = new Paxos(conf->this_group, conf->this_node, paxos_connection, conf->this_node_partition, conf->num_partitions, &batch_queue_);
 	#endif
 }
 
@@ -177,17 +175,19 @@ void Sequencer::RunWriter() {
 
   MessageProto batch;
   batch.set_destination_channel("paxos");
+  batch.set_source_node(configuration_->this_node_id);
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
 
   //double time = GetTime();
-  int txn_batch_number = configuration_->this_node_id;
+  int txn_batch_number = configuration_->this_node_partition;
   int txn_id_offset = 0;
-  int all_nodes = configuration_->all_nodes.size();
+  //int all_nodes = configuration_->all_nodes.size();
+  int all_parts = configuration_->num_partitions;
 
-  for (int batch_number = configuration_->this_node_id;
+  for (int batch_number = configuration_->this_node_partition;
        !deconstructor_invoked_;
-       batch_number += all_nodes) {
+       batch_number += all_parts) {
 	  // Begin epoch.
 	  double epoch_start = GetTime();
 	  batch.set_batch_number(batch_number);
@@ -204,7 +204,7 @@ void Sequencer::RunWriter() {
 		  // Add next txn request to batch.
 
           if(this_batch_added < max_batch_size){
-              client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
+              client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, all_parts, max_batch_size));
               this_batch_added++;
 			  txn->SerializeToString(&txn_string);
 			  batch.add_data(txn_string);
@@ -227,17 +227,17 @@ void Sequencer::RunReader() {
 
   // Set up batch messages for each system node.
   map<int, MessageProto> batches;
-  for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
-       it != configuration_->all_nodes.end(); ++it) {
-    batches[it->first].set_destination_channel("scheduler_");
-    batches[it->first].set_destination_node(it->first);
-    batches[it->first].set_type(MessageProto::TXN_BATCH);
+  vector<Node*> group = configuration_->this_group;
+  for (uint i = 0; i < group.size(); ++i) {
+    batches[group[i]->node_id].set_destination_channel("scheduler_");
+    batches[group[i]->node_id].set_destination_node(group[i]->node_id);
+    batches[group[i]->node_id].set_type(MessageProto::TXN_BATCH);
   }
 
   double time = GetTime();
   int txn_count = 0;
   int batch_count = 0;
-  int batch_number = configuration_->this_node_id;
+  int batch_number = configuration_->this_node_partition;
 
 #ifdef LATENCY_TEST
   int watched_txn = -1;
@@ -298,7 +298,7 @@ void Sequencer::RunReader() {
     	pthread_mutex_unlock(&mutex_);
     	it->second.clear_data();
     }
-    batch_number += configuration_->all_nodes.size();
+    batch_number += configuration_->this_dc.size();
     batch_count++;
 
 #ifdef LATENCY_TEST
