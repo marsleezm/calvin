@@ -30,6 +30,7 @@
 
 
 #include "common/types.h"
+#include "common/utils.h"
 
 
 using std::map;
@@ -53,23 +54,6 @@ extern pthread_mutex_t mutex_for_item;
 
 #define ORDER_LINE_NUMBER 10
 
-struct Node {
-  // Globally unique node identifier.
-  int node_id;
-  int replica_id;
-  int partition_id;
-
-  // IP address of this node's machine.
-  string host;
-
-  // Port on which to listen for messages from other nodes.
-  int port;
-
-  // Total number of cores available for use by this node.
-  // Note: Is this needed?
-  int cores;
-};
-
 class Configuration {
  public:
   Configuration(int node_id, const string& filename);
@@ -82,8 +66,16 @@ class Configuration {
   // Returns true when success.
   bool WriteToFile(const string& filename) const;
 
+  void InitInfo();
+
   // This node's node_id.
   int this_node_id;
+  int this_node_partition;
+  int this_dc_id;
+  Node* this_node;
+  vector<Node*> this_group;
+  vector<Node*> this_dc;
+  int num_partitions;
 
   // Tracks the set of current active nodes in the system.
   map<int, Node*> all_nodes;

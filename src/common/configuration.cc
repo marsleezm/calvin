@@ -6,6 +6,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 
+#include <set>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -18,20 +19,37 @@ using std::string;
 
 Configuration::Configuration(int node_id, const string& filename)
     : this_node_id(node_id) {
-  if (ReadFromFile(filename))  // Reading from file failed.
-    exit(0);
+  	if (ReadFromFile(filename))  // Reading from file failed.
+    	exit(0);
+}
+
+void Configuration::InitInfo(){
+  	this_node_partition = all_nodes[this_node_id]->partition_id;
+  	this_dc_id = all_nodes[this_node_id]->replica_id;
+  	this_node = all_nodes[this_node_id];
+	set<int> all_partitions;
+	for(uint i = 0; i < all_nodes.size(); ++i){
+		if(all_nodes[i]->partition_id == this_node_partition){
+			this_group.push_back(all_nodes[i]);
+		}
+		if(all_nodes[i]->replica_id == this_dc_id){
+			this_dc.push_back(all_nodes[i]);
+		}
+		all_partitions.insert(all_nodes[i]->partition_id);
+	}
+	num_partitions = all_partitions.size();
 }
 
 // TODO(alex): Implement better (application-specific?) partitioning.
 int Configuration::LookupPartition(const Key& key) const {
   if (key.find("w") == 0)  // TPCC
-    return OffsetStringToInt(key, 1) % static_cast<int>(all_nodes.size());
+    return OffsetStringToInt(key, 1) % static_cast<int>(num_partitions);
   else
-    return StringToInt(key) % static_cast<int>(all_nodes.size());
+    return StringToInt(key) % static_cast<int>(num_partitions);
 }
 
 int Configuration::LookupPartition(const int& key) const {
-    return key % static_cast<int>(all_nodes.size());
+    return key % static_cast<int>(num_partitions);
 }
 
 bool Configuration::WriteToFile(const string& filename) const {
@@ -75,8 +93,9 @@ int Configuration::ReadFromFile(const string& filename) {
     char* value = strtok_r(NULL, "=\n", &tok);
     ProcessConfigLine(key, value);
   }
-  fclose(fp);
-  return 0;
+  	fclose(fp);
+
+  	return 0;
 }
 
 void Configuration::ProcessConfigLine(char key[], char value[]) {

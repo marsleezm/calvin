@@ -93,7 +93,7 @@ StorageManager::~StorageManager() {
 Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 	read_state = NORMAL;
 	LOG(txn_->txn_id(), "Trying to read key "<<key);
-	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
+	if (configuration_->LookupPartition(key) ==  configuration_->this_node_partition){
 		LOG(txn_->txn_id(), "Trying to read local key "<<key);
 		if (read_set_.count(key) == 0){
 			Value* result = actual_storage_->ReadObject(key, txn_->txn_id());

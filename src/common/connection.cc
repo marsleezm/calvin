@@ -12,7 +12,7 @@
 using zmq::socket_t;
 
 ConnectionMultiplexer::ConnectionMultiplexer(Configuration* config)
-    : configuration_(config), context_(1), restart_queue(NULL), new_connection_channel_(NULL),
+    : configuration_(config), context_(1), new_connection_channel_(NULL),
       delete_connection_channel_(NULL), deconstructor_invoked_(false) {
   // Lookup port. (Pick semi-arbitrary port if node id < 0).
   if (config->this_node_id < 0)
@@ -102,8 +102,6 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
 		  delete it->second;
   }
   
-  delete restart_queue;
-
   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
        it != link_unlink_queue_.end(); ++it) {
     delete it->second;
@@ -151,29 +149,6 @@ Connection* ConnectionMultiplexer::NewConnection(const string& channel, AtomicQu
   pthread_mutex_unlock(&new_connection_mutex_);
   return connection;
 }
-
-Connection* ConnectionMultiplexer::NewConnection(const string& channel, AtomicQueue<MessageProto>** aa, AtomicQueue<MessageProto>** bb) {
-  // Disallow concurrent calls to NewConnection/~Connection.
-  pthread_mutex_lock(&new_connection_mutex_);
-  pthread_mutex_lock(&remote_result_mutex_);
-  remote_result_[channel] = *aa;
-  pthread_mutex_unlock(&remote_result_mutex_);
-  restart_queue = *bb;
-  // Register the new connection request.
-  new_connection_channel_ = &channel;
-
-  // Wait for the Run() loop to create the Connection object. (It will reset
-  // new_connection_channel_ to NULL when the new connection has been created.
-  while (new_connection_channel_ != NULL) {}
-
-  Connection* connection = new_connection_;
-  new_connection_ = NULL;
-
-  // Allow future calls to NewConnection/~Connection.
-  pthread_mutex_unlock(&new_connection_mutex_);
-  return connection;
-}
-
 
 void ConnectionMultiplexer::Run() {
   MessageProto message;
@@ -291,8 +266,7 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 }
 
 void ConnectionMultiplexer::Send(const MessageProto& message) {
-	if (message.type() == MessageProto::READ_RESULT || message.type() == MessageProto::DEPENDENT  || message.type() == MessageProto::RECON_READ_RESULT
-		  || message.type() == MessageProto::RECON_INDEX_REQUEST || message.type() == MessageProto::RECON_INDEX_REPLY) {
+	if (message.type() == MessageProto::READ_RESULT){ 
 		pthread_mutex_lock(&remote_result_mutex_);
 		if (remote_result_.count(message.destination_channel()) > 0) {
 			remote_result_[message.destination_channel()]->Push(message);
@@ -305,8 +279,6 @@ void ConnectionMultiplexer::Send(const MessageProto& message) {
 				LOG(-1, " put message into undelivered: "<<message.type()<<" for "<<message.destination_channel());
 			undelivered_messages_[message.destination_channel()].push_back(message);
 		}
-	} else if (message.type() == MessageProto::TXN_RESTART) {
-		restart_queue->Push(message);
 	}else {
 	  //|| message.type() == MessageProto::RECON_INDEX_REQUEST || message.type() == MessageProto::RECON_INDEX_REPLY
 		// Prepare message.

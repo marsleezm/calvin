@@ -133,6 +133,7 @@ void UnfetchAll(Storage* storage, TxnProto* txn) {
 // Returns ptr to heap-allocated
 unordered_map<int, MessageProto*> batches;
 MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicScheduler* scheduler) {
+	LOG(-1, " trying to get batch "<<batch_id);
   if (batches.count(batch_id) > 0) {
     // Requested batch has already been received.
     MessageProto* batch = batches[batch_id];
@@ -141,6 +142,7 @@ MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicSchedu
   } else {
     MessageProto* message = new MessageProto();
     while (!scheduler->deconstructor_invoked_ && connection->GetMessage(message)) {
+		LOG(-1, " got txn of batch "<<message->batch_number());
       assert(message->type() == MessageProto::TXN_BATCH);
       if (message->batch_number() == batch_id) {
     	  return message;
@@ -176,6 +178,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	int last_committed = 0, now_committed = 0, pending_txns= 0;
 
   	while (!scheduler->deconstructor_invoked_) {
+		LOG(-1, " current txn is "<<reinterpret_cast<int64>(txn));
   		if (txn == NULL){
   			if(txns_queue->Pop(&txn)){
 			  // No remote read result found, start on next txn if one is waiting.
@@ -184,7 +187,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 									scheduler->thread_connection_,
 									scheduler->storage_, txn);
 				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+					LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node){
 	  					if (sample_count == 2){
 	  						int64 now_time = GetUTime();
@@ -248,7 +251,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					break;
 				TxnProto* txn = new TxnProto();
 				txn->ParseFromString(batch_message->data(batch_offset));
-				//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+				LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
 				if (txn->start_time() == 0){
 					int64 now_time = GetUTime();
 					txn->set_start_time(now_time);

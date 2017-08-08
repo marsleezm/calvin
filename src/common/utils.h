@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iostream>
 #include <iomanip>
+#include "proto/message.pb.h"
 #include <sstream>
 //#include <unordered_map>
 
@@ -747,6 +748,91 @@ public:
     }
 
     MyTuple(){}
+};
+
+class CompareMsg
+{
+public:
+    bool operator() (MessageProto* left, MessageProto* right)
+    {
+    	return (left->msg_id() > right->msg_id());
+    }
+};
+
+template<typename K, typename V>
+class MyAtomicMap {
+ public:
+	MyAtomicMap() {
+		pthread_mutex_init(&mutex_, NULL);
+	}
+  ~MyAtomicMap() {}
+
+  inline V Lookup(const K& k) {
+	  V v;
+	  pthread_mutex_lock(&mutex_);
+	  v = map_[k];
+	  pthread_mutex_unlock(&mutex_);
+	  return v;
+  }
+
+  inline void Put(const K& k, const V& v) {
+	pthread_mutex_lock(&mutex_);
+    map_[k] = v;
+    pthread_mutex_unlock(&mutex_);
+  }
+
+  inline void Erase(const K& k) {
+	pthread_mutex_lock(&mutex_);
+	map_.erase(k);
+	pthread_mutex_unlock(&mutex_);
+  }
+
+ private:
+  unordered_map<K, V> map_;
+  pthread_mutex_t mutex_;
+
+};
+
+template<typename T1, typename T2, typename T3, typename T4>
+class MyFour{
+public:
+	T1 first;
+	T2 second;
+	T3 third;
+	T4 fourth;
+
+	MyFour(T1 t1, T2 t2, T3 t3, T4 t4){
+		first = t1;
+		second = t2;
+		third = t3;
+		fourth = t4;
+	}
+
+	MyFour() {}
+
+	MyFour(const MyFour& mf){
+		first = mf.first;
+		second = mf.second;
+		third = mf.third;
+		fourth = mf.fourth;
+	}
+};
+
+struct Node {
+  // Globally unique node identifier.
+  int node_id;
+  int replica_id;
+  int partition_id;
+
+  // IP address of this node's machine.
+  string host;
+
+  // Port on which to listen for messages from other nodes.
+  int port;
+
+  // Total number of cores available for use by this node.
+  // Note: Is this needed?
+  int cores;
 };
 
 class WriteLock {

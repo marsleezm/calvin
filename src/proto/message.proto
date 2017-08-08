@@ -27,12 +27,12 @@ message MessageProto {
     UNLINK_CHANNEL = 5;  // [Connection implementation specific.]
     TXN_PTR = 6;
     MESSAGE_PTR = 7;
-    DEPENDENT = 8;
-    TXN_RESTART = 9;
-    RECON_INDEX_REQUEST = 10;
-    RECON_INDEX_REPLY = 11;
-    RECON_READ_RESULT = 12;
-
+    CLIENT_PROPOSAL = 8;
+    LEADER_PROPOSAL = 9;
+    LEARNER_ACCEPT = 10;
+	SKEEN_REQ = 11;
+	SKEEN_PROPOSE = 12;
+	SKEEN_REPLY = 13;
   };
   required MessageType type = 9;
 
@@ -49,6 +49,8 @@ message MessageProto {
   // For TXN_BATCH messages, 'batch_number' identifies the epoch of the txn
   // batch being sent.
   optional int64 batch_number = 21;
+  
+  optional int64 propose_batch = 22;
 
   // For READ_RESULT messages, 'keys(i)' and 'values(i)' store the key and
   // result of a read, respectively.
@@ -66,4 +68,5 @@ message MessageProto {
   optional int32 restart = 2001;
   
   optional string txn_id = 2003;
+  optional int64 msg_id = 2004;
 }

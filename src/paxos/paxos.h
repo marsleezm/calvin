@@ -8,10 +8,14 @@
 
 #include <zookeeper.h>
 #include <unistd.h>
+#include <vector>
 #include <map>
 #include <string>
 
 #include "common/types.h"
+#include "common/connection.h"
+#include "common/utils.h"
+#include "proto/message.pb.h"
 
 using std::map;
 using std::string;
@@ -29,50 +33,46 @@ class Paxos {
   // zookeeper instance is read from the file whose path is identified by
   // 'zookeeper_conf_file'. If 'reader' is not set to true, GetNextBatch may
   // never be called on this Paxos object.
-  Paxos(const string& zookeeper_config_file, bool reader);
+  Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connection, int partition_id, int num_partitions);
 
   // Deconstructor closes the connection with the zookeeper service.
   ~Paxos();
+
+  void RunPaxos();
+
+  	// Functions to start the Multiplexor's main loops, called in new pthreads by
+  	// the Sequencer's constructor.
+  	static void* InitRunPaxos(void *arg);
 
   // Sends a new batch to the associated zookeeper instance. Does NOT block.
   // The zookeeper service will create a new znode whose data is 'batch_data',
   // thus inserting the batch into the global order. Once a quorum of zookeeper
   // nodes have agreed on an insertion, it will appear in the same place in
   // the global order to all readers.
-  void SubmitBatch(const string& batch_data);
+  	void SubmitBatch(MessageProto& batch);
+  	void SubmitBatch(MessageProto* batch);
 
-  // Attempts to read the next batch in the global sequence into '*batch_data'.
-  // Returns true on successful read of the next batch. Like SubmitBatch,
-  // GetNextBatch does NOT block if the next batch is not immediately known,
-  // but rather returns false immediately.
-  bool GetNextBatch(string* batch_data);
-
-  // Reads the next batch in the global sequence into '*batch_data'. If it is
-  // not immediately known, GetNextBatchBlocking blocks until it is received.
-  void GetNextBatchBlocking(string* batch_data);
+ 	void SendMsgToAll(MessageProto& msg);
+ 	void SendMsgToAllOthers(MessageProto& msg);
 
  private:
-  // The zookeeper handle obtained by a call to zookeeper_init.
-  zhandle_t *zh_;
+	void HandleClientProposal(MessageProto& message, int& batch_to_prop);
 
-  // Record the serial number of the batch which will be read next time.
-  uint64 next_read_batch_index_;
 
-  // The mutex lock of every concurrent get(because the map container
-  // is not thread safe).
-  pthread_mutex_t mutexes_[CONCURRENT_GETS];
+ private:
+	Node* leader;
+	vector<Node*> group;
+	Node* myself;
+	int group_size;
+	int num_partitions;
+	int partition_id;
+	Connection* connection;
+	map<int, pair<int, MessageProto*>> client_prop_map;
+	map<int, pair<int, MessageProto*>> leader_prop_map;
 
-  // The map array save the batches which are concurrently got from zookeeper.
-  map<uint64, string> batch_tables_[CONCURRENT_GETS];
+	pthread_t paxos_thread;
+	pthread_mutex_t mutex_;
+	bool deconstructor_invoked_ = false;
 
-  // For zoo_aget completion function, this method will be invoked
-  // at the end of a asynchronous call( zoo_aget is asynchronous call
-  // which get data from zookeeper).
-  static void get_data_completion(int rc, const char *value, int value_len,
-                                  const struct Stat *stat, const void *data);
-
-  // For zoo_acreate completion function, this method will be invoked
-  // at the end of zoo_acreate function.
-  static void acreate_completion(int rc, const char *name, const void * data);
 };
 #endif  // _DB_PAXOS_PAXOS_H_
