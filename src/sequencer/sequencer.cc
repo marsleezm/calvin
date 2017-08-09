@@ -93,7 +93,6 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 		  reinterpret_cast<void*>(this));
 	#ifdef PAXOS
 		std::cout<<"Using Paxos replication!"<<std::endl;
-		conf->InitInfo();
 		Connection* paxos_connection = multiplexer->NewConnection("paxos");
 		paxos = new Paxos(conf->this_group, conf->this_node, paxos_connection, conf->this_node_partition, conf->num_partitions, &batch_queue_);
 	#endif
@@ -182,7 +181,6 @@ void Sequencer::RunWriter() {
   //double time = GetTime();
   int txn_batch_number = configuration_->this_node_partition;
   int txn_id_offset = 0;
-  //int all_nodes = configuration_->all_nodes.size();
   int all_parts = configuration_->num_partitions;
 
   for (int batch_number = configuration_->this_node_partition;
@@ -198,7 +196,6 @@ void Sequencer::RunWriter() {
 	  //int org_cnt = txn_id_offset;
 	  //int org_batch = txn_batch_number;
       int this_batch_added = 0;
-	  MessageProto recv_message;
 	  while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_ ) {
 		  // Add next txn request to batch.
@@ -227,17 +224,19 @@ void Sequencer::RunReader() {
 
   // Set up batch messages for each system node.
   map<int, MessageProto> batches;
-  vector<Node*> group = configuration_->this_group;
-  for (uint i = 0; i < group.size(); ++i) {
-    batches[group[i]->node_id].set_destination_channel("scheduler_");
-    batches[group[i]->node_id].set_destination_node(group[i]->node_id);
-    batches[group[i]->node_id].set_type(MessageProto::TXN_BATCH);
+  vector<Node*> dc = configuration_->this_dc;
+  for (uint i = 0; i < dc.size(); ++i) {
+	LOG(0, " group size is "<<dc.size()<<", init for node "<<dc[i]->node_id);
+    batches[dc[i]->node_id].set_destination_channel("scheduler_");
+    batches[dc[i]->node_id].set_destination_node(dc[i]->node_id);
+    batches[dc[i]->node_id].set_type(MessageProto::TXN_BATCH);
   }
 
   double time = GetTime();
   int txn_count = 0;
   int batch_count = 0;
   int batch_number = configuration_->this_node_partition;
+	LOG(-1, " this node's partition is "<<batch_number);
 
 #ifdef LATENCY_TEST
   int watched_txn = -1;
@@ -252,7 +251,8 @@ void Sequencer::RunReader() {
       if (batch_queue_.Pop(&batch_message)) {
         //batch_string = batch_queue_.front();
 		assert(batch_message->type() == MessageProto::TXN_BATCH);
-        got_batch = true;
+		LOG(batch_message->batch_number(), " msg's dest node is "<<batch_message->destination_node());
+       	got_batch = true;
       }
       if (!got_batch)
         Spin(0.001);
@@ -274,14 +274,18 @@ void Sequencer::RunReader() {
       set<int> to_send;
       google::protobuf::RepeatedField<int>::const_iterator  it;
 
-      for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
-      	  to_send.insert(*it);
-      for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
-          to_send.insert(*it);
-
+      for (it = txn.readers().begin(); it != txn.readers().end(); ++it) {
+		  LOG(-1, " adding to_send of "<<configuration_->PartLocalNode(*it)<<", origin is "<<*it);
+      	  to_send.insert(configuration_->PartLocalNode(*it));
+	  }
+      for (it = txn.writers().begin(); it != txn.writers().end(); ++it){
+          to_send.insert(configuration_->PartLocalNode(*it));
+	  }
       // Insert txn into appropriate batches.
-      for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it)
-        batches[*it].add_data(txn_data);
+      for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
+		   LOG(-1, " adding to send of "<<configuration_->PartLocalNode(*it)<<", origin is "<<*it);
+           batches[*it].add_data(txn_data);
+	  }
 
       txn_count++;
     }
@@ -292,7 +296,7 @@ void Sequencer::RunReader() {
          it != batches.end(); ++it) {
     	it->second.set_batch_number(batch_number);
 		//std::cout<<"Putting "<<batch_number<<" into queue at "<<GetUTime()<<std::endl;
-    	//LOG(0, " before sending batch message! Msg's dest is "<<it->second.destination_node()<<", "<<it->second.destination_channel());
+    	LOG(batch_number, " before sending batch message! Msg's dest is "<<it->second.destination_node()<<", "<<it->second.destination_channel());
     	pthread_mutex_lock(&mutex_);
     	connection_->Send(it->second);
     	pthread_mutex_unlock(&mutex_);

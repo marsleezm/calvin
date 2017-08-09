@@ -38,18 +38,24 @@ void Configuration::InitInfo(){
 		all_partitions.insert(all_nodes[i]->partition_id);
 	}
 	num_partitions = all_partitions.size();
+	part_local_node = new int[num_partitions];
+	for (int i = 0; i < num_partitions; ++i)
+	{
+		part_local_node[this_dc[i]->partition_id] = this_dc[i]->node_id;		
+		LOG(-1, " setting part "<<this_dc[i]->partition_id<<" as node "<<this_dc[i]->node_id);
+	}
 }
 
 // TODO(alex): Implement better (application-specific?) partitioning.
 int Configuration::LookupPartition(const Key& key) const {
   if (key.find("w") == 0)  // TPCC
-    return OffsetStringToInt(key, 1) % static_cast<int>(all_nodes.size());
+    return OffsetStringToInt(key, 1) % num_partitions;
   else
-    return StringToInt(key) % static_cast<int>(all_nodes.size());
+    return StringToInt(key) % num_partitions;
 }
 
 int Configuration::LookupPartition(const int& key) const {
-    return key % static_cast<int>(all_nodes.size());
+    return key % num_partitions;
 }
 
 bool Configuration::WriteToFile(const string& filename) const {

@@ -42,7 +42,7 @@ int multi_txn_num_parts;
 class MClient : public Client {
  public:
   MClient(Configuration* config, float mp)
-      : microbenchmark(config->all_nodes.size(), config->this_node_id), config_(config),
+      : microbenchmark(config, config->num_partitions, config->this_node_partition), config_(config),
         percent_mp_(mp*100) {
   }
   virtual ~MClient() {}
@@ -50,10 +50,10 @@ class MClient : public Client {
     if (config_->all_nodes.size() > 1 && rand() % 10000 < percent_mp_) {
     	// Multi-partition txn.
     	int parts[multi_txn_num_parts];
-    	parts[0] = config_->this_node_id;
+    	parts[0] = config_->this_node_partition;
     	int counter = 1;
     	while (counter != multi_txn_num_parts){
-    		int new_part = abs(rand()) %  config_->all_nodes.size(), i = 0;
+    		int new_part = config_->RandomPartition(), i = 0;
     		for(i =0; i< counter; ++i){
     			if(parts[i] == new_part){
     				break;
@@ -74,9 +74,9 @@ class MClient : public Client {
     } else {
       // Single-partition txn.
       if (abs(rand()) %10000 < dependent_percent)
-    	  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
+    	  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_partition);
       else
-    	  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
+    	  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_partition);
 
       (*txn)->set_multipartition(false);
     }
@@ -172,6 +172,7 @@ int main(int argc, char** argv) {
 
   // Build this node's configuration object.
   Configuration config(StringToInt(argv[1]), "deploy-run.conf");
+  config.InitInfo();
 
   // Build connection context and start multiplexer thread running.
   ConnectionMultiplexer multiplexer(&config);
@@ -207,7 +208,7 @@ int main(int argc, char** argv) {
 		<<", index size: "<<ConfigReader::Value("index_size")
 		<<", index num: "<<ConfigReader::Value("index_num")
 		<<std::endl;
-	  Microbenchmark(config.all_nodes.size(), config.this_node_id).InitializeStorage(storage, &config);
+	  Microbenchmark(&config, config.num_partitions, config.this_node_partition).InitializeStorage(storage, &config);
   }
 
   int queue_mode;
@@ -239,7 +240,7 @@ int main(int argc, char** argv) {
 	  scheduler = new DeterministicScheduler(&config,
 			  	  	  	  	  	  	 scheduler_connection,
                                      storage,
-                                     new Microbenchmark(config.all_nodes.size(), config.this_node_id),
+                                     new Microbenchmark(&config, config.num_partitions, config.this_node_partition),
 									 sequencer.GetTxnsQueue(),
 									 client, queue_mode);
   }
