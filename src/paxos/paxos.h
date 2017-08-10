@@ -54,9 +54,17 @@ class Paxos {
 
  	void SendMsgToAll(MessageProto& msg);
  	void SendMsgToAllOthers(MessageProto& msg);
+    inline int IdInGroup(int node_id)
+   {
+        int i=0;
+        while(node_id != group[i]->node_id)
+            ++i;
+        return i;
+    }
 
+ 
  private:
-	void HandleClientProposal(MessageProto& message, int& batch_to_prop);
+	void HandleClientProposal(MessageProto* message, int& batch_to_prop);
 
 
  private:
@@ -67,7 +75,7 @@ class Paxos {
 	int num_partitions;
 	int partition_id;
 	Connection* connection;
-	map<int, pair<int, MessageProto*>> client_prop_map;
+	map<int, pair<int, MessageProto**>> client_prop_map;
 	map<int, pair<int, MessageProto*>> leader_prop_map;
 
 	pthread_t paxos_thread;

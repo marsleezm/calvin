@@ -113,24 +113,6 @@ class Sequencer {
 	  }
   }
 
-
-  inline void add_readers_writers(TxnProto* txn){
-  	  set<int> readers, writers;
-        for (int i = 0; i < txn->read_set_size(); i++)
-          readers.insert(configuration_->LookupPartition(txn->read_set(i)));
-        for (int i = 0; i < txn->write_set_size(); i++)
-          writers.insert(configuration_->LookupPartition(txn->write_set(i)));
-        for (int i = 0; i < txn->read_write_set_size(); i++) {
-          writers.insert(configuration_->LookupPartition(txn->read_write_set(i)));
-          readers.insert(configuration_->LookupPartition(txn->read_write_set(i)));
-        }
-
-        for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
-          txn->add_readers(*it);
-        for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
-          txn->add_writers(*it);
-    }
-
   // Length of time spent collecting client requests before they are ordered,
   // batched, and sent out to schedulers.
   double epoch_duration_;

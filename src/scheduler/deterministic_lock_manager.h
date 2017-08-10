@@ -43,7 +43,7 @@ class DeterministicLockManager {
   }
 
   bool IsLocal(const Key& key) {
-    return configuration_->LookupPartition(key) == configuration_->this_node_id;
+    return configuration_->LookupPartition(key) == configuration_->this_node_partition;
   }
 
   // Configuration object (needed to avoid locking non-local keys).

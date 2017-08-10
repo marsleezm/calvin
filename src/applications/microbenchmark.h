@@ -28,9 +28,10 @@ class Microbenchmark : public Application {
   };
 
 
-  Microbenchmark(int nodecount, int node_id) {
-	  nparts = nodecount;
-	  this_node_id = node_id;
+  Microbenchmark(Configuration* config, int partition_count, int partition_id) {
+	  this->config = config;
+	  nparts = partition_count;
+	  this_partition_id = partition_id;
   }
 
   virtual ~Microbenchmark() {}
@@ -45,10 +46,11 @@ class Microbenchmark : public Application {
   TxnProto* MicroTxnDependentSP(int64 txn_id, int part);
   TxnProto* MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts);
 
+  Configuration* config;
   int nparts;
   int hot_records = atoi(ConfigReader::Value("index_size").c_str());
   int index_records = atoi(ConfigReader::Value("index_size").c_str());
-  int this_node_id;
+  int this_partition_id;
   int kRWSetSize = atoi(ConfigReader::Value("rw_set_size").c_str());
   int indexAccessNum = atoi(ConfigReader::Value("index_num").c_str());
   int kDBSize = atoi(ConfigReader::Value("total_key").c_str());

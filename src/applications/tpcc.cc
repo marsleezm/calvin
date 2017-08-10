@@ -38,16 +38,16 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
   int remote_node = -1, remote_warehouse_id = -1;
   if (mp) {
      do {
-       remote_node = rand() % config->all_nodes.size();
+       remote_node = config->RandomDCNode();
      } while (config->all_nodes.size() > 1 &&
               remote_node == config->this_node_id);
 
      do {
         remote_warehouse_id = rand() % (WAREHOUSES_PER_NODE *
-                                        config->all_nodes.size());
+                                        config->num_partitions);
      } while (config->all_nodes.size() > 1 &&
            config->LookupPartition(remote_warehouse_id) !=
-             remote_node);
+             config->NodePartition(remote_node));
   }
 
   // Create an arg list
@@ -77,7 +77,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 		txn->add_writers(config->this_node_id);
 
       // First, we pick a local warehouse
-        warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+        warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->num_partitions + config->this_node_partition;
         snprintf(warehouse_key, sizeof(warehouse_key), "w%d",
                  warehouse_id);
 
@@ -154,7 +154,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
                             4999.0 + 1);
 
 		// First, we pick a local warehouse
-		warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+		warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->num_partitions + config->this_node_partition;
 		snprintf(warehouse_key, sizeof(warehouse_key), "w%dy", warehouse_id);
 		txn->add_read_write_set(warehouse_key);
 
@@ -215,7 +215,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
     	 string district_string;
     	 //int customer_order_line_number;
 
-    	 warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+    	 warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->num_partitions + config->this_node_partition;
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%dy",
     		   warehouse_id);
     	 district_id = rand() % DISTRICTS_PER_WAREHOUSE;
@@ -239,7 +239,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
      case STOCK_LEVEL:
      {
     	 //LOG(txn->txn_id(), " populating stock level");
-    	 warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+    	 warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->num_partitions + config->this_node_partition;
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
 
     	 // Next, we pick a random district
@@ -258,7 +258,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
      case DELIVERY :
      {
     	 //(txn->txn_id(), " populating delivery");
-         warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+         warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->num_partitions + config->this_node_partition;
          snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
          txn->add_read_set(warehouse_key);
          //char order_line_key[128];
@@ -804,7 +804,7 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) const {
     Value* warehouse_value = new Value();
     snprintf(warehouse_key, sizeof(warehouse_key), "w%d", i);
     snprintf(warehouse_key_ytd, sizeof(warehouse_key_ytd), "w%dy", i);
-    if (conf->LookupPartition(warehouse_key) != conf->this_node_id) {
+    if (conf->LookupPartition(warehouse_key) != conf->this_node_partition) {
       continue;
     }
     // Next we initialize the object and serialize it
@@ -812,7 +812,7 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) const {
     assert(warehouse->SerializeToString(warehouse_value));
 
     // Finally, we pass it off to the storage manager to write to disk
-    if (conf->LookupPartition(warehouse_key) == conf->this_node_id) {
+    if (conf->LookupPartition(warehouse_key) == conf->this_node_partition) {
       storage->PutObject(warehouse_key, warehouse_value);
       storage->PutObject(warehouse_key_ytd, new Value(*warehouse_value));
     }
@@ -832,7 +832,7 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) const {
       assert(district->SerializeToString(district_value));
 
       // Finally, we pass it off to the storage manager to write to disk
-      if (conf->LookupPartition(district_key) == conf->this_node_id) {
+      if (conf->LookupPartition(district_key) == conf->this_node_partition) {
         storage->PutObject(district_key, district_value);
         storage->PutObject(district_key_ytd, new Value(*district_value));
       }
@@ -851,7 +851,7 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) const {
         assert(customer->SerializeToString(customer_value));
 
         // Finally, we pass it off to the storage manager to write to disk
-        if (conf->LookupPartition(customer_key) == conf->this_node_id)
+        if (conf->LookupPartition(customer_key) == conf->this_node_partition)
           storage->PutObject(customer_key, customer_value);
         delete customer;
       }
@@ -872,7 +872,7 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) const {
       assert(stock->SerializeToString(stock_value));
 
       // Finally, we pass it off to the storage manager to write to disk
-      if (conf->LookupPartition(stock->id()) == conf->this_node_id)
+      if (conf->LookupPartition(stock->id()) == conf->this_node_partition)
         storage->PutObject(stock->id(), stock_value);
       delete stock;
     }

@@ -14,14 +14,14 @@
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		Storage* actual_storage)
-    : configuration_(config), connection_(connection), actual_storage_(actual_storage),
+    : config(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(NULL), message_(NULL), message_has_value_(false), exec_counter_(0), max_counter_(0){
 	tpcc_args = new TPCCArgs();
 }
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		Storage* actual_storage,  TxnProto* txn)
-    : configuration_(config), connection_(connection), actual_storage_(actual_storage),
+    : config(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0){
 	tpcc_args = new TPCCArgs();
 
@@ -67,8 +67,8 @@ StorageManager::~StorageManager() {
 		if (message_has_value_){
 			LOG(txn_->txn_id(), "Sending message to remote");
 			for (int i = 0; i < txn_->writers().size(); i++) {
-			  if (txn_->writers(i) != configuration_->this_node_id) {
-				  message_->set_destination_node(txn_->writers(i));
+			  if (txn_->writers(i) != config->this_node_partition) {
+				  message_->set_destination_node(config->PartLocalNode(txn_->writers(i)));
 				  connection_->Send1(*message_);
 			  }
 			}
@@ -93,7 +93,7 @@ StorageManager::~StorageManager() {
 Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 	read_state = NORMAL;
 	LOG(txn_->txn_id(), "Trying to read key "<<key);
-	if (configuration_->LookupPartition(key) ==  configuration_->this_node_partition){
+	if (config->LookupPartition(key) ==  config->this_node_partition){
 		LOG(txn_->txn_id(), "Trying to read local key "<<key);
 		if (read_set_.count(key) == 0){
 			Value* result = actual_storage_->ReadObject(key, txn_->txn_id());
@@ -137,9 +137,9 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 
 void StorageManager::SendLocalReads(){
 	for (int i = 0; i < txn_->writers_size(); i++) {
-	  if (txn_->writers(i) != configuration_->this_node_id) {
+	  if (txn_->writers(i) != config->this_node_partition) {
 		  LOG(txn_->txn_id()," sending reads to " << txn_->writers(i));
-		  message_->set_destination_node(txn_->writers(i));
+		  message_->set_destination_node(config->PartLocalNode(txn_->writers(i)));
 		  connection_->Send1(*message_);
 	  }
 	}

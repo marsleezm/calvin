@@ -44,33 +44,40 @@ void* Paxos::InitRunPaxos(void *arg) {
   return NULL;
 }
 
-void Paxos::HandleClientProposal(MessageProto& message, int& batch_to_prop){
-	int batch_num = message.batch_number();
+void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop){
+	int batch_num = message->batch_number();
+	//LOG(-1, "got a client proposal, batch num is "<<batch_num<<", batch to prop is "<<batch_to_prop);
 	if(client_prop_map.count(batch_num) == 0){
-		//std::cout<<"Got client proposal for "<<batch_num<<", cnt is 1 from "<<message.source_node()<<std::endl;
-		MessageProto* msg_list = new MessageProto[group_size];
-		msg_list[message.source_node()] = message;
+		LOG(-1, "Got client proposal for "<<batch_num<<", cnt is 1 from "<<message->source_node()<<", addr is "<<reinterpret_cast<int64>(message)<<", putting into "<<IdInGroup(message->source_node()));
+		MessageProto** msg_list = new MessageProto*[group_size];
+		msg_list[IdInGroup(message->source_node())] = message;
 		client_prop_map[batch_num] = make_pair(1, msg_list);
+		//LOG(-1, "after storing is "<<reinterpret_cast<int64>(msg_list[0]));
+		//LOG(-1, "after storing is "<<reinterpret_cast<int64>(msg_list[1]));
 	}
 	else{
-		pair<int, MessageProto*> msgs = client_prop_map[batch_num];
-		//std::cout<<"Got client proposal for "<<batch_num<<", cnt is "<<msgs.first+1<<" from "<<message.source_node()<<std::endl;
+		pair<int, MessageProto**> msgs = client_prop_map[batch_num];
+		LOG(-1, "Got client proposal for "<<batch_num<<", cnt is "<<msgs.first+1<<" from "<<message->source_node()<<", addr is "<<reinterpret_cast<int64>(message)<<", putting into "<<IdInGroup(message->source_node()));
+		msgs.second[IdInGroup(message->source_node())] = message;
 		msgs.first = msgs.first+1;
-		msgs.second[message.source_node()] = message;
 		client_prop_map[batch_num] = msgs;
+		//LOG(-1, "after storing is "<<reinterpret_cast<int64>(msgs.second[0]));
+		//LOG(-1, "after storing is "<<reinterpret_cast<int64>(msgs.second[1]));
 	}
 	while(client_prop_map.count(batch_to_prop) != 0 && client_prop_map[batch_to_prop].first == group_size){
-		pair<int, MessageProto*> msgs = client_prop_map[batch_to_prop];
+		MessageProto** msgs = client_prop_map[batch_to_prop].second;
 		MessageProto decision_msg;
 		decision_msg.set_batch_number(batch_to_prop);
 		decision_msg.set_destination_channel("paxos");
 		decision_msg.set_type(MessageProto::LEADER_PROPOSAL);
 		for( int i = 0; i < group_size; ++i) {
-			for( int j = 0; j <msgs.second[i].data_size(); ++j)
-				decision_msg.add_data(msgs.second[i].data(j));	
+			LOG(batch_to_prop, " group size is "<<group_size<<", i is "<<i<<", addr is "<<reinterpret_cast<int64>(msgs[i]));
+			for( int j = 0; j <msgs[i]->data_size(); ++j)
+				decision_msg.add_data(msgs[i]->data(j));	
+			delete msgs[i];
 		}
-		//std::cout<<"Sending decision for client proposal "<<batch_to_prop<<std::endl;
-		delete[] msgs.second;
+		LOG(-1, "Sending decision for client proposal "<<batch_to_prop);
+		delete[] msgs;
 		client_prop_map.erase(batch_to_prop);
 		SendMsgToAll(decision_msg);
 		batch_to_prop += 1;
@@ -78,46 +85,46 @@ void Paxos::HandleClientProposal(MessageProto& message, int& batch_to_prop){
 }
 
 void Paxos::RunPaxos() {
-	MessageProto message;
-	int batch_to_prop = partition_id;
-	int batch_to_accept = partition_id;
+	int batch_to_prop = 0;
+	int batch_to_accept = 0;
 	int quorum_size = group_size/2+1;
   	while (!deconstructor_invoked_) {
 		// If has received enough proposal message, propose it!
 		//if(message_queue->Pop(&message)){
-		if(connection->GetMessage(&message)){
-			if(message.type() == MessageProto::CLIENT_PROPOSAL){
+		MessageProto* message = new MessageProto();
+		if(connection->GetMessage(message)){
+			if(message->type() == MessageProto::CLIENT_PROPOSAL){
 				assert(leader == myself);
 				HandleClientProposal(message, batch_to_prop);
 			}	
-			else if(message.type() == MessageProto::LEADER_PROPOSAL){
-				//std::cout<<"Sending accept for leader proposal for "<<message.batch_number()<<std::endl;
-				if(leader_prop_map.count(message.batch_number()) == 0){
-					leader_prop_map[message.batch_number()] = make_pair(0, new MessageProto(message));	
+			else if(message->type() == MessageProto::LEADER_PROPOSAL){
+				LOG(-1, "Sending accept for leader proposal for "<<message->batch_number());
+				if(leader_prop_map.count(message->batch_number()) == 0){
+					leader_prop_map[message->batch_number()] = make_pair(0, message);	
 				}
 				else{
-					pair<int, MessageProto*> proposal_msg = leader_prop_map[message.batch_number()];
+					pair<int, MessageProto*> proposal_msg = leader_prop_map[message->batch_number()];
 					assert(proposal_msg.second == NULL);
-					leader_prop_map[message.batch_number()].second = new MessageProto(message);
+					leader_prop_map[message->batch_number()].second = message;
 				}
 				MessageProto msg;
 				msg.set_type(MessageProto::LEARNER_ACCEPT);
 				msg.set_destination_channel("paxos");
-				msg.set_batch_number(message.batch_number());
+				msg.set_batch_number(message->batch_number());
 				SendMsgToAll(msg);
 			}
 			else{
-				assert(message.type() == MessageProto::LEARNER_ACCEPT);
-				if(message.batch_number() >= batch_to_accept){
-					if(leader_prop_map.count(message.batch_number()) == 0) {
-						//std::cout<<"Got new learner accept "<<message.batch_number()<<std::endl;
-						leader_prop_map[message.batch_number()] = pair<int, MessageProto*>(1, NULL);	
+				assert(message->type() == MessageProto::LEARNER_ACCEPT);
+				if(message->batch_number() >= batch_to_accept){
+					if(leader_prop_map.count(message->batch_number()) == 0) {
+						LOG(-1, "Got new learner accept "<<message->batch_number());
+						leader_prop_map[message->batch_number()] = pair<int, MessageProto*>(1, NULL);	
 					}
 					else{
-						pair<int, MessageProto*> proposal_msg = leader_prop_map[message.batch_number()];
-						//std::cout<<"Got learner accept for "<<message.batch_number()<<", count is "<<proposal_msg.first<<std::endl;
+						pair<int, MessageProto*> proposal_msg = leader_prop_map[message->batch_number()];
+						LOG(-1, "Got learner accept for "<<message->batch_number()<<", count is "<<proposal_msg.first);
 						proposal_msg.first += 1;
-						leader_prop_map[message.batch_number()] = proposal_msg;	
+						leader_prop_map[message->batch_number()] = proposal_msg;	
 					}
 					while(leader_prop_map.count(batch_to_accept) != 0 && leader_prop_map[batch_to_accept].first == quorum_size && leader_prop_map[batch_to_accept].second != NULL) {
 						//std::cout<<"Accepting batch "<<batch_to_accept<<", his batch is "<<leader_prop_map[batch_to_accept].second->batch_number()<<std::endl;
@@ -134,6 +141,8 @@ void Paxos::RunPaxos() {
 				}
 			}
 		}
+		else
+			delete message;
 		Spin(0.0005);
  	}
 }

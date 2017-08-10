@@ -62,6 +62,23 @@ class Configuration {
   int LookupPartition(const Key& key) const;
   int LookupPartition(const int& key) const;
 
+  inline int RandomDCNode()
+	{
+      	int index = abs(rand()) %  num_partitions; 
+		return this_group[index]->node_id; 
+	}
+
+  inline int RandomPartition()
+	{
+      	return abs(rand()) %  num_partitions; 
+	}
+					
+  inline int NodePartition(int node_id)
+	{ return all_nodes[node_id]->partition_id; }
+
+  inline int PartLocalNode(int partition_id)
+	{ return part_local_node[partition_id];  }
+
   // Dump the current config into the file in key=value format.
   // Returns true when success.
   bool WriteToFile(const string& filename) const;
@@ -75,9 +92,9 @@ class Configuration {
   Node* this_node;
   vector<Node*> this_group;
   vector<Node*> this_dc;
+  int* part_local_node;
   int num_partitions;
 
-  // Tracks the set of current active nodes in the system.
   map<int, Node*> all_nodes;
 
  private:

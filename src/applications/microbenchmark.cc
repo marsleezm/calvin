@@ -50,7 +50,7 @@ TxnProto* Microbenchmark::InitializeTxn() {
 }
 
 // Create a non-dependent single-partition transaction
-TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
+TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int partition) {
   // Create the new transaction object
   TxnProto* txn = new TxnProto();
 
@@ -64,29 +64,31 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
 				indexAccessNum,
 				nparts * 0,
 				nparts * index_records,
-				part);
+				partition);
 
-  for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+  for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 	  txn->add_read_write_set(IntToString(*it));
+  }
 
   GetRandomKeys(&keys,
 				kRWSetSize-indexAccessNum,
 				nparts * index_records,
 				nparts * kDBSize,
-				part);
+				partition);
 
-  for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+  for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 	  txn->add_read_write_set(IntToString(*it));
+  }
 
-  txn->add_readers(part);
-  txn->add_writers(part);
+  txn->add_readers(partition);
+  txn->add_writers(partition);
 
   return txn;
 }
 
 // Create a dependent single-partition transaction
 // Read&update five index keys. Then read and update five other keys according to this index.
-TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
+TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int partition) {
   // Create the new transaction object
   TxnProto* txn = new TxnProto();
 
@@ -101,7 +103,7 @@ TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
   			  indexAccessNum,
                 nparts * 0,
                 nparts * index_records,
-                part);
+                partition);
 
   for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 	  txn->add_read_write_set(IntToString(*it));
@@ -110,14 +112,14 @@ TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
               kRWSetSize-2*indexAccessNum,
               nparts * index_records,
               nparts * kDBSize,
-              part);
+              partition);
 
 
   for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 	  txn->add_read_write_set(IntToString(*it));
 
-  txn->add_readers(part);
-  txn->add_writers(part);
+  txn->add_readers(partition);
+  txn->add_writers(partition);
 
   return txn;
 }
@@ -262,7 +264,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 					Key indexed_key = *index_val;
 					next_val = storage->ReadObject(*index_val, read_state);
 					assert(read_state == NORMAL);
-					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
+					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_partition_id));
 					storage->PutObject(txn->read_write_set(i), index_val);
 					*next_val = IntToString(StringToInt(*next_val) +  txn->seed()% 100 -50);
 					storage->PutObject(indexed_key, next_val);
@@ -281,7 +283,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 				if(read_state != NORMAL)
 					return SUSPENDED;
 				else{
-		            int value = NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id);
+		            int value = NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_partition_id);
 				    *val = IntToString(value);
 				    storage->PutObject(txn->read_write_set(i), val);
 				}
@@ -294,7 +296,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 void Microbenchmark::InitializeStorage(Storage* storage,
                                        Configuration* conf) const {
   for (int i = 0; i < nparts*kDBSize; i++) {
-    if (conf->LookupPartition(IntToString(i)) == conf->this_node_id) {
+    if (conf->LookupPartition(IntToString(i)) == conf->this_node_partition) {
 #ifdef PREFETCHING
       if (i % 10000 == 0)
         std::cout << i << std::endl;
@@ -306,7 +308,7 @@ void Microbenchmark::InitializeStorage(Storage* storage,
           std::cout << i << std::endl;
       }
 #else
-      storage->PutObject(IntToString(i), new Value(IntToString(RandomLocalKey(index_records*nparts, nparts*kDBSize, this_node_id))));
+      storage->PutObject(IntToString(i), new Value(IntToString(RandomLocalKey(index_records*nparts, nparts*kDBSize, this_partition_id))));
 #endif
     }
   }

@@ -98,7 +98,7 @@ class StorageManager {
 
   inline bool DeleteObject(const Key& key) {
 	  // Delete object from storage if applicable.
-	  if (configuration_->LookupPartition(key) == configuration_->this_node_id)
+	  if (config->LookupPartition(key) == config->this_node_partition)
 	    return actual_storage_->DeleteObject(key);
 	  else
 	    return true;  // Not this node's problem.
@@ -119,7 +119,7 @@ class StorageManager {
   friend class DeterministicScheduler;
 
   // Pointer to the configuration object for this node.
-  Configuration* configuration_;
+  Configuration* config;
 
   // A Connection object that can be used to send and receive messages.
   Connection* connection_;

@@ -92,7 +92,6 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 
 	#ifdef PAXOS
 		std::cout<<"Using Paxos replication!"<<std::endl;
-		conf->InitInfo();
 		batch_prop_limit = conf->num_partitions;
 		Connection* paxos_connection = multiplexer->NewConnection("paxos");
 		paxos = new Paxos(conf->this_group, conf->this_node, paxos_connection, conf->this_node_partition, conf->num_partitions);
@@ -183,7 +182,6 @@ void Sequencer::RunWriter() {
   batch.set_type(MessageProto::TXN_BATCH);
 
   //double time = GetTime();
-  //int all_nodes = configuration_->all_nodes.size();
   int all_parts = configuration_->num_partitions;
 
   for (int batch_number = configuration_->this_node_partition;
@@ -203,13 +201,6 @@ void Sequencer::RunWriter() {
         TxnProto* txn;
         string txn_string;
         client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset);
-#ifdef LATENCY_TEST
-        if (txn->txn_id() % SAMPLE_RATE == 0) {
-          sequencer_recv[txn->txn_id() / SAMPLE_RATE] =
-              epoch_start
-            + epoch_duration_ * (static_cast<double>(rand()) / RAND_MAX);
-        }
-#endif
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
@@ -366,12 +357,12 @@ void Sequencer::RunReader() {
   int node_id = configuration_->this_node_id;
   // Set up batch messages for each system node.
   map<int, MessageProto> batches;
-  vector<Node*> group = configuration_->this_group;
-  for (uint i = 0; i < group.size(); ++i) {
-    batches[group[i]->node_id].set_destination_channel("skeen");
-    batches[group[i]->node_id].set_destination_node(group[i]->node_id);
-    batches[group[i]->node_id].set_source_node(node_id);
-    batches[group[i]->node_id].set_type(MessageProto::SKEEN_REQ);
+  vector<Node*> dc = configuration_->this_dc;
+  for (uint i = 0; i < dc.size(); ++i) {
+    batches[dc[i]->node_id].set_destination_channel("skeen");
+    batches[dc[i]->node_id].set_destination_node(dc[i]->node_id);
+    batches[dc[i]->node_id].set_source_node(node_id);
+    batches[dc[i]->node_id].set_type(MessageProto::SKEEN_REQ);
   }
 
   int batch_number = 0;
@@ -404,9 +395,9 @@ void Sequencer::RunReader() {
 			google::protobuf::RepeatedField<int>::const_iterator  it;
 
 			for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
-				to_send.insert(*it);
+				to_send.insert(configuration_->PartLocalNode(*it));
 			for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
-				to_send.insert(*it);
+				to_send.insert(configuration_->PartLocalNode(*it));
 
 			// Insert txn into appropriate batches.
 			if(to_send.size() == 1 && *to_send.begin() == node_id){
