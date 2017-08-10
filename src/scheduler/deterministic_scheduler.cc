@@ -38,6 +38,8 @@
 //           to get COLD_CUTOFF
 #include "sequencer/sequencer.h"  // COLD_CUTOFF and buffers in LATENCY_TEST
 
+extern LatencyUtils latency_util;
+
 using std::pair;
 using std::string;
 using std::tr1::unordered_map;
@@ -175,7 +177,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	int batch_number = 0;
 	int second = 0;
 	int abort_number = 0;
-	int sample_count = 0;
 	int last_committed = 0, now_committed = 0, pending_txns= 0;
 
   	while (!scheduler->deconstructor_invoked_) {
@@ -189,14 +190,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
 					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
-	  					if (sample_count == 2){
-	  						int64 now_time = GetUTime();
-	  						scheduler->process_lat += now_time - txn->start_time();
-	  						scheduler->total_lat += now_time - txn->seed();
-	  						scheduler->latency_cnt += 1;
-	  						sample_count = 0;
-	  					}
-	  					++sample_count;
+						latency_util.add_latency((GetUTime() - txn->seed())/1000);
 						++scheduler->committed;
 					}
 					delete manager;
@@ -212,15 +206,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			if(scheduler->application_->Execute(txn, manager) == SUCCESS){
   				LOG(-1, " finished execution for "<<txn->txn_id());
   				if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
-  					if (sample_count == 2){
-  						int64 now_time = GetUTime();
-  						scheduler->process_lat += now_time - txn->start_time();
-  						scheduler->total_lat += now_time - txn->seed();
-  						scheduler->latency_cnt += 1;
-  						sample_count = 0;
-  					}
-  					++sample_count;
-  					++scheduler->committed;
+					latency_util.add_latency((GetUTime() - txn->seed())/1000);
+					++scheduler->committed;
   				}
   				delete manager;
   				txn = NULL;
@@ -233,7 +220,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			assert(message.type() == MessageProto::READ_RESULT);
   			buffered_messages[atoi(message.destination_channel().c_str())] = message;
   		}
-
 
   		if (batch_message == NULL) {
 			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
@@ -251,11 +237,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					break;
 				TxnProto* txn = new TxnProto();
 				txn->ParseFromString(batch_message->data(batch_offset));
-				//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
-				if (txn->start_time() == 0){
-					int64 now_time = GetUTime();
-					txn->set_start_time(now_time);
-				}
 				batch_offset++;
 				txns_queue->Push(txn);
 				pending_txns++;

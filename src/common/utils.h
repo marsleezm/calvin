@@ -733,6 +733,73 @@ class ReadLock {
   ReadLock& operator=(const ReadLock&);
 };
 
+class LatencyUtils {
+  	private:
+		int small_lat[1000];
+		vector<int> large_lat;
+		int total_latency;
+		int total_count;
+	public:
+		inline void add_latency(int latency){
+			if (latency >= 1000)
+				large_lat.push_back(latency);
+			else
+				small_lat[latency] += 1;
+		}
+
+		int average_latency(){
+			if(total_latency == 0)
+				calculate_total();
+			return total_latency/total_count; 	
+		}	
+		int medium_latency(){
+			if(total_latency == 0)
+				calculate_total();
+			return get_percent_latency(0.5);
+		}
+		int the95_latency(){
+			if(total_latency == 0)
+				calculate_total();
+			return get_percent_latency(0.95);
+		}
+		int the99_latency(){
+			if(total_latency == 0)
+				calculate_total();
+			return get_percent_latency(0.99);
+		}
+		int the999_latency(){
+			if(total_latency == 0)
+				calculate_total();
+			return get_percent_latency(0.999);
+		}
+	private:
+		void calculate_total() {
+			for(uint i = 0; i< 1000; ++i){
+				total_latency += small_lat[i]*i;
+				total_count += small_lat[i];
+			}
+			for(uint i = 0; i< large_lat.size(); ++i){	
+				total_latency += large_lat[i];
+				total_count += 1;
+			}
+		}
+		int get_percent_latency(double percent){
+			int medium_cnt = total_count*percent, cnt = 0;	
+			for(uint j = 0; j < 1000; ++j){
+				if(cnt+small_lat[j] >= medium_cnt)
+					return j;
+				cnt += small_lat[j];
+			}
+			for(uint j = 0; j< large_lat.size(); ++j){	
+				if(cnt+1 >= medium_cnt)
+					return large_lat[j];
+				cnt += 1;
+			}
+			return large_lat[large_lat.size()-1];
+		}
+
+};
+
 template<typename T1, typename T2, typename T3>
 class MyTuple{
 public:
