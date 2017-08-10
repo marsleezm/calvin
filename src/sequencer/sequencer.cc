@@ -33,6 +33,7 @@ using std::multimap;
 using std::set;
 using std::queue;
 
+extern LatencyUtils latency_util;
 
 #ifdef LATENCY_TEST
 double sequencer_recv[SAMPLES];
@@ -483,9 +484,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
         myfile << scheduler->throughput[count] << ", "<< abort << '\n';
         ++count;
     }
-	std::cout<<"My latency cnt is "<<scheduler->latency_cnt<<", total lat is "<<scheduler->total_lat<<", avg lat is "<<
-		scheduler->total_lat/scheduler->latency_cnt<<std::endl;
     myfile << "LATENCY" << '\n';
-	myfile << scheduler->process_lat/scheduler->latency_cnt<<", "<<scheduler->total_lat/scheduler->latency_cnt << '\n';
+	myfile << latency_util.average_latency()<<", "<<latency_util.medium_latency()<<", "<< latency_util.the95_latency() <<", "<<latency_util.the99_latency()<<", "<<latency_util.the999_latency()<< '\n';
     myfile.close();
 }

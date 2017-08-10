@@ -11,6 +11,7 @@
 #include "applications/microbenchmark.h"
 #include "applications/tpcc.h"
 #include "common/configuration.h"
+#include "common/utils.h"
 #include "common/connection.h"
 #include "backend/simple_storage.h"
 #include "backend/fetching_storage.h"
@@ -37,6 +38,7 @@
 
 int dependent_percent;
 int multi_txn_num_parts;
+LatencyUtils latency_util;
 
 // Microbenchmark load generation client.
 class MClient : public Client {
