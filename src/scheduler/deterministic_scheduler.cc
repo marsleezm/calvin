@@ -252,13 +252,22 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				TxnProto* txn = new TxnProto();
 				txn->ParseFromString(batch_message->data(batch_offset));
 				//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
-				if (txn->start_time() == 0){
-					int64 now_time = GetUTime();
-					txn->set_start_time(now_time);
+				bool added = false;
+				for(int j = 0; j<txn->writers_size(); ++j){
+					if(txn->writers(j) == scheduler->configuration_->this_node_partition){
+						if (txn->start_time() == 0){
+							int64 now_time = GetUTime();
+							txn->set_start_time(now_time);
+						}
+						batch_offset++;
+						txns_queue->Push(txn);
+						pending_txns++;
+						added = true;
+						break;
+					}
 				}
-				batch_offset++;
-				txns_queue->Push(txn);
-				pending_txns++;
+				if (added == false)
+					delete txn;
 			}
 		}
 

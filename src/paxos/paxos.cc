@@ -14,12 +14,16 @@ using std::pair;
 using std::vector;
 
 
-Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connection, int p_id, int num_p, AtomicQueue<MessageProto*>* b_queue): group(my_group), myself(myself_n), num_partitions(num_p), partition_id(p_id), connection(paxos_connection), batch_queue(b_queue) {
-	//Set CPU affinity	
+Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connection, int p_id, int num_p, AtomicQueue<MessageProto*>* b_queue, bool is_global): group(my_group), myself(myself_n), num_partitions(num_p), partition_id(p_id), connection(paxos_connection), batch_queue(b_queue) {
     pthread_mutex_init(&mutex_, NULL);
 	leader = group[0];
 	group_size = group.size();
    	cpu_set_t cpuset;
+
+	if (is_global)
+		paxos_name = "global_paxos";
+	else
+		paxos_name = "paxos";
 
     pthread_attr_t attr_thread;
     pthread_attr_init(&attr_thread);
@@ -52,8 +56,6 @@ void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop){
 		MessageProto** msg_list = new MessageProto*[group_size];
 		msg_list[IdInGroup(message->source_node())] = message;
 		client_prop_map[batch_num] = make_pair(1, msg_list);
-		//LOG(-1, "after storing is "<<reinterpret_cast<int64>(msg_list[0]));
-		//LOG(-1, "after storing is "<<reinterpret_cast<int64>(msg_list[1]));
 	}
 	else{
 		pair<int, MessageProto**> msgs = client_prop_map[batch_num];
@@ -61,14 +63,12 @@ void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop){
 		msgs.second[IdInGroup(message->source_node())] = message;
 		msgs.first = msgs.first+1;
 		client_prop_map[batch_num] = msgs;
-		//LOG(-1, "after storing is "<<reinterpret_cast<int64>(msgs.second[0]));
-		//LOG(-1, "after storing is "<<reinterpret_cast<int64>(msgs.second[1]));
 	}
 	while(client_prop_map.count(batch_to_prop) != 0 && client_prop_map[batch_to_prop].first == group_size){
 		MessageProto** msgs = client_prop_map[batch_to_prop].second;
 		MessageProto decision_msg;
 		decision_msg.set_batch_number(batch_to_prop);
-		decision_msg.set_destination_channel("paxos");
+		decision_msg.set_destination_channel(paxos_name);
 		decision_msg.set_type(MessageProto::LEADER_PROPOSAL);
 		for( int i = 0; i < group_size; ++i) {
 			LOG(batch_to_prop, " group size is "<<group_size<<", i is "<<i<<", addr is "<<reinterpret_cast<int64>(msgs[i]));
@@ -85,8 +85,17 @@ void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop){
 }
 
 void Paxos::RunPaxos() {
-	int batch_to_prop = partition_id;
-	int batch_to_accept = partition_id;
+
+	int batch_to_prop;
+	int batch_to_accept;
+	if (paxos_name == "global_paxos") {
+		batch_to_prop = 1;
+		batch_to_accept = 1;
+	}
+	else{
+		batch_to_prop = 0;
+		batch_to_accept = 0;
+	}
 	int quorum_size = group_size/2+1;
   	while (!deconstructor_invoked_) {
 		// If has received enough proposal message, propose it!
@@ -109,7 +118,7 @@ void Paxos::RunPaxos() {
 				}
 				MessageProto msg;
 				msg.set_type(MessageProto::LEARNER_ACCEPT);
-				msg.set_destination_channel("paxos");
+				msg.set_destination_channel(paxos_name);
 				msg.set_batch_number(message->batch_number());
 				SendMsgToAll(msg);
 			}
