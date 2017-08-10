@@ -741,6 +741,7 @@ class LatencyUtils {
 		int total_count;
 	public:
 		inline void add_latency(int latency){
+			//std::cout<<"Adding latency "<<latency<<std::endl;
 			if (latency >= 1000)
 				large_lat.push_back(latency);
 			else
