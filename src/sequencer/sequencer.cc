@@ -65,7 +65,6 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
 
-  	cpu_set_t cpuset;
 
 	message_queues = new AtomicQueue<MessageProto>();
 
@@ -73,22 +72,12 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 
 	pthread_attr_t attr_writer;
 	pthread_attr_init(&attr_writer);
-	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-	CPU_ZERO(&cpuset);
-	CPU_SET(1, &cpuset);
-	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
-	std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
 	pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 		 reinterpret_cast<void*>(this));
 
-	CPU_ZERO(&cpuset);
-	CPU_SET(2, &cpuset);
 	pthread_attr_t attr_reader;
 	pthread_attr_init(&attr_reader);
-	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
-	std::cout << "Sequencer reader starts at core 2"<<std::endl;
 
 	pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
@@ -208,6 +197,8 @@ void Sequencer::RunWriter() {
 			  batch.add_data(txn_string);
 			  delete txn;
           }
+		  else
+			  Spin(0.001);
 	  }
 #ifdef PAXOS
     paxos->SubmitBatch(batch);
