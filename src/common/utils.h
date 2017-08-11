@@ -734,7 +734,7 @@ class ReadLock {
 };
 
 class LatencyUtils {
-  	private:
+	public:
 		int small_lat[1000];
 		vector<int> large_lat;
 		int total_latency;
@@ -746,6 +746,11 @@ class LatencyUtils {
 				large_lat.push_back(latency);
 			else
 				small_lat[latency] += 1;
+		}
+		
+		void reset_total(){
+			total_latency = 0;
+			total_count = 0;
 		}
 
 		int average_latency(){

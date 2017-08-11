@@ -324,5 +324,46 @@ void Sequencer::output(DeterministicScheduler* scheduler){
     }
     myfile << "LATENCY" << '\n';
 	myfile << latency_util.average_latency()<<", "<<latency_util.medium_latency()<<", "<< latency_util.the95_latency() <<", "<<latency_util.the99_latency()<<", "<<latency_util.the999_latency()<< '\n';
+	if(configuration_->this_node_id == 0){
+		//Wait for nodes from the same DC to send him data
+		int to_receive_msg = configuration_->this_dc.size()-1;
+		MessageProto message;
+		while(to_receive_msg != 0){
+			if(connection_->GetMessage(&message)){
+				if(message.type() == MessageProto::LATENCY){
+					std::cout<<"Got latency info"<<std::endl;
+					for(int i = 0; i< message.latency_size(); ++i){
+						for(int j = 0; j < message.count(i); ++j)
+							latency_util.add_latency(message.latency(i));
+					}
+					to_receive_msg--;
+				}
+			}
+		}
+		latency_util.reset_total();
+    	myfile << "SUMMARY LATENCY" << '\n';
+		myfile << latency_util.average_latency()<<", "<<latency_util.medium_latency()<<", "<< latency_util.the95_latency() <<", "<<latency_util.the99_latency()<<", "<<latency_util.the999_latency()<< '\n';
+	}
+	else if (configuration_->all_nodes[configuration_->this_node_id]->replica_id == 0){
+		// Pack up my data		
+		std::cout<<"Node "<<configuration_->this_node_id<<" sending latency info to master"<<std::endl;
+		MessageProto message;
+		message.set_destination_channel("sequencer");	
+		message.set_destination_node(0);	
+		message.set_type(MessageProto::LATENCY);	
+		for(int i = 0; i < 1000; ++i){
+			if (latency_util.small_lat[i]!=0)
+			{
+				message.add_latency(i);
+				message.add_count(latency_util.small_lat[i]);
+			}
+		}	
+		for(uint i = 0; i < latency_util.large_lat.size(); ++i){
+			message.add_latency(latency_util.large_lat[i]);
+			message.add_count(1);
+		}	
+		connection_->Send(message);
+	}
+
     myfile.close();
 }

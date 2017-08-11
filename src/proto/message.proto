@@ -30,7 +30,7 @@ message MessageProto {
     CLIENT_PROPOSAL = 8;
     LEADER_PROPOSAL = 9;
     LEARNER_ACCEPT = 10;
-
+	LATENCY = 11;
   };
   required MessageType type = 9;
 
@@ -52,6 +52,9 @@ message MessageProto {
   // result of a read, respectively.
   repeated bytes keys = 31;
   repeated bytes values = 32;
+
+  repeated int64 latency = 33;
+  repeated int64 count = 34;
 
   // For (UN)LINK_CHANNEL messages, specifies the main channel of the requesting
   // Connection object.
