@@ -13,6 +13,7 @@
 #include "common/configuration.h"
 #include "common/utils.h"
 #include "common/connection.h"
+#include "common/utils.h"
 #include "backend/simple_storage.h"
 #include "backend/fetching_storage.h"
 #include "backend/collapsed_versioned_storage.h"

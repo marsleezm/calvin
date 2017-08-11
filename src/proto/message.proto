@@ -33,6 +33,7 @@ message MessageProto {
 	SKEEN_REQ = 11;
 	SKEEN_PROPOSE = 12;
 	SKEEN_REPLY = 13;
+	LATENCY = 14;
   };
   required MessageType type = 9;
 
@@ -56,6 +57,9 @@ message MessageProto {
   // result of a read, respectively.
   repeated bytes keys = 31;
   repeated bytes values = 32;
+
+  repeated int64 latency = 33;
+  repeated int64 count = 34;
 
   // For (UN)LINK_CHANNEL messages, specifies the main channel of the requesting
   // Connection object.

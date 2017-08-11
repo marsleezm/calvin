@@ -38,6 +38,8 @@
 //           to get COLD_CUTOFF
 #include "sequencer/sequencer.h"  // COLD_CUTOFF and buffers in LATENCY_TEST
 
+extern LatencyUtils latency_util;
+
 using std::pair;
 using std::string;
 using std::tr1::unordered_map;
@@ -207,7 +209,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   				LOG(-1, " finished execution for "<<txn->txn_id());
   				if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
 					latency_util.add_latency((GetUTime() - txn->seed())/1000);
-  					++scheduler->committed;
+					++scheduler->committed;
   				}
   				delete manager;
   				txn = NULL;
@@ -220,7 +222,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			assert(message.type() == MessageProto::READ_RESULT);
   			buffered_messages[atoi(message.destination_channel().c_str())] = message;
   		}
-
 
   		if (batch_message == NULL) {
 			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
@@ -238,7 +239,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					break;
 				TxnProto* txn = new TxnProto();
 				txn->ParseFromString(batch_message->data(batch_offset));
-				LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
 				batch_offset++;
 				txns_queue->Push(txn);
 				pending_txns++;
