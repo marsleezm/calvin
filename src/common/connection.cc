@@ -47,7 +47,6 @@ send_mutex_ = new pthread_mutex_t[(int)config->all_nodes.size()];
     }
   }
 
-cpu_set_t cpuset;
 pthread_attr_t attr;
 pthread_attr_init(&attr);
 //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);

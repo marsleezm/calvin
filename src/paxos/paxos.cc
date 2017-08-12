@@ -18,7 +18,6 @@ Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connecti
     pthread_mutex_init(&mutex_, NULL);
 	leader = group[0];
 	group_size = group.size();
-   	cpu_set_t cpuset;
 
     pthread_attr_t attr_thread;
     pthread_attr_init(&attr_thread);

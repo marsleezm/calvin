@@ -88,7 +88,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     Spin(2);
 
   // start lock manager thread
-    cpu_set_t cpuset;
     pthread_attr_t attr1;
     pthread_attr_init(&attr1);
   //pthread_attr_setdetachstate(&attr1, PTHREAD_CREATE_DETACHED);
