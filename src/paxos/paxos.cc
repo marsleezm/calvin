@@ -75,7 +75,7 @@ void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop){
 		delete[] msgs;
 		client_prop_map.erase(batch_to_prop);
 		SendMsgToAll(decision_msg);
-		batch_to_prop += num_partitions;
+		batch_to_prop += 2;
 	}
 }
 
@@ -136,7 +136,7 @@ void Paxos::RunPaxos() {
 						leader_prop->set_type(MessageProto::TXN_BATCH);
 						batch_queue->Push(leader_prop);
 						leader_prop_map.erase(batch_to_accept);
-						batch_to_accept += num_partitions;
+						batch_to_accept += 2;
 					}
 				}
 			}
