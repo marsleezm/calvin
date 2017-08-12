@@ -92,7 +92,10 @@ Sequencer::~Sequencer() {
   if (queue_mode_ == DIRECT_QUEUE)
 	  delete txns_queue_;
   delete connection_;
-  std::cout<<"Sequencer done"<<std::endl;
+  std::cout<<"Sequencer done"<<std::endl; 
+  #ifdef PAXOS
+	delete paxos;	
+  #endfi
 }
 
 void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {

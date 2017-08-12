@@ -29,9 +29,9 @@ Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connecti
 }
 
 Paxos::~Paxos() {
-	deconstructor_invoked_ = true;
-	pthread_join(paxos_thread, NULL);
-	delete connection;
+    deconstructor_invoked_ = true;
+    pthread_join(paxos_thread, NULL);
+    delete connection;
 }
 
 void* Paxos::InitRunPaxos(void *arg) {
