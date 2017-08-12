@@ -233,7 +233,7 @@ void Sequencer::RunReader() {
   while (!deconstructor_invoked_) {
     // Get batch from Paxos service.
     //string batch_string;
-    MessageProto* batch_message;
+    MessageProto* batch_message = NULL;
     bool got_batch = false;
     do {
       if (batch_queue_.Pop(&batch_message)) {
@@ -249,11 +249,6 @@ void Sequencer::RunReader() {
     for (int i = 0; i < batch_message->data_size(); i++) {
       	TxnProto txn;
       	txn.ParseFromString(batch_message->data(i));
-
-#ifdef LATENCY_TEST
-      if (txn.txn_id() % SAMPLE_RATE == 0)
-        watched_txn = txn.txn_id();
-#endif
 
       // Compute readers & writers; store in txn proto.
       bytes txn_data;
@@ -320,6 +315,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
   	deconstructor_invoked_ = true;
   	pthread_join(writer_thread_, NULL);
   	pthread_join(reader_thread_, NULL);
+	std::cout<<"Threads joined"<<std::endl;
     ofstream myfile;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
@@ -338,6 +334,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		while(to_receive_msg != 0){
 			if(connection_->GetMessage(&message)){
 				if(message.type() == MessageProto::LATENCY){
+					std::cout<<"Got message from "<<message.source_node()<<std::endl;
 					for(int i = 0; i< message.latency_size(); ++i){
 						for(int j = 0; j < message.count(i); ++j)
 							latency_util.add_latency(message.latency(i));
@@ -354,6 +351,8 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		// Pack up my data		
 		MessageProto message;
 		message.set_destination_channel("sequencer");	
+		message.set_source_node(configuration_->this_node_id);
+		std::cout<<"Sent message to "<<0<<std::endl;
 		message.set_destination_node(0);	
 		message.set_type(MessageProto::LATENCY);	
 		for(int i = 0; i < 1000; ++i){
