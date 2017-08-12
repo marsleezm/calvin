@@ -93,7 +93,6 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 }
 
 Sequencer::~Sequencer() {
-  deconstructor_invoked_ = true;
   if (queue_mode_ == DIRECT_QUEUE)
 	  delete txns_queue_;
   pthread_join(writer_thread_, NULL);
@@ -302,6 +301,8 @@ void Sequencer::RunReader() {
 
 
 void Sequencer::output(DeterministicScheduler* scheduler){
+  	deconstructor_invoked_ = true;
+	Sleep(1);
     ofstream myfile;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
@@ -320,7 +321,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		while(to_receive_msg != 0){
 			if(connection_->GetMessage(&message)){
 				if(message.type() == MessageProto::LATENCY){
-					std::cout<<"Got latency info from "<<configuration_->this_node_id<<std::endl;
+					std::cout<<"Got latency info from "<<message.source_node()<<std::endl;
 					for(int i = 0; i< message.latency_size(); ++i){
 						for(int j = 0; j < message.count(i); ++j)
 							latency_util.add_latency(message.latency(i));
@@ -337,7 +338,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		// Pack up my data		
 		std::cout<<"Node "<<configuration_->this_node_id<<" sending latency info to master"<<std::endl;
 		MessageProto message;
-		message.set_destination_channel("sequencer");	
+		message.set_destination_channel("sequencer");
 		message.set_destination_node(0);	
 		message.set_source_node(configuration_->this_node_id);	
 		message.set_type(MessageProto::LATENCY);	
