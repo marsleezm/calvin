@@ -359,4 +359,5 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 	}
 
     myfile.close();
+	Spin(1);
 }
