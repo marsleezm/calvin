@@ -15,7 +15,6 @@ using std::vector;
 
 
 Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connection, int p_id, int num_p): group(my_group), myself(myself_n), num_partitions(num_p), partition_id(p_id), connection(paxos_connection) {
-	//Set CPU affinity	
     pthread_mutex_init(&mutex_, NULL);
 	leader = group[0];
 	group_size = group.size();
@@ -25,9 +24,6 @@ Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connecti
     pthread_attr_init(&attr_thread);
     //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    CPU_SET(0, &cpuset);
-    pthread_attr_setaffinity_np(&attr_thread, sizeof(cpu_set_t), &cpuset);
-    std::cout << "Paxos starts at core 0"<<std::endl;
 
     pthread_create(&paxos_thread, &attr_thread, InitRunPaxos,
           reinterpret_cast<void*>(this));

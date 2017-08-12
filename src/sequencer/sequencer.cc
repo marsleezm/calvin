@@ -61,10 +61,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
     : epoch_duration_(0.01), configuration_(conf), multiplexer_(multiplexer),
       client_(client), storage_(storage), deconstructor_invoked_(false), queue_mode_(queue_mode), fetched_txn_num_(0) {
 	pthread_mutex_init(&mutex_, NULL);
-  // Start Sequencer main loops running in background thread.
-
-  	cpu_set_t cpuset;
-
+	paxos = NULL;
 	message_queues = new AtomicQueue<MessageProto>();
 
 	connection_ = multiplexer->NewConnection("sequencer", &message_queues);
@@ -74,19 +71,13 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_attr_init(&attr_writer);
 	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-	CPU_ZERO(&cpuset);
-	CPU_SET(1, &cpuset);
-	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
 	std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
 	pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 		 reinterpret_cast<void*>(this));
 
-	CPU_ZERO(&cpuset);
-	CPU_SET(2, &cpuset);
 	pthread_attr_t attr_reader;
 	pthread_attr_init(&attr_reader);
-	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
 	std::cout << "Sequencer reader starts at core 2"<<std::endl;
 	pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
@@ -102,13 +93,11 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 }
 
 Sequencer::~Sequencer() {
-  deconstructor_invoked_ = true;
   if (queue_mode_ == DIRECT_QUEUE)
 	  delete txns_queue_;
-  pthread_join(writer_thread_, NULL);
-  pthread_join(reader_thread_, NULL);
-  pthread_join(skeen_thread_, NULL);
   delete connection_;
+  delete skeen_connection_;
+  delete paxos;
   std::cout<<"Sequencer done"<<std::endl;
 }
 
@@ -202,16 +191,13 @@ void Sequencer::RunWriter() {
         TxnProto* txn;
         string txn_string;
         client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset);
-        if(txn->txn_id() == -1) {
-          delete txn;
-          continue;
-        }
-
         txn->SerializeToString(&txn_string);
         batch.add_data(txn_string);
         txn_id_offset++;
         delete txn;
       }
+      else
+	Spin(0.001);
     }
 
     batch.SerializeToString(&batch_string);
@@ -475,6 +461,10 @@ void Sequencer::RunReader() {
 
 
 void Sequencer::output(DeterministicScheduler* scheduler){
+    deconstructor_invoked_ = true;
+    pthread_join(writer_thread_, NULL);
+    pthread_join(reader_thread_, NULL);
+
     ofstream myfile;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
