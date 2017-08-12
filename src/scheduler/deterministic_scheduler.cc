@@ -272,23 +272,3 @@ DeterministicScheduler::~DeterministicScheduler() {
 	std::cout<<"Scheduler deleted"<<std::endl;
 }
 
-//void* DeterministicScheduler::LockManagerThread(void* arg) {
-//	DeterministicScheduler* scheduler = reinterpret_cast<DeterministicScheduler*>(arg);
-//
-//	// Run main loop.
-//	MessageProto message;
-//	MessageProto* batch_message = NULL;
-//	double time = GetTime();
-//	int batch_offset = 0;
-//	int batch_number = 0;
-//	int second = 0;
-//	int abort_number = 0;
-//	int last_committed = 0, now_committed = 0;
-//
-//  	while (!scheduler->deconstructor_invoked_) {
-//      	// Have we run out of txns in our batch? Let's get some new ones.
-//
-//  	}
-//  	return NULL;
-//}
-

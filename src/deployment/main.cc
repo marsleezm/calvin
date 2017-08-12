@@ -249,8 +249,8 @@ int main(int argc, char** argv) {
 
   sequencer.WaitForStart();
   Spin(atoi(ConfigReader::Value("duration").c_str()));
-  sequencer.output(scheduler);
   delete scheduler;
+  sequencer.output(scheduler);
   delete scheduler_connection;
   return 0;
 }
