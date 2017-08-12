@@ -245,6 +245,8 @@ void Sequencer::RunReader() {
       if (!got_batch)
         Spin(0.001);
     } while (!deconstructor_invoked_ && !got_batch);
+    if(got_batch == false)
+	return;
     //batch_message.ParseFromString(batch_string);
     for (int i = 0; i < batch_message->data_size(); i++) {
       	TxnProto txn;
