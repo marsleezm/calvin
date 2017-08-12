@@ -47,20 +47,8 @@ send_mutex_ = new pthread_mutex_t[(int)config->all_nodes.size()];
     }
   }
 
-cpu_set_t cpuset;
-pthread_attr_t attr;
-pthread_attr_init(&attr);
-//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-CPU_ZERO(&cpuset);
-CPU_SET(0, &cpuset);
-//CPU_SET(4, &cpuset);
-//CPU_SET(5, &cpuset);
-//CPU_SET(6, &cpuset);
-//CPU_SET(7, &cpuset);
-    std::cout<<"Connection starts at 0"<<std::endl;
-pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
-
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
 
   // Start Multiplexer main loop running in background thread.
   pthread_create(&thread_, &attr, RunMultiplexer, reinterpret_cast<void*>(this));
@@ -156,7 +144,9 @@ void ConnectionMultiplexer::Run() {
 
   while (!deconstructor_invoked_) {
     // Serve any pending NewConnection request.
+	bool nothing_happened = true;
     if (new_connection_channel_ != NULL) {
+	   nothing_happened = false;
       if (inproc_out_.count(*new_connection_channel_) > 0) {
         // Channel name already in use. Report an error and set new_connection_
         // (which NewConnection() will return) to NULL.
@@ -203,6 +193,7 @@ void ConnectionMultiplexer::Run() {
     // Serve any pending (valid) connection deletion request.
     if (delete_connection_channel_ != NULL &&
         inproc_out_.count(*delete_connection_channel_) > 0) {
+	   nothing_happened = false;
       delete inproc_out_[*delete_connection_channel_];
       inproc_out_.erase(*delete_connection_channel_);
       delete_connection_channel_ = NULL;
@@ -213,6 +204,7 @@ void ConnectionMultiplexer::Run() {
 
     // Forward next message from a remote node (if any).
     if (remote_in_->recv(&msg, ZMQ_NOBLOCK)) {
+	   nothing_happened = false;
       message.ParseFromArray(msg.data(), msg.size());
       Send(message);
     }
@@ -220,6 +212,7 @@ void ConnectionMultiplexer::Run() {
     // Forward next message from a local component (if any), intercepting
     // local Link/UnlinkChannel requests.
     if (inproc_in_->recv(&msg, ZMQ_NOBLOCK)) {
+	   nothing_happened = false;
       message.ParseFromArray(msg.data(), msg.size());
         // Normal message. Forward appropriately.
         Send(message);
@@ -231,6 +224,7 @@ void ConnectionMultiplexer::Run() {
      MessageProto message;
      bool got_it = it->second->Pop(&message);
      if (got_it == true) {
+	   	nothing_happened = false;
        if (message.type() == MessageProto::LINK_CHANNEL) {
     	   //LOG(-1, " linking channel: "<<message.channel_request());
     	   pthread_mutex_lock(&remote_result_mutex_);
@@ -245,16 +239,10 @@ void ConnectionMultiplexer::Run() {
          }
          undelivered_messages_.erase(message.channel_request());
        }
-//       else if (message.type() == MessageProto::UNLINK_CHANNEL) {
-//    	   pthread_mutex_lock(&remote_result_mutex_);
-//    	   //if(remote_result_[message.channel_request()] == remote_result_[it->first]){
-//    	   remote_result_.erase(message.channel_request());
-//    	   //}
-//		   pthread_mutex_unlock(&remote_result_mutex_);
-//		   //LOG(-1, " unlinking channel: "<<message.channel_request()<<" from "<<it->first);
-//       }
      }
    }
+	if(nothing_happened == true)
+		Spin(0.001);
        
   }
 }

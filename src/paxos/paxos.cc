@@ -18,7 +18,6 @@ Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connecti
     pthread_mutex_init(&mutex_, NULL);
 	leader = group[0];
 	group_size = group.size();
-   	cpu_set_t cpuset;
 
 	if (is_global)
 		paxos_name = "global_paxos";
@@ -28,10 +27,6 @@ Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connecti
     pthread_attr_t attr_thread;
     pthread_attr_init(&attr_thread);
     //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-    CPU_SET(0, &cpuset);
-    pthread_attr_setaffinity_np(&attr_thread, sizeof(cpu_set_t), &cpuset);
-    std::cout << "Paxos starts at core 0"<<std::endl;
 
     pthread_create(&paxos_thread, &attr_thread, InitRunPaxos,
           reinterpret_cast<void*>(this));

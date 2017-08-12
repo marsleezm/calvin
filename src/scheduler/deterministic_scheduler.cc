@@ -85,21 +85,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
     Spin(2);
 
-  // start lock manager thread
-    cpu_set_t cpuset;
     pthread_attr_t attr1;
     pthread_attr_init(&attr1);
-  //pthread_attr_setdetachstate(&attr1, PTHREAD_CREATE_DETACHED);
-  
-//    CPU_ZERO(&cpuset);
-//    CPU_SET(3, &cpuset);
-//    std::cout << "Central locking thread starts at 3"<<std::endl;
-//    pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
-//    pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
-//                 reinterpret_cast<void*>(this));
-
-
-    //  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
     // Start all worker threads.
     string channel("scheduler");
@@ -107,13 +94,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
-	CPU_ZERO(&cpuset);
-	//if (i == 0 || i == 1)
-	CPU_SET(4, &cpuset);
-	std::cout << "Worker thread starts at core 4"<<std::endl;
-		//else
-		//CPU_SET(i+2, &cpuset);
-	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,
 					   reinterpret_cast<void*>(this));
@@ -180,8 +160,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	int last_committed = 0, now_committed = 0, pending_txns= 0;
 
   	while (!scheduler->deconstructor_invoked_) {
+		bool nothing_happened = true;
   		if (txn == NULL){
   			if(txns_queue->Pop(&txn)){
+				nothing_happened = false;
 			  // No remote read result found, start on next txn if one is waiting.
 			  // Create manager.
   				manager = new StorageManager(scheduler->configuration_,
@@ -200,6 +182,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			}
   		}
   		else if (buffered_messages.count(txn->txn_id()) != 0){
+			nothing_happened = false;
   			message = buffered_messages[txn->txn_id()];
   			buffered_messages.erase(txn->txn_id());
   			manager->HandleReadResult(message);
@@ -216,6 +199,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   		}
   		else if (scheduler->message_queue->Pop(&message)){
 		  // If I get read_result when executing a transaction
+			nothing_happened = false;
   			LOG(-1, " got READ_RESULT for "<<message.destination_channel());
   			assert(message.type() == MessageProto::READ_RESULT);
   			buffered_messages[atoi(message.destination_channel().c_str())] = message;
@@ -224,6 +208,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   		if (batch_message == NULL) {
 			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
 		} else if (batch_offset >= batch_message->data_size()) {
+			nothing_happened = false;
 			batch_offset = 0;
 			batch_number++;
 			delete batch_message;
@@ -232,6 +217,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		// Current batch has remaining txns, grab up to 10.
 		if (pending_txns < 2000 && batch_message) {
+			nothing_happened = false;
 			for (int i = 0; i < 200; i++) {
 				if (batch_offset >= batch_message->data_size())
 					break;
@@ -251,6 +237,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					delete txn;
 			}
 		}
+
+		if (nothing_happened == true)
+			Spin(0.001);
 
 		// Report throughput.
 		if (GetTime() > time + 1) {
