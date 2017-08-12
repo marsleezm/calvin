@@ -132,7 +132,6 @@ class Sequencer {
 
   // Separate pthread contexts in which to run the sequencer's main loops.
   pthread_t writer_thread_;
-  pthread_t paxos_thread_;
   pthread_t reader_thread_;
 
   // False until the deconstructor is called. As soon as it is set to true, the

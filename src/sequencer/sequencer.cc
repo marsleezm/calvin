@@ -64,8 +64,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
       client_(client), storage_(storage), deconstructor_invoked_(false), queue_mode_(queue_mode), fetched_txn_num_(0) {
 	pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
-
-
+	paxos = NULL;
 	message_queues = new AtomicQueue<MessageProto>();
 
 	connection_ = multiplexer->NewConnection("sequencer", &message_queues);
@@ -95,11 +94,9 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 Sequencer::~Sequencer() {
   if (queue_mode_ == DIRECT_QUEUE)
 	  delete txns_queue_;
-  pthread_join(writer_thread_, NULL);
-  pthread_join(reader_thread_, NULL);
-  pthread_join(paxos_thread_, NULL);
   delete connection_;
-  std::cout<<"Sequencer done"<<std::endl;
+  std::cout<<"Sequencer done"<<std::endl; 
+  delete paxos;	
 }
 
 void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
@@ -247,7 +244,7 @@ void Sequencer::RunReader() {
   while (!deconstructor_invoked_) {
     // Get batch from Paxos service.
     //string batch_string;
-    MessageProto* batch_message;
+    MessageProto* batch_message = NULL;
     bool got_batch = false;
     do {
       if (batch_queue_.Pop(&batch_message)) {
@@ -259,6 +256,8 @@ void Sequencer::RunReader() {
       if (!got_batch)
         Spin(0.001);
     } while (!deconstructor_invoked_ && !got_batch);
+    if(got_batch == false)
+	return;
     //batch_message.ParseFromString(batch_string);
 
 	if(batch_message->batch_number() %2 == 0) {
@@ -301,9 +300,10 @@ void Sequencer::RunReader() {
 
 
 void Sequencer::output(DeterministicScheduler* scheduler){
-	std::cout<<"Node "<<configuration_->this_node_id<<" calling output"<<std::endl;
   	deconstructor_invoked_ = true;
-	Spin(1);
+  	pthread_join(writer_thread_, NULL);
+  	pthread_join(reader_thread_, NULL);
+	std::cout<<"Threads joined"<<std::endl;
     ofstream myfile;
 	std::cout<<"Node "<<configuration_->this_node_id<<" before output"<<std::endl;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
@@ -340,7 +340,8 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		// Pack up my data		
 		std::cout<<"Node "<<configuration_->this_node_id<<" sending latency info to master"<<std::endl;
 		MessageProto message;
-		message.set_destination_channel("sequencer");
+		message.set_destination_channel("sequencer");	
+		message.set_source_node(configuration_->this_node_id);
 		message.set_destination_node(0);	
 		message.set_source_node(configuration_->this_node_id);	
 		message.set_type(MessageProto::LATENCY);	
