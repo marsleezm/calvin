@@ -320,7 +320,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		while(to_receive_msg != 0){
 			if(connection_->GetMessage(&message)){
 				if(message.type() == MessageProto::LATENCY){
-					std::cout<<"Got latency info"<<std::endl;
+					std::cout<<"Got latency info from "<<configuration_->this_node_id<<std::endl;
 					for(int i = 0; i< message.latency_size(); ++i){
 						for(int j = 0; j < message.count(i); ++j)
 							latency_util.add_latency(message.latency(i));
@@ -339,6 +339,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		MessageProto message;
 		message.set_destination_channel("sequencer");	
 		message.set_destination_node(0);	
+		message.set_source_node(configuration_->this_node_id);	
 		message.set_type(MessageProto::LATENCY);	
 		for(int i = 0; i < 1000; ++i){
 			if (latency_util.small_lat[i]!=0)
