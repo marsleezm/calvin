@@ -89,12 +89,8 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 }
 
 Sequencer::~Sequencer() {
-  deconstructor_invoked_ = true;
   if (queue_mode_ == DIRECT_QUEUE)
 	  delete txns_queue_;
-  pthread_join(writer_thread_, NULL);
-  pthread_join(reader_thread_, NULL);
-  pthread_join(paxos_thread_, NULL);
   delete connection_;
   std::cout<<"Sequencer done"<<std::endl;
 }
@@ -321,6 +317,9 @@ void Sequencer::RunReader() {
 
 
 void Sequencer::output(DeterministicScheduler* scheduler){
+  	deconstructor_invoked_ = true;
+  	pthread_join(writer_thread_, NULL);
+  	pthread_join(reader_thread_, NULL);
     ofstream myfile;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
