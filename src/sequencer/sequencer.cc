@@ -65,6 +65,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
 	paxos = NULL;
+	global_paxos = NULL;
 	message_queues = new AtomicQueue<MessageProto>();
 
 	connection_ = multiplexer->NewConnection("sequencer", &message_queues);
@@ -97,6 +98,7 @@ Sequencer::~Sequencer() {
   delete connection_;
   std::cout<<"Sequencer done"<<std::endl; 
   delete paxos;	
+  delete global_paxos;
 }
 
 void Sequencer::FindParticipatingNodes(const TxnProto& txn, set<int>* nodes) {
