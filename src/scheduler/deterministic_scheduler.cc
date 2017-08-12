@@ -135,7 +135,7 @@ void UnfetchAll(Storage* storage, TxnProto* txn) {
 // Returns ptr to heap-allocated
 unordered_map<int, MessageProto*> batches;
 MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicScheduler* scheduler) {
-	//LOG(-1, " trying to get"<<batch_id);
+	LOG(-1, " trying to get"<<batch_id);
   if (batches.count(batch_id) > 0) {
     // Requested batch has already been received.
     MessageProto* batch = batches[batch_id];
