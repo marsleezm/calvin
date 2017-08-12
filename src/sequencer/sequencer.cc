@@ -301,9 +301,11 @@ void Sequencer::RunReader() {
 
 
 void Sequencer::output(DeterministicScheduler* scheduler){
+	std::cout<<"Node "<<configuration_->this_node_id<<" calling output"<<std::endl;
   	deconstructor_invoked_ = true;
 	Spin(1);
     ofstream myfile;
+	std::cout<<"Node "<<configuration_->this_node_id<<" before output"<<std::endl;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
     double abort = 0;
