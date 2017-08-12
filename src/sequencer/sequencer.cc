@@ -302,7 +302,7 @@ void Sequencer::RunReader() {
 
 void Sequencer::output(DeterministicScheduler* scheduler){
   	deconstructor_invoked_ = true;
-	Sleep(1);
+	Spin(1);
     ofstream myfile;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
