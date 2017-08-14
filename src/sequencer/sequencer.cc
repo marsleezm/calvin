@@ -224,8 +224,10 @@ void Sequencer::RunWriter() {
 	global_batch_number+=2;
 #ifdef PAXOS
     paxos->SubmitBatch(batch);
-	if (configuration_->this_node_partition == 0)
+	if (configuration_->this_node_partition == 0){
+		std::cout<<"Global paxos submitting batch, size is "<<global_batch.data_size()<<std::endl;
 		global_paxos->SubmitBatch(global_batch);
+	}
 #else
     batch_queue_.Push(new MessageProto(batch));
 #endif
@@ -272,11 +274,13 @@ void Sequencer::RunReader() {
     }
 	else{
 		LOG(batch_message->batch_number(), " got global message");
+		std::cout<<batch_message->batch_number()<< " got global message"<<std::endl;
 		batch_message->set_destination_channel("scheduler_");
 		for(uint i = 0; i<dc.size(); ++i)
 		{
 			batch_message->set_destination_node(dc[i]->node_id);
 			LOG(batch_message->batch_number(), " sending global message to "<<dc[i]->node_id);
+			std::cout<<batch_message->batch_number()<<" sending global message to "<<dc[i]->node_id<<std::endl;
     		pthread_mutex_lock(&mutex_);
     		connection_->Send(*batch_message);
     		pthread_mutex_unlock(&mutex_);
