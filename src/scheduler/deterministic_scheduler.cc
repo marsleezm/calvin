@@ -227,7 +227,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				for(int j = 0; j<txn->writers_size(); ++j){
 					if(txn->writers(j) == scheduler->configuration_->this_node_partition){
 						batch_offset++;
-                        if(j == 0)
+                        if(j == 0 && txn->writer_size() > 1)
                             LOG(txn->txn_id(), " is added to txn queue, another is "<<txn->writers(1));
                         else
                             LOG(txn->txn_id(), " is added to txn queue, another is "<<txn->writers(0));
