@@ -170,7 +170,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 									scheduler->thread_connection_,
 									scheduler->storage_, txn);
 				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+					LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
 						latency_util.add_latency((GetUTime() - txn->seed())/1000);
 						++scheduler->committed;
@@ -226,8 +226,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				bool added = false;
 				for(int j = 0; j<txn->writers_size(); ++j){
 					if(txn->writers(j) == scheduler->configuration_->this_node_partition){
-						batch_offset++;
-                        if(j == 0 && txn->writer_size() > 1)
+                        if(j == 0 && txn->writers_size() > 1)
                             LOG(txn->txn_id(), " is added to txn queue, another is "<<txn->writers(1));
                         else
                             LOG(txn->txn_id(), " is added to txn queue, another is "<<txn->writers(0));
@@ -237,8 +236,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						break;
 					}
 				}
-				if (added == false)
+				if (added == false){
+					LOG(txn->txn_id(), "is not added! My partition is "<<scheduler->configuration_->this_node_partition);
 					delete txn;
+				}
+				batch_offset++;
 			}
 		}
 
