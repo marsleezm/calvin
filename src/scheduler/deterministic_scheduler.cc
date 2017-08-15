@@ -87,18 +87,12 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
     Spin(2);
 
-  // start lock manager thread
-    pthread_attr_t attr1;
-    pthread_attr_init(&attr1);
-  //pthread_attr_setdetachstate(&attr1, PTHREAD_CREATE_DETACHED);
-  
-
     // Start all worker threads.
     string channel("scheduler");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
 
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,
 					   reinterpret_cast<void*>(this));
@@ -187,7 +181,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			}
   		}
   		else if (buffered_messages.count(txn->txn_id()) != 0){
-			 nothing_happened = false;
+			nothing_happened = false;
   			message = buffered_messages[txn->txn_id()];
   			buffered_messages.erase(txn->txn_id());
   			manager->HandleReadResult(message);
@@ -205,6 +199,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   		else if (scheduler->message_queue->Pop(&message)){
 			 nothing_happened = false;
 		  // If I get read_result when executing a transaction
+			nothing_happened = false;
   			LOG(-1, " got READ_RESULT for "<<message.destination_channel());
   			assert(message.type() == MessageProto::READ_RESULT);
   			buffered_messages[atoi(message.destination_channel().c_str())] = message;
@@ -213,7 +208,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   		if (batch_message == NULL) {
 			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
 		} else if (batch_offset >= batch_message->data_size()) {
-			 nothing_happened = false;
+			nothing_happened = false;
 			batch_offset = 0;
 			batch_number++;
 			delete batch_message;
@@ -224,7 +219,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		// Current batch has remaining txns, grab up to 10.
 		if (pending_txns < 2000 && batch_message) {
-			 nothing_happened = false;
+			nothing_happened = false;
 			for (int i = 0; i < 200; i++) {
 				if (batch_offset >= batch_message->data_size())
 					break;
@@ -235,6 +230,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				pending_txns++;
 			}
 		}
+
+		if (nothing_happened == true)
+			Spin(0.001);
 
 		// Report throughput.
 		if (GetTime() > time + 1) {

@@ -23,15 +23,14 @@ Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connecti
     pthread_attr_init(&attr_thread);
     //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-
     pthread_create(&paxos_thread, &attr_thread, InitRunPaxos,
           reinterpret_cast<void*>(this));
 }
 
 Paxos::~Paxos() {
-	deconstructor_invoked_ = true;
-	pthread_join(paxos_thread, NULL);
-	delete connection;
+    deconstructor_invoked_ = true;
+    pthread_join(paxos_thread, NULL);
+    delete connection;
 }
 
 void* Paxos::InitRunPaxos(void *arg) {

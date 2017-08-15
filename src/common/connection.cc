@@ -47,10 +47,8 @@ send_mutex_ = new pthread_mutex_t[(int)config->all_nodes.size()];
     }
   }
 
-pthread_attr_t attr;
-pthread_attr_init(&attr);
-//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
 
   // Start Multiplexer main loop running in background thread.
   pthread_create(&thread_, &attr, RunMultiplexer, reinterpret_cast<void*>(this));
@@ -146,9 +144,9 @@ void ConnectionMultiplexer::Run() {
 
   while (!deconstructor_invoked_) {
     // Serve any pending NewConnection request.
-    bool nothing_happened = true;
+	bool nothing_happened = true;
     if (new_connection_channel_ != NULL) {
-        nothing_happened = false;
+	   nothing_happened = false;
       if (inproc_out_.count(*new_connection_channel_) > 0) {
         // Channel name already in use. Report an error and set new_connection_
         // (which NewConnection() will return) to NULL.
@@ -206,7 +204,7 @@ void ConnectionMultiplexer::Run() {
 
     // Forward next message from a remote node (if any).
     if (remote_in_->recv(&msg, ZMQ_NOBLOCK)) {
-	nothing_happened = false;
+	    nothing_happened = false;
       message.ParseFromArray(msg.data(), msg.size());
       Send(message);
     }
@@ -214,7 +212,7 @@ void ConnectionMultiplexer::Run() {
     // Forward next message from a local component (if any), intercepting
     // local Link/UnlinkChannel requests.
     if (inproc_in_->recv(&msg, ZMQ_NOBLOCK)) {
-	nothing_happened = false;
+	    nothing_happened = false;
       	message.ParseFromArray(msg.data(), msg.size());
         // Normal message. Forward appropriately.
         Send(message);
@@ -226,7 +224,7 @@ void ConnectionMultiplexer::Run() {
      MessageProto message;
      bool got_it = it->second->Pop(&message);
      if (got_it == true) {
-	nothing_happened = false;
+	    nothing_happened = false;
        if (message.type() == MessageProto::LINK_CHANNEL) {
     	   //LOG(-1, " linking channel: "<<message.channel_request());
     	   pthread_mutex_lock(&remote_result_mutex_);
@@ -241,11 +239,10 @@ void ConnectionMultiplexer::Run() {
          }
          undelivered_messages_.erase(message.channel_request());
        }
-    if(nothing_happened == true)
-        Spin(0.001);
      }
    }
-       
+	if(nothing_happened == true)
+		Spin(0.001);
   }
 }
 
