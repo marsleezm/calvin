@@ -152,8 +152,7 @@ void Sequencer::GenerateLoad(double now, MessageProto& batch, MessageProto& glob
 		TxnProto* txn;
 		string txn_string;
         MessageProto global_receive;
-		int batch_number = 2*batch_count_,
-		    global_batch_number = 2*batch_count_+1;
+		int batch_number = configuration_->all_nodes.size()*batch_count_+configuration_->this_node_id;
 		while (!deconstructor_invoked_ &&
      		now < epoch_start_ + (batch_count_+1)*epoch_duration_ && txn_id_offset < max_batch_size){
 
@@ -173,8 +172,8 @@ void Sequencer::GenerateLoad(double now, MessageProto& batch, MessageProto& glob
             for(int i = 0; i <global_receive.data_size(); ++i)
                 global_batch.add_data(global_receive.data(i));
        	}
-		batch.set_batch_number(batch_number);
-		global_batch.set_batch_number(global_batch_number);
+		batch.set_batch_number(2*batch_count_);
+		global_batch.set_batch_number(2*batch_count_+1);
 		#ifdef PAXOS
 			paxos->SubmitBatch(batch);
 			if (configuration_->this_node_partition == 0){
