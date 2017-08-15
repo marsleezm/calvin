@@ -403,6 +403,7 @@ void Sequencer::RunReader() {
 			SEQLOG(-1, " Sending skeen request "<<msg_id<<" to "<<*it);
 		}
     	batch_number += 1;
+        batch.clear_data();
     }
 
 	HandleSkeen();
