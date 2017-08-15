@@ -66,9 +66,8 @@ void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop, stri
 		decision_msg.set_destination_channel(paxos_name);
 		decision_msg.set_type(MessageProto::LEADER_PROPOSAL);
 		for( int i = 0; i < group_size; ++i) {
-			LOG(batch_to_prop, " group size is "<<group_size<<", i is "<<i<<", addr is "<<reinterpret_cast<int64>(msgs[i]));
+			//LOG(batch_to_prop, " group size is "<<group_size<<", i is "<<i<<", addr is "<<reinterpret_cast<int64>(msgs[i]));
 			for( int j = 0; j <msgs[i]->data_size(); ++j){
-			    LOG(batch_to_prop, " adding data "<<j); 
 				decision_msg.add_data(msgs[i]->data(j));	
             }
 			delete msgs[i];
