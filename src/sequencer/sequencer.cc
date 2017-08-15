@@ -148,9 +148,10 @@ void Sequencer::GenerateLoad(double now, MessageProto& batch){
 		int txn_id_offset = 0;
 		TxnProto* txn;
 		string txn_string;
+        int batch_number = batch_count_*configuration_->all_nodes.size()+configuration_->all_nodes.size();
 		while (!deconstructor_invoked_ &&
      		now < epoch_start_ + (batch_count_+1)*epoch_duration_ && batch.data_size() < max_batch_size){
-    		client_->GetTxn(&txn, max_batch_size*batch_count_+txn_id_offset);
+    		client_->GetTxn(&txn, max_batch_size*batch_number+txn_id_offset);
 			txn->SerializeToString(&txn_string);
 	  		batch.add_data(txn_string);
 			delete txn;
