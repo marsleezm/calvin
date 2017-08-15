@@ -226,6 +226,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				TxnProto* txn = new TxnProto();
 				txn->ParseFromString(batch_message->data(batch_offset));
 				batch_offset++;
+				LOG(txn->txn_id(), " adding txn");
 				txns_queue->Push(txn);
 				pending_txns++;
 			}

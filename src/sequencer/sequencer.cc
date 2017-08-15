@@ -152,6 +152,7 @@ void Sequencer::GenerateLoad(double now, MessageProto& batch){
 		while (!deconstructor_invoked_ &&
      		now < epoch_start_ + (batch_count_+1)*epoch_duration_ && batch.data_size() < max_batch_size){
     		client_->GetTxn(&txn, max_batch_size*batch_number+txn_id_offset);
+			LOG(txn->txn_id(), " adding txn");
 			txn->SerializeToString(&txn_string);
 	  		batch.add_data(txn_string);
 			delete txn;
