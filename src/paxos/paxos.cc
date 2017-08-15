@@ -13,16 +13,15 @@ using std::ifstream;
 using std::pair;
 using std::vector;
 
+Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connection, int p_id, int num_p, AtomicQueue<MessageProto*>* b_queue):Paxos(my_group, myself_n, paxos_connection, NULL, p_id, num_p, b_queue){
+}
 
-Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connection, int p_id, int num_p, AtomicQueue<MessageProto*>* b_queue, bool is_global): group(my_group), myself(myself_n), num_partitions(num_p), partition_id(p_id), connection(paxos_connection), batch_queue(b_queue) {
+Paxos::Paxos(vector<Node*>& my_group, Node* myself_n, Connection* paxos_connection, Connection* global_connection, int p_id, int num_p, AtomicQueue<MessageProto*>* b_queue): group(my_group), myself(myself_n), num_partitions(num_p), partition_id(p_id), connection(paxos_connection), batch_queue(b_queue) {
+    this->global_connection = global_connection;
     pthread_mutex_init(&mutex_, NULL);
 	leader = group[0];
 	group_size = group.size();
-
-	if (is_global)
-		paxos_name = "global_paxos";
-	else
-		paxos_name = "paxos";
+	quorum_size = group_size/2+1;
 
     pthread_attr_t attr_thread;
     pthread_attr_init(&attr_thread);
@@ -36,6 +35,7 @@ Paxos::~Paxos() {
     deconstructor_invoked_ = true;
     pthread_join(paxos_thread, NULL);
     delete connection;
+    delete global_connection;
 }
 
 void* Paxos::InitRunPaxos(void *arg) {
@@ -43,7 +43,7 @@ void* Paxos::InitRunPaxos(void *arg) {
   return NULL;
 }
 
-void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop){
+void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop, string paxos_name){
 	int batch_num = message->batch_number();
 	//LOG(-1, "got a client proposal, batch num is "<<batch_num<<", batch to prop is "<<batch_to_prop);
 	if(client_prop_map.count(batch_num) == 0){
@@ -67,8 +67,10 @@ void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop){
 		decision_msg.set_type(MessageProto::LEADER_PROPOSAL);
 		for( int i = 0; i < group_size; ++i) {
 			LOG(batch_to_prop, " group size is "<<group_size<<", i is "<<i<<", addr is "<<reinterpret_cast<int64>(msgs[i]));
-			for( int j = 0; j <msgs[i]->data_size(); ++j)
+			for( int j = 0; j <msgs[i]->data_size(); ++j){
+			    LOG(batch_to_prop, " adding data "<<j); 
 				decision_msg.add_data(msgs[i]->data(j));	
+            }
 			delete msgs[i];
 		}
 		LOG(-1, "Sending decision for client proposal "<<batch_to_prop);
@@ -81,70 +83,67 @@ void Paxos::HandleClientProposal(MessageProto* message, int& batch_to_prop){
 
 void Paxos::RunPaxos() {
 
-	int batch_to_prop;
-	int batch_to_accept;
-	if (paxos_name == "global_paxos") {
-		batch_to_prop = 1;
-		batch_to_accept = 1;
-	}
-	else{
-		batch_to_prop = 0;
-		batch_to_accept = 0;
-	}
-	int quorum_size = group_size/2+1;
+	int batch_to_prop = 0, batch_to_accept= 0;
+	int global_batch_to_prop = 1, global_batch_to_accept = 1;
   	while (!deconstructor_invoked_) {
 		// If has received enough proposal message, propose it!
 		//if(message_queue->Pop(&message)){
-		MessageProto* message = new MessageProto();
-		if(connection->GetMessage(message)){
-			if(message->type() == MessageProto::CLIENT_PROPOSAL){
-				assert(leader == myself);
-				HandleClientProposal(message, batch_to_prop);
-			}	
-			else if(message->type() == MessageProto::LEADER_PROPOSAL){
-				LOG(-1, "Sending accept for leader proposal for "<<message->batch_number());
-				if(leader_prop_map.count(message->batch_number()) == 0){
-					leader_prop_map[message->batch_number()] = make_pair(0, message);	
-				}
-				else{
-					pair<int, MessageProto*> proposal_msg = leader_prop_map[message->batch_number()];
-					assert(proposal_msg.second == NULL);
-					leader_prop_map[message->batch_number()].second = message;
-				}
-				MessageProto msg;
-				msg.set_type(MessageProto::LEARNER_ACCEPT);
-				msg.set_destination_channel(paxos_name);
-				msg.set_batch_number(message->batch_number());
-				SendMsgToAll(msg);
-			}
-			else{
-				assert(message->type() == MessageProto::LEARNER_ACCEPT);
-				if(message->batch_number() >= batch_to_accept){
-					if(leader_prop_map.count(message->batch_number()) == 0) {
-						LOG(-1, "Got new learner accept "<<message->batch_number());
-						leader_prop_map[message->batch_number()] = pair<int, MessageProto*>(1, NULL);	
-					}
-					else{
-						pair<int, MessageProto*> proposal_msg = leader_prop_map[message->batch_number()];
-						LOG(-1, "Got learner accept for "<<message->batch_number()<<", count is "<<proposal_msg.first);
-						proposal_msg.first += 1;
-						leader_prop_map[message->batch_number()] = proposal_msg;	
-					}
-					while(leader_prop_map.count(batch_to_accept) != 0 && leader_prop_map[batch_to_accept].first == quorum_size && leader_prop_map[batch_to_accept].second != NULL) {
-						MessageProto* leader_prop = leader_prop_map[batch_to_accept].second;
-						LOG(-1, "Accepting batch "<<batch_to_accept);
-						leader_prop->set_type(MessageProto::TXN_BATCH);
-						batch_queue->Push(leader_prop);
-						leader_prop_map.erase(batch_to_accept);
-						batch_to_accept += 2;
-					}
-				}
-			}
-		}
-		else
-			delete message;
-		Spin(0.0005);
+        HandleMsg(connection, batch_to_prop, batch_to_accept, "paxos");
+        if(global_connection)
+            HandleMsg(global_connection, global_batch_to_prop, global_batch_to_accept, "global_paxos");
+		Spin(0.001);
  	}
+}
+
+void Paxos::HandleMsg(Connection* connection, int& batch_to_prop, int& batch_to_accept, string paxos_name){
+    MessageProto* message = new MessageProto();
+    while(connection->GetMessage(message)){
+        if(message->type() == MessageProto::CLIENT_PROPOSAL){
+            assert(leader == myself);
+            HandleClientProposal(message, batch_to_prop, paxos_name);
+        }	
+        else if(message->type() == MessageProto::LEADER_PROPOSAL){
+            LOG(-1, "Sending accept for leader proposal for "<<message->batch_number());
+            if(leader_prop_map.count(message->batch_number()) == 0){
+                leader_prop_map[message->batch_number()] = make_pair(0, message);	
+            }
+            else{
+                pair<int, MessageProto*> proposal_msg = leader_prop_map[message->batch_number()];
+                assert(proposal_msg.second == NULL);
+                leader_prop_map[message->batch_number()].second = message;
+            }
+            MessageProto msg;
+            msg.set_type(MessageProto::LEARNER_ACCEPT);
+            msg.set_destination_channel(paxos_name);
+            msg.set_batch_number(message->batch_number());
+            SendMsgToAll(msg);
+        }
+        else{
+            assert(message->type() == MessageProto::LEARNER_ACCEPT);
+            if(message->batch_number() >= batch_to_accept){
+                if(leader_prop_map.count(message->batch_number()) == 0) {
+                    LOG(-1, "Got new learner accept "<<message->batch_number());
+                    leader_prop_map[message->batch_number()] = pair<int, MessageProto*>(1, NULL);	
+                }
+                else{
+                    pair<int, MessageProto*> proposal_msg = leader_prop_map[message->batch_number()];
+                    LOG(-1, "Got learner accept for "<<message->batch_number()<<", count is "<<proposal_msg.first);
+                    proposal_msg.first += 1;
+                    leader_prop_map[message->batch_number()] = proposal_msg;	
+                }
+                while(leader_prop_map.count(batch_to_accept) != 0 && leader_prop_map[batch_to_accept].first == quorum_size && leader_prop_map[batch_to_accept].second != NULL) {
+                    MessageProto* leader_prop = leader_prop_map[batch_to_accept].second;
+                    LOG(-1, "Accepting batch "<<batch_to_accept);
+                    leader_prop->set_type(MessageProto::TXN_BATCH);
+                    batch_queue->Push(leader_prop);
+                    leader_prop_map.erase(batch_to_accept);
+                    batch_to_accept += 2;
+                }
+            }
+        }
+        message = new MessageProto();
+    }
+    delete message;
 }
 
 void Paxos::SendMsgToAll(MessageProto& msg){

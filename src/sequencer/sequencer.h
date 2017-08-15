@@ -76,6 +76,8 @@ class Sequencer {
   void WaitForStart(){ while(!started) ; }
 
  private:
+	void Synchronize();
+	void GenerateLoad(double now, MessageProto& msg, MessageProto& global_msg);
   // Sequencer's main loops:
   //
   // RunWriter:
@@ -88,32 +90,20 @@ class Sequencer {
   //    Spend epoch_duration collecting client txn requests into a batch.
   //
   // Executes in a background thread created and started by the constructor.
-  void RunWriter();
   void RunReader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
-  static void* RunSequencerWriter(void *arg);
   static void* RunSequencerReader(void *arg);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
 
-  int64 inline increment_counter(int& mybatch, int& offset, int all_nodes, int max_batch_size){
-	  if (offset == max_batch_size - 1){
-		  offset = 0;
-		  mybatch += all_nodes;
-		  return (mybatch-all_nodes)*max_batch_size + max_batch_size-1;
-	  }
-	  else{
-		  offset += 1;
-		  return mybatch*max_batch_size+offset-1;
-	  }
-  }
-
   // Length of time spent collecting client requests before they are ordered,
   // batched, and sent out to schedulers.
   double epoch_duration_;
+  double epoch_start_;
+  int batch_count_;
 
   // Configuration specifying node & system settings.
   Configuration* configuration_;
@@ -131,7 +121,6 @@ class Sequencer {
   Storage* storage_;
 
   // Separate pthread contexts in which to run the sequencer's main loops.
-  pthread_t writer_thread_;
   pthread_t reader_thread_;
 
   // False until the deconstructor is called. As soon as it is set to true, the
@@ -154,6 +143,5 @@ class Sequencer {
   AtomicQueue<TxnProto*>* txns_queue_;
   bool started = false;
 	Paxos* paxos;
-	Paxos* global_paxos;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
