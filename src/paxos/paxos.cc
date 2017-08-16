@@ -87,7 +87,7 @@ void Paxos::RunPaxos() {
 		// If has received enough proposal message, propose it!
 		//if(message_queue->Pop(&message)){
 		MessageProto* message = new MessageProto();
-		if(connection->GetMessage(message)){
+		while(connection->GetMessage(message)){
 			if(message->type() == MessageProto::CLIENT_PROPOSAL){
 				assert(leader == myself);
 				HandleClientProposal(message, batch_to_prop);
@@ -131,10 +131,10 @@ void Paxos::RunPaxos() {
 					}
 				}
 			}
+		    message = new MessageProto();
 		}
-		else
-			delete message;
-		Spin(0.0005);
+		delete message;
+		Spin(0.001);
  	}
 }
 

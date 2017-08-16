@@ -156,7 +156,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	int batch_number = 0;
 	int second = 0;
 	int abort_number = 0;
-	int last_committed = 0, now_committed = 0, pending_txns= 0;
+	int last_committed = 0, now_committed = 0;
 
   	while (!scheduler->deconstructor_invoked_) {
 		bool nothing_happened = true;
@@ -179,7 +179,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					}
 					delete manager;
 					txn = NULL;
-					--pending_txns;
 				}
   			}
             else{
