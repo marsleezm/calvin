@@ -181,10 +181,6 @@ void ConnectionMultiplexer::Run() {
         undelivered_messages_.erase(*new_connection_channel_);
       }
 
-
-      if ((new_connection_channel_->substr(0, 9) == "scheduler") && (new_connection_channel_->substr(9,1) != "_")) {
-        link_unlink_queue_[*new_connection_channel_] = new AtomicQueue<MessageProto>();
-      }
       // Reset request variable.
       new_connection_channel_ = NULL;
       
@@ -203,44 +199,21 @@ void ConnectionMultiplexer::Run() {
     }
 
     // Forward next message from a remote node (if any).
-    if (remote_in_->recv(&msg, ZMQ_NOBLOCK)) {
-	    nothing_happened = false;
+    while (remote_in_->recv(&msg, ZMQ_NOBLOCK)) {
+	   nothing_happened = false;
       message.ParseFromArray(msg.data(), msg.size());
       Send(message);
     }
 
     // Forward next message from a local component (if any), intercepting
     // local Link/UnlinkChannel requests.
-    if (inproc_in_->recv(&msg, ZMQ_NOBLOCK)) {
-	    nothing_happened = false;
-      	message.ParseFromArray(msg.data(), msg.size());
+    while (inproc_in_->recv(&msg, ZMQ_NOBLOCK)) {
+	   nothing_happened = false;
+      message.ParseFromArray(msg.data(), msg.size());
         // Normal message. Forward appropriately.
         Send(message);
     }
 
-   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
-        it != link_unlink_queue_.end(); ++it) {
-      
-     MessageProto message;
-     bool got_it = it->second->Pop(&message);
-     if (got_it == true) {
-	    nothing_happened = false;
-       if (message.type() == MessageProto::LINK_CHANNEL) {
-    	   //LOG(-1, " linking channel: "<<message.channel_request());
-    	   pthread_mutex_lock(&remote_result_mutex_);
-    	   remote_result_[message.channel_request()] = remote_result_[it->first];
-    	   pthread_mutex_unlock(&remote_result_mutex_);
-         // Forward on any messages sent to this channel before it existed.
-         vector<MessageProto>::iterator i;
-         for (i = undelivered_messages_[message.channel_request()].begin();
-              i != undelivered_messages_[message.channel_request()].end();
-              ++i) {
-           Send(*i);
-         }
-         undelivered_messages_.erase(message.channel_request());
-       }
-     }
-   }
 	if(nothing_happened == true)
 		Spin(0.001);
   }

@@ -76,7 +76,7 @@ class Sequencer {
 
  private:
 	void Synchronize();
-	void GenerateLoad(double now, MessageProto& msg);
+	void GenerateLoad(double now, map<int, MessageProto>& batches);
   // Sequencer's main loops:
   //
   // RunWriter:
