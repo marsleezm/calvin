@@ -66,5 +66,5 @@ message MessageProto {
   
   optional int32 restart = 2001;
   
-  optional string txn_id = 2003;
+  optional int64 txn_id = 2003;
 }

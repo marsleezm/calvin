@@ -72,7 +72,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 											   int queue_mode)
     : configuration_(conf), batch_connection_(batch_connection),
       storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode),
-	  committed(0), pending_txns(0) {
+	  committed(0){
 
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	message_queue = new AtomicQueue<MessageProto>();
@@ -89,7 +89,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     pthread_attr_init(&attr1);
 
     // Start all worker threads.
-    string channel("scheduler");
+    string channel("execution");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
 	pthread_attr_t attr;
@@ -148,24 +148,26 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	StorageManager* manager;
   	TxnProto* txn = NULL;
   	map<int64, MessageProto> buffered_messages;
-    AtomicQueue<TxnProto*>* txns_queue = new AtomicQueue<TxnProto*>();;
+    queue<TxnProto*> txns_queue; 
 
 	MessageProto message;
 	MessageProto* batch_message = NULL;
 	double time = GetTime();
-	int batch_offset = 0;
 	int batch_number = 0;
 	int second = 0;
 	int abort_number = 0;
-	int last_committed = 0, now_committed = 0, pending_txns= 0;
+	int last_committed = 0, now_committed = 0; 
 
   	while (!scheduler->deconstructor_invoked_) {
 		bool nothing_happened = true;
   		if (txn == NULL){
-  			if(txns_queue->Pop(&txn)){
+  			if(txns_queue.size()){
+                txn = txns_queue.front();
+                txns_queue.pop();
 				nothing_happened = false;
 			  // No remote read result found, start on next txn if one is waiting.
 			  // Create manager.
+                LOG(txn->txn_id(), " starting txn");
   				manager = new StorageManager(scheduler->configuration_,
 									scheduler->thread_connection_,
 									scheduler->storage_, txn);
@@ -177,9 +179,29 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					}
 					delete manager;
 					txn = NULL;
-					--pending_txns;
 				}
   			}
+            else{
+                if(batch_message){
+			        nothing_happened = false;
+			        for (int i = 0; i < batch_message->data_size(); i++) {
+				        TxnProto* txn = new TxnProto();
+                        txn->ParseFromString(batch_message->data(i));
+                        for(int j = 0; j<txn->writers_size(); ++j){
+                            if(txn->writers(j) == scheduler->configuration_->this_node_partition){
+                                txns_queue.push(txn);
+                                break;
+                            }
+                        }
+                    }
+			        delete batch_message;
+                    batch_message = NULL;
+			        batch_number++;
+                }
+                else{
+			        batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
+                }
+            }
   		}
   		else if (buffered_messages.count(txn->txn_id()) != 0){
 			nothing_happened = false;
@@ -194,55 +216,18 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   				}
   				delete manager;
   				txn = NULL;
-  				--pending_txns;
   			}
   		}
   		else if (scheduler->message_queue->Pop(&message)){
 		  // If I get read_result when executing a transaction
 			nothing_happened = false;
-  			LOG(-1, " got READ_RESULT for "<<message.destination_channel());
+  			LOG(-1, " got READ_RESULT for "<<message.txn_id());
   			assert(message.type() == MessageProto::READ_RESULT);
-  			buffered_messages[atoi(message.destination_channel().c_str())] = message;
+  			buffered_messages[message.txn_id()] = message;
   		}
 
-  		if (batch_message == NULL) {
-			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
-		} else if (batch_offset >= batch_message->data_size()) {
-			nothing_happened = false;
-			batch_offset = 0;
-			batch_number++;
-			delete batch_message;
-			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
-		}
 
 		// Current batch has remaining txns, grab up to 10.
-		if (pending_txns < 2000 && batch_message) {
-			nothing_happened = false;
-			for (int i = 0; i < 200; i++) {
-				if (batch_offset >= batch_message->data_size())
-					break;
-				TxnProto* txn = new TxnProto();
-				txn->ParseFromString(batch_message->data(batch_offset));
-				bool added = false;
-				for(int j = 0; j<txn->writers_size(); ++j){
-					if(txn->writers(j) == scheduler->configuration_->this_node_partition){
-                        if(j == 0 && txn->writers_size() > 1)
-                            LOG(txn->txn_id(), " is added to txn queue, another is "<<txn->writers(1));
-                        else
-                            LOG(txn->txn_id(), " is added to txn queue, another is "<<txn->writers(0));
-						txns_queue->Push(txn);
-						pending_txns++;
-						added = true;
-						break;
-					}
-				}
-				if (added == false){
-					LOG(txn->txn_id(), "is not added! My partition is "<<scheduler->configuration_->this_node_partition);
-					delete txn;
-				}
-				batch_offset++;
-			}
-		}
 
 		if (nothing_happened == true)
 			Spin(0.001);

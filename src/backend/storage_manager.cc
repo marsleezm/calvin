@@ -28,9 +28,9 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	tpcc_args ->ParseFromString(txn->arg());
 	if (txn->multipartition()){
 		message_ = new MessageProto();
-		message_->set_destination_channel(IntToString(txn_->txn_id()));
+		message_->set_destination_channel("execution");
+        message_->set_txn_id(txn->txn_id());
 		message_->set_type(MessageProto::READ_RESULT);
-		connection->LinkChannel(IntToString(txn->txn_id()));
 	}
 	else{
 		message_ = NULL;
@@ -43,9 +43,9 @@ void StorageManager::Setup(TxnProto* txn){
 
 	txn_ = txn;
 	message_ = new MessageProto();
-	message_->set_destination_channel(IntToString(txn_->txn_id()));
+	message_->set_destination_channel("execution");
+    message_->set_txn_id(txn->txn_id());
 	message_->set_type(MessageProto::READ_RESULT);
-	connection_->LinkChannel(IntToString(txn_->txn_id()));
 	tpcc_args ->ParseFromString(txn->arg());
 }
 
@@ -65,15 +65,15 @@ StorageManager::~StorageManager() {
 	if (message_){
 		//LOG(txn_->txn_id(), "Has message");
 		if (message_has_value_){
-			LOG(txn_->txn_id(), "Sending message to remote");
 			for (int i = 0; i < txn_->writers().size(); i++) {
 			  if (txn_->writers(i) != config->this_node_partition) {
+			      LOG(txn_->txn_id(), "Sending message to "<<config->PartLocalNode(txn_->writers(i)));
 				  message_->set_destination_node(config->PartLocalNode(txn_->writers(i)));
 				  connection_->Send1(*message_);
+			      LOG(txn_->txn_id(), " sent message");
 			  }
 			}
 		}
-		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
 
 	read_set_.clear();
@@ -144,7 +144,8 @@ void StorageManager::SendLocalReads(){
 	  }
 	}
 	message_->Clear();
-	message_->set_destination_channel(IntToString(txn_->txn_id()));
+	message_->set_destination_channel("execution");
+    message_->set_txn_id(txn_->txn_id());
 	message_->set_type(MessageProto::READ_RESULT);
 	message_has_value_ = false;
 }
