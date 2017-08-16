@@ -220,7 +220,7 @@ void Sequencer::RunReader() {
       google::protobuf::RepeatedField<int>::const_iterator  it;
 
       for (it = txn.readers().begin(); it != txn.readers().end(); ++it) {
-		  LOG(-1, " adding to_send of "<<configuration_->PartLocalNode(*it)<<", origin is "<<*it);
+		  //LOG(-1, " adding to_send of "<<configuration_->PartLocalNode(*it)<<", origin is "<<*it);
       	  to_send.insert(configuration_->PartLocalNode(*it));
 	  }
       for (it = txn.writers().begin(); it != txn.writers().end(); ++it){
@@ -228,7 +228,7 @@ void Sequencer::RunReader() {
 	  }
       // Insert txn into appropriate batches.
       for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
-		   LOG(-1, " adding to send of "<<configuration_->PartLocalNode(*it)<<", origin is "<<*it);
+		   //LOG(-1, " adding to send of "<<configuration_->PartLocalNode(*it)<<", origin is "<<*it);
            batches[*it].add_data(txn_data);
 	  }
 
