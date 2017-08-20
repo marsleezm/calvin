@@ -22,7 +22,7 @@
 #include "proto/txn.pb.h"
 #include <fstream>
 
-#define PAXOS
+//#define PAXOS
 
 #ifdef PAXOS
 # include "paxos/paxos.h"
@@ -311,6 +311,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 			message.add_count(1);
 		}	
 		connection_->Send(message);
+		Spin(1);
 	}
 
     myfile.close();
