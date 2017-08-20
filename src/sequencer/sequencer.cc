@@ -22,7 +22,7 @@
 #include "proto/txn.pb.h"
 #include <fstream>
 
-#define PAXOS
+//#define PAXOS
 
 #ifdef PAXOS
 # include "paxos/paxos.h"
@@ -257,7 +257,6 @@ void Sequencer::RunReader() {
 void Sequencer::output(DeterministicScheduler* scheduler){
   	deconstructor_invoked_ = true;
   	pthread_join(reader_thread_, NULL);
-	std::cout<<"Threads joined"<<std::endl;
     ofstream myfile;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
@@ -276,7 +275,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		while(to_receive_msg != 0){
 			if(connection_->GetMessage(&message)){
 				if(message.type() == MessageProto::LATENCY){
-                    std::cout<<"Got latency info from "<<message.source_node()<<std::endl;
+                    std::cout<<"Got latency info from "<<message.source_node()<<", remaing is "<<to_receive_msg-1<<std::endl;
 					for(int i = 0; i< message.latency_size(); ++i){
 						for(int j = 0; j < message.count(i); ++j)
 							latency_util.add_latency(message.latency(i));
@@ -291,7 +290,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 	}
 	else if (configuration_->all_nodes[configuration_->this_node_id]->replica_id == 0){
 		// Pack up my data		
-        std::cout<<"Node "<<configuration_->this_node_id<<" sending latency info to master"<<std::endl;
+        	std::cout<<"Node "<<configuration_->this_node_id<<" sending latency info to master"<<std::endl;
 		MessageProto message;
 		message.set_destination_channel("sequencer");	
 		message.set_source_node(configuration_->this_node_id);
@@ -309,6 +308,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 			message.add_count(1);
 		}	
 		connection_->Send(message);
+		Spin(1);
 	}
 
     myfile.close();
