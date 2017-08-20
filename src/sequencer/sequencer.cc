@@ -261,7 +261,15 @@ void Sequencer::propose_global(int64& proposed_batch, map<int64, int>& num_pendi
                     delete msg;
                 }
             }
-			paxos->SubmitBatch(propose_msg);
+            #ifdef PAXOS
+			    paxos->SubmitBatch(propose_msg);
+            #else
+                propose_msg->set_destination_channel("scheduler_");
+                propose_msg->set_type(MessageProto::TXN_BATCH);
+                propose_msg->set_destination_node(configuration_->this_node_id);
+                connection_->Send(*propose_msg);
+                delete propose_msg;
+            #endif
             multi_part_txns.erase(next_batch);
             pending_paxos_props.pop();
             num_pending.erase(next_batch);
@@ -332,7 +340,15 @@ void Sequencer::GenerateLoad(double now, map<int, MessageProto>& batches){
                     delete msg;
                 }
             }
-            paxos->SubmitBatch(single_part_msg);
+            #ifdef PAXOS
+                paxos->SubmitBatch(single_part_msg);
+            #else
+                single_part_msg->set_destination_channel("scheduler_");
+                single_part_msg->set_type(MessageProto::TXN_BATCH);
+                single_part_msg->set_destination_node(configuration_->this_node_id);
+                connection_->Send(*single_part_msg);
+                delete single_part_msg;
+            #endif
             multi_part_txns.erase(batch_count_);
             ++proposed_batch;
         }
