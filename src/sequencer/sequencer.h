@@ -148,6 +148,7 @@ class Sequencer {
 
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
   int dependent_percent = atoi(ConfigReader::Value("dependent_percent").c_str());
+  bool do_paxos;
 
   int queue_mode_;
   int fetched_txn_num_;

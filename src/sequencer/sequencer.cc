@@ -22,11 +22,7 @@
 #include "proto/txn.pb.h"
 #include <fstream>
 
-//#define PAXOS
-
-#ifdef PAXOS
-# include "paxos/paxos.h"
-#endif
+#include "paxos/paxos.h"
 
 using std::map;
 using std::multimap;
@@ -61,6 +57,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
   // Start Sequencer main loops running in background thread.
 	paxos = NULL;
 	message_queues = new AtomicQueue<MessageProto>();
+	do_paxos = (ConfigReader::Value("paxos") == "true");
 
 	connection_ = multiplexer->NewConnection("sequencer", &message_queues);
 
@@ -69,11 +66,11 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 
 	pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
-	#ifdef PAXOS
+	if (do_paxos == true){
 		std::cout<<"Using Paxos replication!"<<std::endl;
 		Connection* paxos_connection = multiplexer->NewConnection("paxos");
 		paxos = new Paxos(conf->this_group, conf->this_node, paxos_connection, conf->this_node_partition, conf->num_partitions, &batch_queue_);
-	#endif
+	}
 }
 
 Sequencer::~Sequencer() {
@@ -155,11 +152,10 @@ void Sequencer::GenerateLoad(double now, MessageProto& batch){
 			txn_id_offset++;
 		}
 		batch.set_batch_number(configuration_->this_node_partition+configuration_->num_partitions*batch_count_);
-		#ifdef PAXOS
+		if (do_paxos)
 			paxos->SubmitBatch(batch);
-		#else
+		else
 			batch_queue_.Push(new MessageProto(batch));
-		#endif
 		batch.clear_data();
 		batch_count_++;
 	}
