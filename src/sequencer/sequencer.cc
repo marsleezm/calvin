@@ -22,11 +22,7 @@
 #include "proto/txn.pb.h"
 #include <fstream>
 
-//#define PAXOS
-
-#ifdef PAXOS
-# include "paxos/paxos.h"
-#endif
+#include "paxos/paxos.h"
 
 using std::map;
 using std::multimap;
@@ -58,6 +54,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_mutex_init(&mutex_, NULL);
 	paxos = NULL;
 	message_queues = new AtomicQueue<MessageProto>();
+	do_paxos = (ConfigReader::Value("paxos") == "true");
 
 	connection_ = multiplexer->NewConnection("sequencer", &message_queues);
 	skeen_connection_ = multiplexer->NewConnection("skeen");
@@ -68,14 +65,14 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
 
-	#ifdef PAXOS
+	if(do_paxos){
 		std::cout<<"Using Paxos replication!"<<std::endl;
 		batch_prop_limit = conf->num_partitions;
 		Connection* paxos_connection = multiplexer->NewConnection("paxos");
 		paxos = new Paxos(conf->this_group, conf->this_node, paxos_connection, conf->this_node_partition, conf->num_partitions);
-	#else
+	}
+	else
 		batch_prop_limit = conf->all_nodes.size();
-	#endif
 }
 
 Sequencer::~Sequencer() {
@@ -261,15 +258,15 @@ void Sequencer::propose_global(int64& proposed_batch, map<int64, int>& num_pendi
                     delete msg;
                 }
             }
-            #ifdef PAXOS
+			if(do_paxos)
 			    paxos->SubmitBatch(propose_msg);
-            #else
+			else{
                 propose_msg->set_destination_channel("scheduler_");
                 propose_msg->set_type(MessageProto::TXN_BATCH);
                 propose_msg->set_destination_node(configuration_->this_node_id);
                 connection_->Send(*propose_msg);
                 delete propose_msg;
-            #endif
+			}
             multi_part_txns.erase(next_batch);
             pending_paxos_props.pop();
             num_pending.erase(next_batch);
@@ -340,15 +337,15 @@ void Sequencer::GenerateLoad(double now, map<int, MessageProto>& batches){
                     delete msg;
                 }
             }
-            #ifdef PAXOS
+			if(do_paxos)
                 paxos->SubmitBatch(single_part_msg);
-            #else
+			else{
                 single_part_msg->set_destination_channel("scheduler_");
                 single_part_msg->set_type(MessageProto::TXN_BATCH);
                 single_part_msg->set_destination_node(configuration_->this_node_id);
                 connection_->Send(*single_part_msg);
                 delete single_part_msg;
-            #endif
+			}
             multi_part_txns.erase(batch_count_);
             ++proposed_batch;
         }
