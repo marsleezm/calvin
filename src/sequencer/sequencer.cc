@@ -181,6 +181,8 @@ void Sequencer::GenerateLoad(double now, MessageProto& batch, MessageProto& glob
 			}
 		#else
 			batch_queue_.Push(new MessageProto(batch));
+			if (configuration_->this_node_partition == 0)
+				batch_queue_.Push(new MessageProto(global_batch));
 		#endif
 		batch.clear_data();
 		global_batch.clear_data();
