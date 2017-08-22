@@ -51,8 +51,9 @@ void* Sequencer::RunSequencerReader(void *arg) {
 
 Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
                      Client* client, Storage* storage, int queue_mode)
-    : epoch_duration_(0.01), batch_count_(0), configuration_(conf), multiplexer_(multiplexer),
+    : batch_count_(0), configuration_(conf), multiplexer_(multiplexer),
       client_(client), storage_(storage), deconstructor_invoked_(false), queue_mode_(queue_mode), fetched_txn_num_(0)  {
+    epoch_duration_ = stof(ConfigReader::Value("batch_duration")),
 	pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
 	paxos = NULL;
@@ -257,7 +258,6 @@ void Sequencer::RunReader() {
 void Sequencer::output(DeterministicScheduler* scheduler){
   	deconstructor_invoked_ = true;
   	pthread_join(reader_thread_, NULL);
-	std::cout<<"Threads joined"<<std::endl;
     ofstream myfile;
 	std::cout<<"Node "<<configuration_->this_node_id<<" before output"<<std::endl;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
@@ -277,7 +277,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		while(to_receive_msg != 0){
 			if(connection_->GetMessage(&message)){
 				if(message.type() == MessageProto::LATENCY){
-					std::cout<<"Got latency info from "<<message.source_node()<<std::endl;
+                    std::cout<<"Got latency info from "<<message.source_node()<<", remaing is "<<to_receive_msg-1<<std::endl;
 					for(int i = 0; i< message.latency_size(); ++i){
 						for(int j = 0; j < message.count(i); ++j)
 							latency_util.add_latency(message.latency(i));
