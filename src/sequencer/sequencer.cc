@@ -49,8 +49,9 @@ void* Sequencer::RunSequencerReader(void *arg) {
 
 Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
                      Client* client, Storage* storage, int queue_mode)
-    : epoch_duration_(0.01), batch_count_(0), configuration_(conf), multiplexer_(multiplexer),
+    : batch_count_(0), configuration_(conf), multiplexer_(multiplexer),
       client_(client), storage_(storage), deconstructor_invoked_(false), queue_mode_(queue_mode), fetched_txn_num_(0)  {
+    epoch_duration_ = stof(ConfigReader::Value("batch_duration")),
 	pthread_mutex_init(&mutex_, NULL);
 	paxos = NULL;
 	message_queues = new AtomicQueue<MessageProto>();
@@ -64,8 +65,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 
 	pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
-
-	if(do_paxos){
+	if (do_paxos == true){
 		std::cout<<"Using Paxos replication!"<<std::endl;
 		batch_prop_limit = conf->num_partitions;
 		Connection* paxos_connection = multiplexer->NewConnection("paxos");
@@ -425,7 +425,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 		while(to_receive_msg != 0){
 			if(connection_->GetMessage(&message)){
 				if(message.type() == MessageProto::LATENCY){
-					std::cout<<"Got message from "<<message.source_node()<<std::endl;
+                    std::cout<<"Got latency info from "<<message.source_node()<<", remaing is "<<to_receive_msg-1<<std::endl;
 					for(int i = 0; i< message.latency_size(); ++i){
 						for(int j = 0; j < message.count(i); ++j)
 							latency_util.add_latency(message.latency(i));
@@ -440,10 +440,10 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 	}
 	else if (configuration_->all_nodes[configuration_->this_node_id]->replica_id == 0){
 		// Pack up my data		
+        	std::cout<<"Node "<<configuration_->this_node_id<<" sending latency info to master"<<std::endl;
 		MessageProto message;
 		message.set_destination_channel("sequencer");	
 		message.set_source_node(configuration_->this_node_id);
-		std::cout<<"Sent message to "<<0<<std::endl;
 		message.set_destination_node(0);	
 		message.set_type(MessageProto::LATENCY);	
 		for(int i = 0; i < 1000; ++i){

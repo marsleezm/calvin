@@ -101,18 +101,6 @@ class Sequencer {
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
 
-  int64 inline increment_counter(int& mybatch, int& offset, int all_nodes, int max_batch_size){
-	  if (offset == max_batch_size - 1){
-		  offset = 0;
-		  mybatch += all_nodes;
-		  return (mybatch-all_nodes)*max_batch_size + max_batch_size-1;
-	  }
-	  else{
-		  offset += 1;
-		  return mybatch*max_batch_size+offset-1;
-	  }
-  }
-
   // Length of time spent collecting client requests before they are ordered,
   // batched, and sent out to schedulers.
   double epoch_duration_;
@@ -150,6 +138,7 @@ class Sequencer {
 
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
   int dependent_percent = atoi(ConfigReader::Value("dependent_percent").c_str());
+  bool do_paxos;
 
   int queue_mode_;
   int fetched_txn_num_;
