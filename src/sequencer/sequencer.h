@@ -159,7 +159,6 @@ class Sequencer {
 
   AtomicQueue<TxnProto*>* txns_queue_;
   bool started = false;
-  bool do_paxos;
 	Paxos* paxos;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
