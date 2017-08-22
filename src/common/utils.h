@@ -737,7 +737,7 @@ class LatencyUtils {
 	public:
 		int small_lat[1000];
 		vector<int> large_lat;
-		int total_latency;
+		int64 total_latency;
 		int total_count;
 	public:
 		inline void add_latency(int latency){
