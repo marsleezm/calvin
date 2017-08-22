@@ -67,18 +67,12 @@ class MClient : public Client {
     		}
     	}
 
-    	if (abs(rand()) %10000 < dependent_percent)
-    		*txn = microbenchmark.MicroTxnDependentMP(txn_id, parts, multi_txn_num_parts);
-    	else
-    		*txn = microbenchmark.MicroTxnMP(txn_id, parts, multi_txn_num_parts);
+    	*txn = microbenchmark.MicroTxnMP(txn_id, parts, multi_txn_num_parts);
 
     	(*txn)->set_multipartition(true);
     } else {
       // Single-partition txn.
-      if (abs(rand()) %10000 < dependent_percent)
-    	  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_partition);
-      else
-    	  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_partition);
+      *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_partition);
 
       (*txn)->set_multipartition(false);
     }

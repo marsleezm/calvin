@@ -137,14 +137,12 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 
 	// Add two hot keys to read/write set---one in each partition.
 	set<int> keys;
-	int avg_index_per_part = indexAccessNum/num_parts;
-	int index_first_part = indexAccessNum- avg_index_per_part*(num_parts-1);
 
-	int avg_key_per_part = (kRWSetSize - indexAccessNum)/num_parts,
-			key_first_part = (kRWSetSize - indexAccessNum)- avg_key_per_part*(num_parts-1);
+	int avg_key_per_part = kRWSetSize/num_parts,
+			key_first_part = kRWSetSize- avg_key_per_part*(num_parts-1);
 
 	GetRandomKeys(&keys,
-				index_first_part,
+				key_first_part,
 				nparts * 0,
 				nparts * index_records,
 				parts[0]);
@@ -155,43 +153,19 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 		txn->add_read_write_set(IntToString(*it));
 	}
 
-	GetRandomKeys(&keys,
-			key_first_part,
-				nparts * index_records,
-				nparts * kDBSize,
-				parts[0]);
-	//std::cout<<"Key first part is "<< key_first_part <<std::endl;
-	for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-		//std::cout<<"Adding first key "<<*it<<std::endl;
-		//LOG(txn_id, " adding key "<<*it);
-		txn->add_read_write_set(IntToString(*it));
-	}
-
 	txn->add_readers(parts[0]);
 	txn->add_writers(parts[0]);
 
 	for(int i = 1; i<num_parts; ++i){
 		GetRandomKeys(&keys,
-					  avg_index_per_part,
+					  avg_key_per_part,
 					  nparts * 0,
 					  nparts * index_records,
 					  parts[i]);
 		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-			//std::cout<<"Adding index "<<*it<<std::endl;
-			//LOG(txn_id, " adding key "<<*it);
 			txn->add_read_write_set(IntToString(*it));
 		}
 
-		GetRandomKeys(&keys,
-					  avg_key_per_part,
-					  nparts * index_records,
-					  nparts * kDBSize,
-					  parts[i]);
-		for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-			//std::cout<<"Adding key "<<*it<<std::endl;
-			//LOG(txn_id, " adding key "<<*it);
-			txn->add_read_write_set(IntToString(*it));
-		}
 		txn->add_readers(parts[i]);
 		txn->add_writers(parts[i]);
 	}
