@@ -83,18 +83,22 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     }
 
 
-    Spin(2);
 
-    pthread_attr_t attr1;
-    pthread_attr_init(&attr1);
+    Spin(2);
 
     // Start all worker threads.
     string channel("execution");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
+    int base = 4*(configuration_->this_node_id % 2);
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(3+base, &cpuset);
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
+    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
+    std::cout<<"Executing thread starts at "<<3+base<<std::endl;
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,
 					   reinterpret_cast<void*>(this));
 
@@ -159,12 +163,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	int last_committed = 0, now_committed = 0;
 
   	while (!scheduler->deconstructor_invoked_) {
-		bool nothing_happened = true;
   		if (txn == NULL){
   			if(txns_queue.size()){
                 txn = txns_queue.front();
                 txns_queue.pop();
-				nothing_happened = false;
 			  // No remote read result found, start on next txn if one is waiting.
 			  // Create manager.
                 LOG(txn->txn_id(), " starting txn");
@@ -183,7 +185,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			}
             else{
                 if(batch_message){
-			        nothing_happened = false;
 			        for (int i = 0; i < batch_message->data_size(); i++) {
 				        TxnProto* txn = new TxnProto();
                         txn->ParseFromString(batch_message->data(i));
@@ -200,7 +201,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
             }
   		}
   		else if (buffered_messages.count(txn->txn_id()) != 0){
-			nothing_happened = false;
   			message = buffered_messages[txn->txn_id()];
   			buffered_messages.erase(txn->txn_id());
   			manager->HandleReadResult(message);
@@ -216,17 +216,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   		}
   		else if (scheduler->message_queue->Pop(&message)){
 		  // If I get read_result when executing a transaction
-			nothing_happened = false;
   			LOG(-1, " got READ_RESULT for "<<message.txn_id());
   			assert(message.type() == MessageProto::READ_RESULT);
   			buffered_messages[message.txn_id()] = message;
   		}
-
-
-		// Current batch has remaining txns, grab up to 10.
-
-		if (nothing_happened == true)
-			Spin(0.001);
 
 		// Report throughput.
 		if (GetTime() > time + 1) {

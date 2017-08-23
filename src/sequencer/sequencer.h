@@ -91,10 +91,12 @@ class Sequencer {
   //
   // Executes in a background thread created and started by the constructor.
   void RunReader();
+  void RunWriter();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerReader(void *arg);
+  static void* RunSequencerWriter(void *arg);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
@@ -122,6 +124,7 @@ class Sequencer {
 
   // Separate pthread contexts in which to run the sequencer's main loops.
   pthread_t reader_thread_;
+  pthread_t writer_thread_;
 
   // False until the deconstructor is called. As soon as it is set to true, the
   // main loop sees it and stops.
