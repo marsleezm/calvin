@@ -252,8 +252,10 @@ void Sequencer::RunReader() {
 
 
 void Sequencer::output(DeterministicScheduler* scheduler){
+	std::cout<<"Trying to output"<<std::endl;
   	deconstructor_invoked_ = true;
   	pthread_join(reader_thread_, NULL);
+	std::cout<<"Reader thread finished already"<<std::endl;
     ofstream myfile;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
