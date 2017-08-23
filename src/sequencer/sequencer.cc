@@ -284,8 +284,13 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 			}
 		}
 		latency_util.reset_total();
+		int64 avg_lat = latency_util.average_latency();
+		int64 med_lat = latency_util.medium_latency();
+		int64 lat_95 = latency_util.the95_latency();
+		int64 lat_99 = latency_util.the99_latency();
+		int64 lat_999 = latency_util.the999_latency();
     	myfile << "SUMMARY LATENCY" << '\n';
-		myfile << latency_util.average_latency()<<", "<<latency_util.medium_latency()<<", "<< latency_util.the95_latency() <<", "<<latency_util.the99_latency()<<", "<<latency_util.the999_latency()<< '\n';
+		myfile << avg_lat<<", "<<med_lat<<", "<< lat_95 <<", "<< lat_99 <<", "<< lat_999<< '\n';
 	}
 	else if (configuration_->all_nodes[configuration_->this_node_id]->replica_id == 0){
 		// Pack up my data		
