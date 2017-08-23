@@ -47,9 +47,16 @@ send_mutex_ = new pthread_mutex_t[(int)config->all_nodes.size()];
     }
   }
 
+
+    int base = 4*(configuration_->this_node_id % 2);
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(base, &cpuset);
     pthread_attr_t attr;
     pthread_attr_init(&attr);
+    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
+    std::cout<<"Network thread starts at "<<base<<std::endl;
   // Start Multiplexer main loop running in background thread.
   pthread_create(&thread_, &attr, RunMultiplexer, reinterpret_cast<void*>(this));
 
@@ -144,9 +151,7 @@ void ConnectionMultiplexer::Run() {
 
   while (!deconstructor_invoked_) {
     // Serve any pending NewConnection request.
-	bool nothing_happened = true;
     if (new_connection_channel_ != NULL) {
-	   nothing_happened = false;
       if (inproc_out_.count(*new_connection_channel_) > 0) {
         // Channel name already in use. Report an error and set new_connection_
         // (which NewConnection() will return) to NULL.
@@ -189,7 +194,6 @@ void ConnectionMultiplexer::Run() {
     // Serve any pending (valid) connection deletion request.
     if (delete_connection_channel_ != NULL &&
         inproc_out_.count(*delete_connection_channel_) > 0) {
-      nothing_happened = false;
       delete inproc_out_[*delete_connection_channel_];
       inproc_out_.erase(*delete_connection_channel_);
       delete_connection_channel_ = NULL;
@@ -200,7 +204,6 @@ void ConnectionMultiplexer::Run() {
 
     // Forward next message from a remote node (if any).
     while (remote_in_->recv(&msg, ZMQ_NOBLOCK)) {
-	   nothing_happened = false;
       message.ParseFromArray(msg.data(), msg.size());
       Send(message);
     }
@@ -208,14 +211,10 @@ void ConnectionMultiplexer::Run() {
     // Forward next message from a local component (if any), intercepting
     // local Link/UnlinkChannel requests.
     while (inproc_in_->recv(&msg, ZMQ_NOBLOCK)) {
-	   nothing_happened = false;
       message.ParseFromArray(msg.data(), msg.size());
         // Normal message. Forward appropriately.
         Send(message);
     }
-
-	if(nothing_happened == true)
-		Spin(0.001);
   }
 }
 

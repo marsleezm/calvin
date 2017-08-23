@@ -90,11 +90,13 @@ class Sequencer {
   //
   // Executes in a background thread created and started by the constructor.
   void RunReader();
+  void RunWriter();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerReader(void *arg);
   void propose_global(int64& proposed_batch, map<int64, int>& num_pending, queue<MessageProto*>& pending_paxos_props, unordered_map<int64, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>>& multi_part_txns);
+  static void* RunSequencerWriter(void *arg);
 
 
   void HandleSkeen();
@@ -125,6 +127,7 @@ class Sequencer {
 
   // Separate pthread contexts in which to run the sequencer's main loops.
   pthread_t reader_thread_;
+  pthread_t writer_thread_;
 
   // False until the deconstructor is called. As soon as it is set to true, the
   // main loop sees it and stops.
