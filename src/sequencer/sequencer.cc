@@ -307,7 +307,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 			message.add_count(1);
 		}	
 		connection_->Send(message);
-		Spin(1);
+		Spin(5);
 	}
 
     myfile.close();
