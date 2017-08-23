@@ -48,6 +48,10 @@ class DeterministicScheduler : public Scheduler {
   DeterministicScheduler(Configuration* conf, Connection* batch_connection, Storage* storage,
 		  const Application* application, AtomicQueue<TxnProto*>* input_queue, Client* client, int queue_mode);
   virtual ~DeterministicScheduler();
+  void StopRunning(){
+	deconstructor_invoked_ = true;
+    pthread_join(worker_thread_, NULL);
+  }
 
  private:
   // Function for starting main loops in a separate pthreads.
