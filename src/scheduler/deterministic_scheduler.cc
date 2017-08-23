@@ -255,8 +255,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 }
 
 DeterministicScheduler::~DeterministicScheduler() {
-	deconstructor_invoked_ = true;
-	pthread_join(worker_thread_, NULL);
 	delete thread_connection_;
 	//pthread_join(lock_manager_thread_, NULL);
 

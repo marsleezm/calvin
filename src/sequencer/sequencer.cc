@@ -256,8 +256,10 @@ void Sequencer::RunReader() {
 }
 
 void Sequencer::output(DeterministicScheduler* scheduler){
+	std::cout<<"Trying to output"<<std::endl;
   	deconstructor_invoked_ = true;
   	pthread_join(reader_thread_, NULL);
+	std::cout<<"Reader thread finished already"<<std::endl;
     ofstream myfile;
 	std::cout<<"Node "<<configuration_->this_node_id<<" before output"<<std::endl;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
@@ -287,8 +289,13 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 			}
 		}
 		latency_util.reset_total();
+		int64 avg_lat = latency_util.average_latency();
+		int64 med_lat = latency_util.medium_latency();
+		int64 lat_95 = latency_util.the95_latency();
+		int64 lat_99 = latency_util.the99_latency();
+		int64 lat_999 = latency_util.the999_latency();
     	myfile << "SUMMARY LATENCY" << '\n';
-		myfile << latency_util.average_latency()<<", "<<latency_util.medium_latency()<<", "<< latency_util.the95_latency() <<", "<<latency_util.the99_latency()<<", "<<latency_util.the999_latency()<< '\n';
+		myfile << avg_lat<<", "<<med_lat<<", "<< lat_95 <<", "<< lat_99 <<", "<< lat_999<< '\n';
 	}
 	else if (configuration_->all_nodes[configuration_->this_node_id]->replica_id == 0){
 		// Pack up my data		
@@ -311,7 +318,7 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 			message.add_count(1);
 		}	
 		connection_->Send(message);
-		Spin(1);
+		Spin(5);
 	}
 
     myfile.close();
