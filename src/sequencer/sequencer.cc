@@ -160,118 +160,139 @@ void Sequencer::RunWriter() {
         }
     }
 
-    int node_id = configuration_->this_node_id;
     started = true;
-    map<int, MessageProto> batches;
-    vector<Node*> dc = configuration_->this_dc;
-    for (uint i = 0; i < dc.size(); ++i) {
-        batches[dc[i]->node_id].set_destination_channel("skeen");
-        batches[dc[i]->node_id].set_destination_node(dc[i]->node_id);
-        batches[dc[i]->node_id].set_source_node(node_id);
-        batches[dc[i]->node_id].set_type(MessageProto::SKEEN_REQ);
-    }
+    MessageProto* batch;
 
     double now;
     epoch_start_ = GetTime();
+    string batch_string;
     while(!deconstructor_invoked_){
         now = GetTime();
         if ( now > epoch_start_ + batch_count_*epoch_duration_ ){ 
             int txn_id_offset = 0, node_id = configuration_->this_node_id;
             TxnProto* txn;
             int txn_base = batch_count_*configuration_->all_nodes.size()+node_id;
-            set<int> involved_parts;
-            MessageProto* multi_part_msg = new MessageProto(),
-                         *single_part_msg = new MessageProto();
+            //set<int> involved_parts;
+            //MessageProto* multi_part_msg = new MessageProto(),
+            //             *single_part_msg = new MessageProto();
 
-            single_part_msg->set_batch_number(batch_count_);
-            single_part_msg->set_destination_channel("paxos");
-            single_part_msg->set_source_node(configuration_->this_node_id);
+            //single_part_msg->set_batch_number(batch_count_);
+            //single_part_msg->set_destination_channel("paxos");
+            //single_part_msg->set_source_node(configuration_->this_node_id);
+            batch = new MessageProto();
+            batch->set_batch_number(batch_count_);
 
             while (!deconstructor_invoked_ &&
                 now < epoch_start_ + (batch_count_+1)*epoch_duration_ && txn_id_offset < max_batch_size){
                 client_->GetTxn(&txn, max_batch_size*txn_base+txn_id_offset);
-                LOG(txn->txn_id(), " adding txn");
-                set<int> to_send;
-                google::protobuf::RepeatedField<int>::const_iterator  it;
-
-                for (it = txn->readers().begin(); it != txn->readers().end(); ++it)
-                    to_send.insert(configuration_->PartLocalNode(*it));
-                for (it = txn->writers().begin(); it != txn->writers().end(); ++it)
-                    to_send.insert(configuration_->PartLocalNode(*it));
-
-                // Insert txn into appropriate batches.
-                if(to_send.size() == 1 && *to_send.begin() == node_id){
-                    single_part_msg->add_data(txn->SerializeAsString());
-                }
-                else{
-                    for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
-                        //LOG(txn.txn_id(), "is added to "<<*it);
-                        if(*it == node_id)
-                            multi_part_msg->add_data(txn->SerializeAsString());
-                        else{
-                            batches[*it].add_data(txn->SerializeAsString());
-                            involved_parts.insert(*it);
-                        }
-                    }
-                }
+                string txn_string;
+                txn->SerializeToString(&txn_string);
+                batch->add_data(txn_string);
                 delete txn;
                 txn_id_offset++;
             }
 
+            pthread_mutex_lock(&mutex_);
+            batch_queue_.push(batch);
+            pthread_mutex_unlock(&mutex_);
+
             // Deal with single part msg
-            SEQLOG(-1, " got single part msg for batch "<<batch_count_<<", proposed batch is "<<proposed_batch);
-            if (num_pending[batch_count_] == 0 && batch_count_ == proposed_batch+1){
-                SEQLOG(-1, " proposing to global "<<batch_count_<<", proposed batch is "<<proposed_batch);
-                if (multi_part_txns.count(batch_count_) != 0){
-                    priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg> msgs = multi_part_txns[batch_count_];
-                    SEQLOG(-1, " Proposing to global "<<batch_count_<<", msg size is "<<msgs.size());
-                    while(msgs.size()){
-                        MessageProto* msg = msgs.top();
-                        SEQLOG(-1, " Proposing to global "<<batch_count_<<", adding message "<<msg->msg_id());
-                        msgs.pop();
-                        for(int j = 0; j < msg->data_size(); ++j)
-                            single_part_msg->add_data(msg->data(j));
-                        delete msg;
-                    }
-                }
-                if(do_paxos)
-                    paxos->SubmitBatch(single_part_msg);
-                else{
-                    single_part_msg->set_destination_channel("scheduler_");
-                    single_part_msg->set_type(MessageProto::TXN_BATCH);
-                    single_part_msg->set_destination_node(configuration_->this_node_id);
-                    connection_->Send(*single_part_msg);
-                    delete single_part_msg;
-                }
-                multi_part_txns.erase(batch_count_);
-                ++proposed_batch;
-            }
-            else{
-                SEQLOG(-1, " not ready to proceed "<<batch_count_<<", num pending is "<<num_pending[batch_count_]);
-                pending_paxos_props.push(single_part_msg);
-            }
-
-            int64 msg_id = batch_count_ | ((uint64)node_id) <<40;
-            //SEQLOG(-1, " finished loading for "<<batch_number);
-            if(involved_parts.size()){
-                std::vector<int> output(involved_parts.size());
-                std::copy(involved_parts.begin(), involved_parts.end(), output.begin());
-                SEQLOG(-1, "multi-part txn's size is "<<involved_parts.size());
-                multi_part_msg->set_msg_id(msg_id);
-                pending_sent_skeen[batch_count_] = MyFour<int64, int64, vector<int>, MessageProto*>(involved_parts.size(), 0, output, multi_part_msg);
-            }
-            else
-                delete multi_part_msg;
-
-            for(set<int>::iterator it = involved_parts.begin(); it != involved_parts.end(); ++it){
-                batches[*it].set_batch_number(batch_count_);
-                batches[*it].set_msg_id(msg_id);
-                connection_->Send(batches[*it]);
-                batches[*it].clear_data();
-                SEQLOG(-1, " Sending skeen request "<<msg_id<<" to "<<*it);
-            }
             batch_count_++;
         }
+    }
+}
+
+void Sequencer::DealWithMsg(MessageProto* message, map<int, MessageProto>& batches){
+    SEQLOG(-1, " got single part msg for batch "<<batch_count_<<", proposed batch is "<<proposed_batch);
+    google::protobuf::RepeatedField<int>::const_iterator  it;
+
+    int node_id = configuration_->this_node_id;
+    int batch_number = message->batch_number();
+    set<int> involved_parts;
+    MessageProto* multi_part_msg = new MessageProto(),
+                 *single_part_msg = new MessageProto();
+
+    single_part_msg->set_batch_number(batch_number);
+    single_part_msg->set_destination_channel("paxos");
+    single_part_msg->set_source_node(node_id);
+
+    for(int i = 0; i < message->data_size(); ++i){
+        TxnProto txn;
+        txn.ParseFromString(message->data(i));
+        LOG(txn.txn_id(), " being processed, is multipart "<<txn.multipartition());
+        set<int> to_send;
+        for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
+            to_send.insert(configuration_->PartLocalNode(*it));
+        for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
+            to_send.insert(configuration_->PartLocalNode(*it));
+
+        // Insert txn into appropriate batches.
+        if(to_send.size() == 1 && *to_send.begin() == node_id){
+            single_part_msg->add_data(txn.SerializeAsString());
+        }
+        else{
+            for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
+                LOG(txn.txn_id(), "is added to "<<*it);
+                if(*it == node_id)
+                    multi_part_msg->add_data(message->data(i));
+                else{
+                    batches[*it].add_data(message->data(i));
+                    involved_parts.insert(*it);
+                }
+            }
+        }
+    }
+    delete message;
+
+    if (num_pending[batch_number] == 0 && batch_number == proposed_batch+1){
+        SEQLOG(-1, " proposing to global "<<batch_number<<", proposed batch is "<<proposed_batch);
+        if (multi_part_txns.count(batch_number) != 0){
+            priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg> msgs = multi_part_txns[batch_number];
+            SEQLOG(-1, " Proposing to global "<<batch_number<<", msg size is "<<msgs.size());
+            while(msgs.size()){
+                MessageProto* msg = msgs.top();
+                SEQLOG(-1, " Proposing to global "<<batch_number<<", adding message "<<msg->msg_id());
+                msgs.pop();
+                for(int j = 0; j < msg->data_size(); ++j)
+                    single_part_msg->add_data(msg->data(j));
+                delete msg;
+            }
+        }
+        if(do_paxos)
+            paxos->SubmitBatch(single_part_msg);
+        else{
+            single_part_msg->set_destination_channel("scheduler_");
+            single_part_msg->set_type(MessageProto::TXN_BATCH);
+            single_part_msg->set_destination_node(configuration_->this_node_id);
+            connection_->Send(*single_part_msg);
+            delete single_part_msg;
+        }
+        multi_part_txns.erase(batch_number);
+        ++proposed_batch;
+    }
+    else{
+        SEQLOG(-1, " not ready to proceed "<<batch_number<<", num pending is "<<num_pending[batch_number]);
+        pending_paxos_props.push(single_part_msg);
+    }
+
+    int64 msg_id = batch_number | ((uint64)node_id) <<40;
+    //SEQLOG(-1, " finished loading for "<<batch_number);
+    if(involved_parts.size()){
+        std::vector<int> output(involved_parts.size());
+        std::copy(involved_parts.begin(), involved_parts.end(), output.begin());
+        SEQLOG(-1, "multi-part txn's size is "<<involved_parts.size());
+        multi_part_msg->set_msg_id(msg_id);
+        pending_sent_skeen[batch_number] = MyFour<int64, int64, vector<int>, MessageProto*>(involved_parts.size(), 0, output, multi_part_msg);
+    }
+    else
+        delete multi_part_msg;
+
+    for(set<int>::iterator it = involved_parts.begin(); it != involved_parts.end(); ++it){
+        batches[*it].set_batch_number(batch_number);
+        batches[*it].set_msg_id(msg_id);
+        connection_->Send(batches[*it]);
+        batches[*it].clear_data();
+        SEQLOG(-1, " Sending skeen request "<<msg_id<<" to "<<*it);
     }
 }
 
@@ -318,7 +339,28 @@ void Sequencer::RunReader() {
     Spin(1);
     // Set up batch messages for each system node.
 
+    map<int, MessageProto> batches;
+    vector<Node*> dc = configuration_->this_dc;
+    int node_id = configuration_->this_node_id;
+    for (uint i = 0; i < dc.size(); ++i) {
+        batches[dc[i]->node_id].set_destination_channel("skeen");
+        batches[dc[i]->node_id].set_destination_node(dc[i]->node_id);
+        batches[dc[i]->node_id].set_source_node(node_id);
+        batches[dc[i]->node_id].set_type(MessageProto::SKEEN_REQ);
+    }
+    MessageProto* batch_msg = NULL;
     while (!deconstructor_invoked_) {
+        pthread_mutex_lock(&mutex_);
+        if (batch_queue_.size()) {
+            batch_msg = batch_queue_.front();
+            batch_queue_.pop();
+        }
+        pthread_mutex_unlock(&mutex_);
+        if (batch_msg){
+            DealWithMsg(batch_msg, batches);
+            batch_msg = NULL;
+        }
+
         MessageProto recv_msg;
         while(skeen_connection_->GetMessage(&recv_msg)){
             int msg_type = recv_msg.type();
@@ -341,7 +383,7 @@ void Sequencer::RunReader() {
                 num_pending[to_propose_batch] += 1;
                 recv_msg.set_propose_batch(to_propose_batch);
                 pending_received_skeen[recv_msg.msg_id()] = new MessageProto(recv_msg);
-                SEQLOG(-1, " replying skeen request: "<<recv_msg.msg_id()<<", proposing "<<to_propose_batch);
+                SEQLOG(-1, " replying skeen request: "<<recv_msg.msg_id()<<", proposing "<<to_propose_batch<<", now pending is "<<num_pending[to_propose_batch]);
 
                 MessageProto reply;
                 reply.set_destination_channel("skeen");
@@ -401,7 +443,7 @@ void Sequencer::RunReader() {
 
                 //Put it to the batch
                 multi_part_txns[new_batch].push(pending_received_skeen[recv_msg.msg_id()]);
-                SEQLOG(-1, " got skeen final: "<<recv_msg.msg_id()<<", batch number is "<<new_batch<<", pushed "<<reinterpret_cast<int64>(pending_received_skeen[recv_msg.msg_id()])<<", size is"<<multi_part_txns[new_batch].size());
+                SEQLOG(-1, " got skeen final: "<<recv_msg.msg_id()<<", batch number is "<<new_batch<<", pushed "<<reinterpret_cast<int64>(pending_received_skeen[recv_msg.msg_id()])<<", remain pending for batch "<<blocked_batch<<" is "<< num_pending[blocked_batch]-1<<", proposed batch is "<<proposed_batch);
                 num_pending[blocked_batch] -= 1;
 
                 if(num_pending[blocked_batch] == 0 && blocked_batch == proposed_batch+1){

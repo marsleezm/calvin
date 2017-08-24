@@ -73,6 +73,7 @@ class Sequencer {
 
   void WaitForStart(){ while(!started) ; }
   
+    void DealWithMsg(MessageProto* message, map<int, MessageProto>& batches);
 
  private:
 	void Synchronize();
@@ -151,6 +152,7 @@ class Sequencer {
 
   unordered_map<int64, priority_queue<MessageProto*, vector<MessageProto*>, CompareMsg>> multi_part_txns;
   queue<MessageProto*> pending_paxos_props;
+  queue<MessageProto*> batch_queue_;
   unordered_map<int64, MessageProto*> pending_received_skeen;
 
   int batch_prop_limit;

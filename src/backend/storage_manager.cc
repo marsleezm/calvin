@@ -55,7 +55,7 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
   for (int i = 0; i < message.keys_size(); i++) {
     Value* val = new Value(message.values(i));
     remote_objects_[message.keys(i)] = val;
-    LOG(txn_->txn_id(), " handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
+    //LOG(txn_->txn_id(), " handle remote to add " << message.keys(i) << " for txn " << txn_->txn_id());
   }
 }
 
@@ -102,9 +102,9 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 				LOG(txn_->txn_id(), " WTF, key is empty: "<<key);
 			}
 			read_set_[key] = result;
-			LOG(txn_->txn_id(), " message is "<<message_);
+			//LOG(txn_->txn_id(), " message is "<<message_);
             if (message_){
-                LOG(txn_->txn_id(), "Adding to msg: "<<key);
+                //LOG(txn_->txn_id(), "Adding to msg: "<<key);
                 message_->add_keys(key);
                 message_->add_values(result == NULL ? "" : *result);
                 message_has_value_ = true;
@@ -126,7 +126,7 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 			read_state = SUSPENDED;
 			// The tranasction will perform the read again
 			if (message_has_value_){
-				LOG(txn_->txn_id(), ": blocked and sent.");
+				//LOG(txn_->txn_id(), ": blocked and sent.");
 				SendLocalReads();
 			}
 			return NULL;

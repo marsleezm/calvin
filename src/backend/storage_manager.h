@@ -83,14 +83,14 @@ class StorageManager {
 
   inline bool ShouldExec()
   {
-	  LOG(txn_->txn_id(), " should exec or not? Exec is "<<exec_counter_<<", max is "<<max_counter_);
+	  //LOG(txn_->txn_id(), " should exec or not? Exec is "<<exec_counter_<<", max is "<<max_counter_);
 	  if (exec_counter_ == max_counter_){
 		++exec_counter_;
 		++max_counter_;
 		return true;
 	  }
 	  else{
-		  LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
+		  //LOCKLOG(txn_->txn_id(), " should not exec, now counter is "<<exec_counter_);
 		  ++exec_counter_;
 		  return false;
 	  }

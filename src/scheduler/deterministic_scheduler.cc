@@ -188,7 +188,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			        for (int i = 0; i < batch_message->data_size(); i++) {
 				        TxnProto* txn = new TxnProto();
                         txn->ParseFromString(batch_message->data(i));
-                        LOG(txn->txn_id(), " adding txn to queue");
+                        LOG(txn->txn_id(), " adding txn to queue of batch "<<batch_number);
                         txns_queue.push(txn);
                     }
 			        delete batch_message;
