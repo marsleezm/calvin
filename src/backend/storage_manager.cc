@@ -122,6 +122,7 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 			return remote_objects_[key];
 		}
 		else{ //Should be blocked
+            LOG(txn_->txn_id(), ": does not have key!.");
 			--max_counter_;
 			read_state = SUSPENDED;
 			// The tranasction will perform the read again
