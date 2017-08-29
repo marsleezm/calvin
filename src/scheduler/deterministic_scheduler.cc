@@ -90,7 +90,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     string channel("execution");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
-    int base = 4*(configuration_->this_node_id % 2);
+    int base = 4*(configuration_->this_node_id % (CPU_NUM / 4));
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(3+base, &cpuset);
@@ -167,13 +167,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			if(txns_queue.size()){
                 txn = txns_queue.front();
                 txns_queue.pop();
-			  // No remote read result found, start on next txn if one is waiting.
-			  // Create manager.
                 LOG(txn->txn_id(), " starting txn");
   				manager = new StorageManager(scheduler->configuration_,
 									scheduler->thread_connection_,
 									scheduler->storage_, txn);
-				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
+				if( manager->ReadyToExecute()){
+                    scheduler->application_->Execute(txn, manager);
 					LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
 						latency_util.add_latency((GetUTime() - txn->seed())/1000);
@@ -205,15 +204,16 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			buffered_messages.erase(txn->txn_id());
             for(uint i = 0; i < messages.size(); ++i)
   			    manager->HandleReadResult(messages[i]);
-  			if(scheduler->application_->Execute(txn, manager) == SUCCESS){
-  				LOG(-1, " finished execution for "<<txn->txn_id());
-  				if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
-					latency_util.add_latency((GetUTime() - txn->seed())/1000);
-					++scheduler->committed;
-  				}
-  				delete manager;
-  				txn = NULL;
-  			}
+            if( manager->ReadyToExecute()){
+                scheduler->application_->Execute(txn, manager);
+                LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+                if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
+                    latency_util.add_latency((GetUTime() - txn->seed())/1000);
+                    ++scheduler->committed;
+                }
+                delete manager;
+                txn = NULL;
+            }
   		}
   		else if (scheduler->message_queue->Pop(&message)){
 		  // If I get read_result when executing a transaction

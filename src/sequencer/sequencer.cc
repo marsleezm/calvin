@@ -65,7 +65,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
     connection_ = multiplexer->NewConnection("sequencer", &message_queues);
     skeen_connection_ = multiplexer->NewConnection("skeen");
 
-    int base = 4*(configuration_->this_node_id % 2);
+    int base = 4*(configuration_->this_node_id % (CPU_NUM/4));
     cpu_set_t cpuset;
     
     CPU_ZERO(&cpuset);
@@ -336,7 +336,6 @@ void Sequencer::propose_global(int64& proposed_batch, map<int64, int>& num_pendi
 
 
 void Sequencer::RunReader() {
-    Spin(1);
     // Set up batch messages for each system node.
 
     map<int, MessageProto> batches;
@@ -457,10 +456,9 @@ void Sequencer::RunReader() {
 }
 
 void Sequencer::output(DeterministicScheduler* scheduler){
-  	deconstructor_invoked_ = true;
-  	pthread_join(reader_thread_, NULL);
-  	pthread_join(writer_thread_, NULL);
-	std::cout<<"Reader thread finished already"<<std::endl;
+    deconstructor_invoked_ = true;
+    pthread_join(reader_thread_, NULL);
+    pthread_join(writer_thread_, NULL);
     ofstream myfile;
     myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
     int count =0;
@@ -471,54 +469,8 @@ void Sequencer::output(DeterministicScheduler* scheduler){
         ++count;
     }
     myfile << "LATENCY" << '\n';
-	myfile << latency_util.average_latency()<<", "<<latency_util.medium_latency()<<", "<< latency_util.the95_latency() <<", "<<latency_util.the99_latency()<<", "<<latency_util.the999_latency()<< '\n';
-	if(configuration_->this_node_id == 0){
-		//Wait for nodes from the same DC to send him data
-		int to_receive_msg = configuration_->this_dc.size()-1;
-		MessageProto message;
-		while(to_receive_msg != 0){
-			if(connection_->GetMessage(&message)){
-				if(message.type() == MessageProto::LATENCY){
-                    std::cout<<"Got latency info from "<<message.source_node()<<", remaing is "<<to_receive_msg-1<<std::endl;
-					for(int i = 0; i< message.latency_size(); ++i){
-						for(int j = 0; j < message.count(i); ++j)
-							latency_util.add_latency(message.latency(i));
-					}
-					to_receive_msg--;
-				}
-			}
-		}
-		latency_util.reset_total();
-		int64 avg_lat = latency_util.average_latency();
-		int64 med_lat = latency_util.medium_latency();
-		int64 lat_95 = latency_util.the95_latency();
-		int64 lat_99 = latency_util.the99_latency();
-		int64 lat_999 = latency_util.the999_latency();
-    	myfile << "SUMMARY LATENCY" << '\n';
-		myfile << avg_lat<<", "<<med_lat<<", "<< lat_95 <<", "<< lat_99 <<", "<< lat_999<< '\n';
-	}
-	else if (configuration_->all_nodes[configuration_->this_node_id]->replica_id == 0){
-		// Pack up my data		
-        	std::cout<<"Node "<<configuration_->this_node_id<<" sending latency info to master"<<std::endl;
-		MessageProto message;
-		message.set_destination_channel("sequencer");	
-		message.set_source_node(configuration_->this_node_id);
-		message.set_destination_node(0);	
-		message.set_type(MessageProto::LATENCY);	
-		for(int i = 0; i < 1000; ++i){
-			if (latency_util.small_lat[i]!=0)
-			{
-				message.add_latency(i);
-				message.add_count(latency_util.small_lat[i]);
-			}
-		}	
-		for(uint i = 0; i < latency_util.large_lat.size(); ++i){
-			message.add_latency(latency_util.large_lat[i]);
-			message.add_count(1);
-		}	
-		connection_->Send(message);
-		Spin(5);
-	}
+    int avg_lat = latency_util.average_latency();
+    myfile << avg_lat<<", "<<latency_util.total_latency<<", "<<latency_util.total_count<<'\n';
 
     myfile.close();
 }
