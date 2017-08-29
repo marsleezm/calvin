@@ -33,7 +33,7 @@ using std::tr1::unordered_map;
 //using std::unordered_map;
 
 // Queue modes
-#define CPU_NUM 16
+#define CPU_NUM 4 
 #define NORMAL_QUEUE 1
 #define SELF_QUEUE 2
 #define DIRECT_QUEUE 3
