@@ -229,6 +229,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 	storage->Init();
 	int read_state;
 	if(txn->txn_type() & DEPENDENT_MASK){
+        assert(1==0);
 		//std::cout<<"Running dependent"<<std::endl;
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
@@ -252,16 +253,9 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 		//std::cout<<"Running non-dependent"<<std::endl;
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
-			if(storage->ShouldExec()){
 				Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
-				if(read_state != NORMAL)
-					return SUSPENDED;
-				else{
-		            int value = NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_partition_id);
-				    *val = IntToString(value);
-				    storage->PutObject(txn->read_write_set(i), val);
-				}
-			}
+                int value = NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_partition_id);
+                *val = IntToString(value);
 		}
 	}
 	return SUCCESS;

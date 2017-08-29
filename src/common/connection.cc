@@ -48,7 +48,7 @@ send_mutex_ = new pthread_mutex_t[(int)config->all_nodes.size()];
   }
 
 
-    int base = 4*(configuration_->this_node_id % 2);
+    int base = 4*(configuration_->this_node_id % (CPU_NUM/4));
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(base, &cpuset);
