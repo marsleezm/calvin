@@ -175,7 +175,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                     scheduler->application_->Execute(txn, manager);
 					LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
-						latency_util.add_latency((GetUTime() - txn->seed())/1000);
+						latency_util.add_latency((GetUTime() - txn->seed())/1000, txn->writers_size());
 						++scheduler->committed;
 					}
 					delete manager;
@@ -208,7 +208,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                 scheduler->application_->Execute(txn, manager);
                 LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
                 if(txn->writers_size() == 0 || txn->writers(0) == this_node_partition){
-                    latency_util.add_latency((GetUTime() - txn->seed())/1000);
+                    latency_util.add_latency((GetUTime() - txn->seed())/1000, txn->writers_size());
                     ++scheduler->committed;
                 }
                 delete manager;

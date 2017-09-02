@@ -282,8 +282,10 @@ void Sequencer::output(DeterministicScheduler* scheduler){
         myfile << scheduler->throughput[count] << ", "<< abort << '\n';
         ++count;
     }
-    myfile << "LATENCY" << '\n';
+    myfile << "SEP LATENCY" << '\n';
     int avg_lat = latency_util.average_latency();
+    myfile << latency_util.average_sp_latency()<<", "<<latency_util.average_mp_latency()<<'\n'; 
+    myfile << "LATENCY" << '\n';
     myfile << avg_lat<<", "<<latency_util.total_latency<<", "<<latency_util.total_count<<'\n'; 
 
     myfile.close();

@@ -33,7 +33,7 @@ using std::tr1::unordered_map;
 //using std::unordered_map;
 
 // Queue modes
-#define CPU_NUM 16
+#define CPU_NUM 8 
 #define NORMAL_QUEUE 1
 #define SELF_QUEUE 2
 #define DIRECT_QUEUE 3
@@ -738,18 +738,49 @@ class ReadLock {
 
 class LatencyUtils {
 	public:
-		map<int, int> large_lat;
+		map<int, int> sp_lat;
+		map<int, int> mp_lat;
 		int64 total_latency;
 		int total_count;
+        int64 sp_total_lat;
+        int sp_count;
+        int64 mp_total_lat;
+        int mp_count;
 	public:
-		inline void add_latency(int latency){
-            large_lat[latency] += 1;
+		inline void add_latency(int latency, int type){
+            if(type == 0 || type == 1)
+                sp_lat[latency] += 1;
+            else
+                mp_lat[latency] += 1;
+		}
+
+		inline void add_sp_lat(int latency){
+            sp_lat[latency] += 1;
+		}
+
+		inline void add_mp_lat(int latency){
+            mp_lat[latency] += 1;
 		}
 		
 		void reset_total(){
 			total_latency = 0;
 			total_count = 0;
+			sp_lat = 0;
+			sp_count = 0;
+			mp_lat = 0;
+			mp_count = 0;
 		}
+		int average_mp_latency(){
+			if(total_latency == 0)
+				calculate_total();
+			return mp_total_lat/max(mp_count,1); 	
+        }
+
+		int average_sp_latency(){
+			if(total_latency == 0)
+				calculate_total();
+			return sp_total_lat/max(sp_count,1); 	
+        }
 
 		int average_latency(){
 			if(total_latency == 0)
@@ -778,9 +809,17 @@ class LatencyUtils {
 		}
 	private:
 		void calculate_total() {
-            for (std::map<int,int>::iterator it=large_lat.begin(); it!=large_lat.end(); ++it){
+            for (std::map<int,int>::iterator it=sp_lat.begin(); it!=sp_lat.end(); ++it){
                 total_latency += it->first*it->second;
                 total_count += it->second;
+                sp_total_lat += it->first*it->second;
+                sp_count += it->second;
+            }
+            for (std::map<int,int>::iterator it=mp_lat.begin(); it!=mp_lat.end(); ++it){
+                total_latency += it->first*it->second;
+                total_count += it->second;
+                mp_total_lat += it->first*it->second;
+                mp_count += it->second;
             }
 		}
 		int get_percent_latency(double percent){
