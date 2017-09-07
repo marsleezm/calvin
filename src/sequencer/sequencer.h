@@ -160,6 +160,7 @@ class Sequencer {
   // The maximal of batches I have already proposed. This should usually be higher my proposed_batch
   int64 max_batch = 0;
   int64 proposed_for_batch = 0;
+  int64 batch_pad;
   map<int64, int> num_pending;
 
   AtomicQueue<TxnProto*>* txns_queue_;

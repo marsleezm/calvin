@@ -254,8 +254,10 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
 				Value* val = storage->ReadObject(txn->read_write_set(i), read_state);
-                int value = NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_partition_id);
-                *val = IntToString(value);
+                if (read_state == 1){
+                    int value = NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_partition_id);
+                    *val = IntToString(value);
+                }
 		}
 	}
 	return SUCCESS;

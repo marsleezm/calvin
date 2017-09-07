@@ -57,6 +57,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
     : batch_count_(0), configuration_(conf), multiplexer_(multiplexer),
       client_(client), storage_(storage), deconstructor_invoked_(false), queue_mode_(queue_mode), fetched_txn_num_(0)  {
     epoch_duration_ = stof(ConfigReader::Value("batch_duration")),
+    batch_pad = stof(ConfigReader::Value("batch_pad")),
     pthread_mutex_init(&mutex_, NULL);
     paxos = NULL;
     message_queues = new AtomicQueue<MessageProto>();
@@ -219,7 +220,7 @@ void Sequencer::DealWithMsg(MessageProto* message, map<int, MessageProto>& batch
     for(int i = 0; i < message->data_size(); ++i){
         TxnProto txn;
         txn.ParseFromString(message->data(i));
-        LOG(txn.txn_id(), " being processed, is multipart "<<txn.multipartition());
+        //LOG(txn.txn_id(), " being processed, is multipart "<<txn.multipartition());
         set<int> to_send;
         for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
             to_send.insert(configuration_->PartLocalNode(*it));
@@ -364,7 +365,7 @@ void Sequencer::RunReader() {
         while(skeen_connection_->GetMessage(&recv_msg)){
             int msg_type = recv_msg.type();
             if (msg_type == MessageProto::SKEEN_REQ){
-                int64 to_propose_batch = max(max_batch, proposed_batch+1);
+                int64 to_propose_batch = max(max_batch, proposed_batch+batch_pad);
                 // Increase random_batch with 50% probability, to avoid the case that messages keep being aggregated in this batch
                 if(max_batch == to_propose_batch){
                     if (proposed_for_batch+1 == batch_prop_limit){
@@ -405,7 +406,7 @@ void Sequencer::RunReader() {
                 if (entry.first == 1)
                 {
                     //Reply to allstd::cout<<"Got batch"
-                    int64 final_batch = max(max_batch, max(proposed_batch+1, entry.second));
+                    int64 final_batch = max(max_batch, max(proposed_batch+batch_pad, entry.second));
                     // Increase random_batch with 50% probability, to avoid the case that messages keep being aggregated in this batch
                     if(max_batch != final_batch){
                         max_batch = final_batch;
@@ -468,8 +469,11 @@ void Sequencer::output(DeterministicScheduler* scheduler){
         myfile << scheduler->throughput[count] << ", "<< abort << '\n';
         ++count;
     }
-    myfile << "LATENCY" << '\n';
+
+    myfile << "SEP LATENCY" << '\n';
     int avg_lat = latency_util.average_latency();
+    myfile << latency_util.average_sp_latency()<<", "<<latency_util.average_mp_latency()<<'\n';
+    myfile << "LATENCY" << '\n';
     myfile << avg_lat<<", "<<latency_util.total_latency<<", "<<latency_util.total_count<<'\n';
 
     myfile.close();
