@@ -57,11 +57,13 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
     }
 
     // Broadcast local reads to (other) writers.
-    for (int i = 0; i < txn->writers_size(); i++) {
-      if (txn->writers(i) != configuration_->this_node_id) {
-        message.set_destination_node(txn->writers(i));
-        connection_->Send1(message);
-      }
+    if(txn->independent() == false){
+        for (int i = 0; i < txn->writers_size(); i++) {
+          if (txn->writers(i) != configuration_->this_node_id) {
+            message.set_destination_node(txn->writers(i));
+            connection_->Send1(message);
+          }
+        }
     }
   }
 
@@ -85,12 +87,12 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
 }
 
 bool StorageManager::ReadyToExecute() {
-  return static_cast<int>(objects_.size()) ==
-         txn_->read_set_size() + txn_->read_write_set_size();
+  return txn_->independent() || (static_cast<int>(objects_.size()) ==
+         txn_->read_set_size() + txn_->read_write_set_size());
 }
 
 StorageManager::~StorageManager() {
-  //delete txn_;
+    delete txn_;
   for (vector<Value*>::iterator it = remote_reads_.begin();
        it != remote_reads_.end(); ++it) {
     delete *it;
@@ -98,7 +100,14 @@ StorageManager::~StorageManager() {
 }
 
 Value* StorageManager::ReadObject(const Key& key, int& whatever) {
-  return objects_[key];
+    if(objects_.count(key)){
+        whatever = 1;
+        return objects_[key];
+    }   
+    else{
+        whatever = 0;
+        return NULL;
+    }
 }
 
 bool StorageManager::PutObject(const Key& key, Value* value) {

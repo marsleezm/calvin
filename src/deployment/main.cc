@@ -36,6 +36,7 @@
 //pthread_mutex_t mutex_;
 //pthread_mutex_t mutex_for_item;
 
+bool independent_txn;
 int dependent_percent;
 int multi_txn_num_parts;
 LatencyUtils latency_util;
@@ -79,6 +80,7 @@ class MClient : public Client {
 	int64_t seed = GetUTime();
 	//std::cout<<(*txn)->txn_id()<<"txn setting seed "<<seed<<std::endl;
     (*txn)->set_seed(seed);
+    (*txn)->set_independent(independent_txn);
   }
 
  private:
@@ -157,6 +159,7 @@ int main(int argc, char** argv) {
 
   ConfigReader::Initialize("myconfig.conf");
   dependent_percent = 100*stof(ConfigReader::Value("dependent_percent").c_str());
+  independent_txn = (ConfigReader::Value("independent_txn") == "true");
   multi_txn_num_parts = stof(ConfigReader::Value("multi_txn_num_parts").c_str());
 
   bool useFetching = false;

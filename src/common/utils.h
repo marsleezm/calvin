@@ -765,9 +765,9 @@ class LatencyUtils {
 		void reset_total(){
 			total_latency = 0;
 			total_count = 0;
-			sp_lat = 0;
+			sp_total_lat = 0;
 			sp_count = 0;
-			mp_lat = 0;
+			mp_total_lat = 0;
 			mp_count = 0;
 		}
 		int average_mp_latency(){

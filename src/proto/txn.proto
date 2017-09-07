@@ -23,6 +23,7 @@ message TxnProto {
 
   // True if transaction is known to span multiple database nodes.
   optional bool multipartition = 12;
+  optional bool independent = 13;
 
   // Keys of objects read (but not modified) by this transaction.
   repeated bytes read_set = 20;
