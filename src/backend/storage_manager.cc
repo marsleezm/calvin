@@ -45,8 +45,10 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		affecting_readers = NULL;
 	}
 	num_unconfirmed_read = txn_->readers_size() - 1;
-	for (int i = 0; i<txn_->readers_size(); ++i)
+	for (int i = 0; i<txn_->readers_size(); ++i){
 		latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
+        touch_nodes = touch_nodes | (1 << txn_->readers(i));
+    }
 }
 
 void StorageManager::SendConfirm(int last_restarted){
@@ -91,8 +93,10 @@ void StorageManager::SetupTxn(TxnProto* txn){
 		affecting_readers[i] = -1;
 
 	num_unconfirmed_read = txn_->readers_size() - 1;
-	for (int i = 0; i<txn_->readers_size(); ++i)
+	for (int i = 0; i<txn_->readers_size(); ++i){
 		latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
+        touch_nodes = touch_nodes | (1 << txn_->readers(i));
+    }
 }
 
 void StorageManager::Abort(){

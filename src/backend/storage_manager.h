@@ -304,6 +304,8 @@ class StorageManager {
   bool message_has_value_;
   bool is_suspended_;
   bool spec_committed_;
+  bool sent_pc = false;
+  int touch_nodes;
   atomic<int> abort_bit_;
   int num_aborted_;
 

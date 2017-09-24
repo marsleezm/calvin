@@ -110,6 +110,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	pthread_mutex_init(&commit_tx_mutex, NULL);
 	int array_size = atoi(ConfigReader::Value("max_sc").c_str())+num_threads*2;
 	sc_txn_list = new MyTuple<int64_t, int, StorageManager*>[array_size];
+	pc_list = new int[array_size][atoi(ConfigReader::Value("multi_txn_num_parts").c_str())];
 	for( int i = 0; i<array_size; ++i)
 		sc_txn_list[i] = MyTuple<int64_t, int, StorageManager*>(NO_TXN, TRY_COMMIT, NULL);
 
@@ -203,8 +204,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  //if(! (to_commit_tx.first == prev_txn && prev_txn == prev_prev_txn))
 		  LOG(-1, " num lc is "<<num_lc_txns_<<", prev txn is  "<<prev_txn<<", prev prev is "<<prev_prev_txn<<", "<<
 				  to_commit_tx.first<<"is the first one in queue, status is "<<to_commit_tx.second);
-		  //prev_prev_txn = prev_txn;
-		  //prev_txn = to_commit_tx.first;
 		  while(true){
 			  // -1 means this txn should be committed; otherwise, it is the last_restarted number of the txn, which wishes to send confirm
 			  if(to_commit_tx.first == num_lc_txns_){
@@ -221,8 +220,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						  ++Sequencer::num_committed;
 						  //std::cout<<"Committing txn "<<to_commit_tx.first<<", num committed is "<<Sequencer::num_committed<<std::endl;
 					  }
-					  //else
-					//	  std::cout<<this_node<<" not committing "<<mgr->get_txn()->txn_id()<<", because its writer size is "<<mgr->get_txn()->writers_size()<<" and first writer is "<<mgr->get_txn()->writers(0)<<std::endl;
 					  ++num_lc_txns_;
 					  LOG(to_commit_tx.first, " committed, num lc txn is "<<num_lc_txns_);
 					  to_commit_tx = scheduler->sc_txn_list[num_lc_txns_%sc_array_size];

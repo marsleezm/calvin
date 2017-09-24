@@ -154,6 +154,7 @@ class DeterministicScheduler : public Scheduler {
 
   pair<int64, int64>** latency;
   MyTuple<int64, int, StorageManager*>* sc_txn_list;
+  int** pc_list;
   pthread_mutex_t commit_tx_mutex;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_
