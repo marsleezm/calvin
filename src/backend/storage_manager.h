@@ -59,36 +59,91 @@ class StorageManager {
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
 		  	  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue);
 
+    inline void ResetMsg(MessageProto* msg){
+        msg->clear_num_aborted();
+        msg->clear_received_num_aborted();
+        msg->set_source_channel(txn_->txn_id());
+        msg->set_destination_channel(IntToString(txn_->txn_id()));
+        for (int i = 0; i < txn_->writers().size(); i++) {
+            if (txn_->writers(i) != configuration_->this_node_id) {
+                msg->set_destination_node(txn_->writers(i));
+            }
+        }
+    }
+
   ~StorageManager();
 
-  inline void SendLocalReads(bool if_confirmed){
-	  if(if_confirmed){
+  inline int SendLocalReads(bool if_to_confirm){
+	  if(if_to_confirm){
 		  has_confirmed = true;
 		  message_->set_confirmed(true);
 		  ASSERT(abort_bit_ == num_aborted_);
 	  }
-	  LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_);
-	  message_->set_num_aborted(num_aborted_);
-//	  for(uint i = 0; i<to_confirm.size(); ++i){
-//		  message_->add_committed_txns(to_confirm[i].first);
-//		  message_->add_final_abort_nums(to_confirm[i].second);
-//		  LOG(txn_->txn_id(), " sending confirm of "<<to_confirm[i].first);
-//	  }
-	  for (int i = 0; i < txn_->writers().size(); i++) {
-		  if (txn_->writers(i) != configuration_->this_node_id) {
-			  //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
-			  message_->set_destination_node(txn_->writers(i));
-			  connection_->Send1(*message_);
-		  }
-	  }
+      if (num_aborted_ == abort_bit_) {
+          LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_);
+          message_->set_num_aborted(num_aborted_);
+          for (int i = 0; i < txn_->writers().size(); i++) {
+              if (txn_->writers(i) != configuration_->this_node_id) {
+                  //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
+                  message_->set_destination_node(txn_->writers(i));
+                  connection_->Send1(*message_);
+              }
+          }
 
-	  message_->clear_keys();
-	  message_->clear_values();
-	  message_has_value_ = false;
+          message_->clear_keys();
+          message_->clear_values();
+          message_has_value_ = false;
+          return num_aborted_;
+      }
+      else{
+          ASSERT(if_to_confirm == false);
+          return -1; 
+      }
   }
 
-  void SendConfirm(int last_restarted);
-  void SetupTxn(TxnProto* txn);
+    inline bool CanAddC(int last_restarted, bool& cas_resend){
+        //Stop already if is not MP txn
+        if (txn_->multipartition() == false) {
+            force_send = false;
+            return false;
+        }
+        else {
+            if (spec_committed){
+                // Spec committed, has sent values and
+                if (last_restarted == abort_bit){
+                    // Not yet sent pc: this guy should send confirm, but cascading resend should stop
+                    if (last_add_pc == -1){
+                        cas_resend = false;
+                        return true;
+                    }
+                    else{
+                        // Has already sent pc, but should resend, if cascading abort or if the sent pc is too old already. 
+                        ASSERT(last_add_pc <= abort_bit);
+                        if (last_add_pc < abort_bit || cas_resend){
+                            cas_resend = true;
+                            return true;
+                        }
+                        else
+                            return false;
+                    }
+                }
+                else{
+                    // if the sent value is too old, then should resent the value first! This should be handled by other threads (hopefully..)
+                    cas_resend = true;
+                    return false;
+                }
+            }
+            else{
+                // If has not even spec-committed, do not send confirm for him now. 
+                return false;
+            }
+        }
+    }
+
+    inline bool AddedPC(){ sent_pc = true; last_add_pc = num_aborted; }
+
+    void AddConfirm(int last_restarted, MessageProto* msg);
+    void SetupTxn(TxnProto* txn);
 
   //Value* ReadObject(const Key& key);
   //Value* SkipOrRead(const Key& key, int& read_state);
@@ -148,7 +203,7 @@ class StorageManager {
   }
 
   // Can commit, if the transaction is read-only or has spec-committed.
-  inline int CanSCToCommit() {
+  inline int CanSCToCommit(int* pcs) {
 	  LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_
 			  <<", unconfirmed read is "<<num_unconfirmed_read);
 	  if (ReadOnly())
@@ -156,16 +211,25 @@ class StorageManager {
 	  else{
 		  if(num_aborted_ != abort_bit_)
 			  return ABORT;
-		  else if(spec_committed_ && num_unconfirmed_read == 0)
+		  else if(spec_committed_ && (num_unconfirmed_read == 0 || GotMatchingPCs(pcs)))
 			  return SUCCESS;
 		  else
 			  return NOT_CONFIRMED;
 	  }
   }
-  inline int CanCommit() {
+
+  inline bool GotMatchingPCs(int* pcs){
+      for (int i = 0; i < writer_id-1; ++i){
+          if(pcs[i] != latest_aborted_num[i].second)
+              return false;
+      }
+      return true;
+  }
+
+  inline int CanCommit(int* pcs) {
 	  if (num_aborted_ != abort_bit_)
 		  return ABORT;
-	  else if(num_unconfirmed_read == 0)
+	  else if(num_unconfirmed_read == 0 || GotMatchingPCs(pcs))
 		  return SUCCESS;
 	  else{
 		  LOG(txn_->txn_id(), " not confirmed, uc read is "<<num_unconfirmed_read);
@@ -305,7 +369,9 @@ class StorageManager {
   bool is_suspended_;
   bool spec_committed_;
   bool sent_pc = false;
-  int touch_nodes;
+  int last_add_pc = -1;
+  int writer_id;
+  int involved_nodes;
   atomic<int> abort_bit_;
   int num_aborted_;
 
