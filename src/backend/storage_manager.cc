@@ -49,24 +49,29 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
         involved_nodes = involved_nodes | (1 << txn_->readers(i));
         if (txn_->readers(i) == configuration_->this_node_id)
-            writer_id = configuration_->this_node_id;
+            writer_id = i; 
     }
 }
 
 
-void StorageManager::AddConfirm(int last_restarted, MessageProto* msg){
+bool StorageManager::ConfirmAndSend(MessageProto* msg){
 	// Is multi-part transactions
-    assert(last_restarted == abort_bit_);
-    assert(msg == NULL);
-    ASSERT(has_confirmed == false);
-    LOG(txn_->txn_id(), " trying to send confirm, last restarted is "<<last_restarted<<", abort bit is "<<abort_bit_);
-    has_confirmed = true;
-    msg = new MessageProto();
-    ResetMsg(msg);
-    msg->set_type(MessageProto::READ_CONFIRM);
-    msg->set_num_aborted(last_restarted);
-    msg->set_source_node(configuration_->this_node_id);
-    AGGRLOG(txn_->txn_id(), " sent confirm");
+    if (msg->num_aborted() != abort_bit_){
+        return false;
+    }
+    else{
+        ASSERT(has_confirmed == false);
+        LOG(txn_->txn_id(), " trying to send confirm, last restarted is "<<num_aborted_<<", abort bit is "<<abort_bit_);
+        has_confirmed = true;
+        for (int i = 0; i < txn_->writers(i); ++i) {
+            if (txn_->writers(i) != configuration_->this_node_id) {
+                msg->set_destination_node(configuration_->this_node_id);
+                connection_->Send1(*msg);
+            }
+        }
+        AGGRLOG(txn_->txn_id(), " sent confirm");
+        return true;
+    }
 }
 
 void StorageManager::SetupTxn(TxnProto* txn){
@@ -128,7 +133,7 @@ void StorageManager::Abort(){
 	tpcc_args ->ParseFromString(txn_->arg());
 	spec_committed_ = false;
     sent_pc = false;
-    assert(has_confirmed, false);
+    assert(has_confirmed == false);
 	max_counter_ = 0;
 	num_aborted_ = abort_bit_;
 }
@@ -283,10 +288,10 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	if(has_confirmed==false && message_){
-		LOG(txn_->txn_id(), " sending confirm when committing");
-		SendConfirm(num_aborted_);
-	}
+	//if(has_confirmed==false && message_){
+	//	LOG(txn_->txn_id(), " sending confirm when committing");
+	//	SendConfirm(num_aborted_);
+	//}
 	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
 		//LOG(txn_->txn_id(), "Has message");

@@ -83,7 +83,6 @@ class DeterministicScheduler : public Scheduler {
           int64 now_time = GetUTime();
           array[latency_count] = make_pair(now_time - txn->start_time(), now_time - txn->seed());
           ++latency_count;
-          sample_count = 0;
       }
   }
 
@@ -95,7 +94,7 @@ class DeterministicScheduler : public Scheduler {
 
   bool ExecuteTxn(StorageManager* manager, int thread,
 		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
-		  int& sample_count, int& latency_count, pair<int64, int64>* latency_array, int this_node, int sc_array_size);
+		  int& latency_count, pair<int64, int64>* latency_array, int this_node, int sc_array_size, DeterministicScheduler* scheduler);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
@@ -158,6 +157,7 @@ class DeterministicScheduler : public Scheduler {
   pair<int64, int64>** latency;
   MyTuple<int64, int, StorageManager*>* sc_txn_list;
   int** pc_list;
+  int** pc_buffer;
   pthread_mutex_t* pc_mutex;
   pthread_mutex_t commit_tx_mutex;
 };

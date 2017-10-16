@@ -59,16 +59,12 @@ class StorageManager {
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
 		  	  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue);
 
-    inline void ResetMsg(MessageProto* msg){
+    inline void InitUnconfirmMsg(MessageProto* msg){
         msg->clear_num_aborted();
         msg->clear_received_num_aborted();
-        msg->set_source_channel(txn_->txn_id());
         msg->set_destination_channel(IntToString(txn_->txn_id()));
-        for (int i = 0; i < txn_->writers().size(); i++) {
-            if (txn_->writers(i) != configuration_->this_node_id) {
-                msg->set_destination_node(txn_->writers(i));
-            }
-        }
+        // The first txn is not confirmed yet
+        msg->set_num_aborted(-1);
     }
 
   ~StorageManager();
@@ -104,13 +100,13 @@ class StorageManager {
     inline bool CanAddC(int last_restarted, bool& cas_resend){
         //Stop already if is not MP txn
         if (txn_->multipartition() == false) {
-            force_send = false;
+            cas_resend = false;
             return false;
         }
         else {
-            if (spec_committed){
+            if (spec_committed_){
                 // Spec committed, has sent values and
-                if (last_restarted == abort_bit){
+                if (last_restarted == abort_bit_){
                     // Not yet sent pc: this guy should send confirm, but cascading resend should stop
                     if (last_add_pc == -1){
                         cas_resend = false;
@@ -118,8 +114,8 @@ class StorageManager {
                     }
                     else{
                         // Has already sent pc, but should resend, if cascading abort or if the sent pc is too old already. 
-                        ASSERT(last_add_pc <= abort_bit);
-                        if (last_add_pc < abort_bit || cas_resend){
+                        ASSERT(last_add_pc <= abort_bit_);
+                        if (last_add_pc < abort_bit_ || cas_resend){
                             cas_resend = true;
                             return true;
                         }
@@ -133,16 +129,15 @@ class StorageManager {
                     return false;
                 }
             }
-            else{
+            else
                 // If has not even spec-committed, do not send confirm for him now. 
                 return false;
-            }
         }
     }
 
-    inline bool AddedPC(){ sent_pc = true; last_add_pc = num_aborted; }
+    inline void AddedPC(){ sent_pc = true; last_add_pc = num_aborted_; }
 
-    void AddConfirm(int last_restarted, MessageProto* msg);
+    bool ConfirmAndSend(MessageProto* msg);
     void SetupTxn(TxnProto* txn);
 
   //Value* ReadObject(const Key& key);
