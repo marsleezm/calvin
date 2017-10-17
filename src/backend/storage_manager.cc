@@ -45,28 +45,32 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		affecting_readers = NULL;
 	}
 	num_unconfirmed_read = txn_->readers_size() - 1;
-	for (int i = 0; i<txn_->readers_size(); ++i){
+	for (int i = 0; i<txn_->readers_size(); ++i)
 		latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
-        involved_nodes = involved_nodes | (1 << txn_->readers(i));
-        if (txn_->readers(i) == configuration_->this_node_id)
-            writer_id = configuration_->this_node_id;
-    }
 }
 
-
-void StorageManager::AddConfirm(int last_restarted, MessageProto* msg){
+void StorageManager::SendConfirm(int last_restarted){
 	// Is multi-part transactions
-    assert(last_restarted == abort_bit_);
-    assert(msg == NULL);
-    ASSERT(has_confirmed == false);
-    LOG(txn_->txn_id(), " trying to send confirm, last restarted is "<<last_restarted<<", abort bit is "<<abort_bit_);
-    has_confirmed = true;
-    msg = new MessageProto();
-    ResetMsg(msg);
-    msg->set_type(MessageProto::READ_CONFIRM);
-    msg->set_num_aborted(last_restarted);
-    msg->set_source_node(configuration_->this_node_id);
-    AGGRLOG(txn_->txn_id(), " sent confirm");
+	if(last_restarted == abort_bit_){
+		LOG(txn_->txn_id(), " trying to send confirm, last restarted is "<<last_restarted<<", abort bit is "<<abort_bit_);
+		ASSERT(has_confirmed == false);
+		has_confirmed = true;
+		MessageProto msg;
+		msg.set_type(MessageProto::READ_CONFIRM);
+		msg.set_destination_channel(IntToString(txn_->txn_id()));
+		msg.set_num_aborted(last_restarted);
+		msg.set_source_node(configuration_->this_node_id);
+		msg.set_source_channel(txn_->txn_id());
+		AGGRLOG(txn_->txn_id(), " sent confirm");
+		for (int i = 0; i < txn_->writers().size(); i++) {
+			if (txn_->writers(i) != configuration_->this_node_id) {
+				msg.set_destination_node(txn_->writers(i));
+				connection_->Send1(msg);
+			}
+		}
+	}
+	else
+		AGGRLOG(txn_->txn_id(), " not sending confirm, because last bit is "<<last_restarted<<", abort bit is "<<abort_bit_);
 }
 
 void StorageManager::SetupTxn(TxnProto* txn){
@@ -87,12 +91,8 @@ void StorageManager::SetupTxn(TxnProto* txn){
 		affecting_readers[i] = -1;
 
 	num_unconfirmed_read = txn_->readers_size() - 1;
-	for (int i = 0; i<txn_->readers_size(); ++i){
+	for (int i = 0; i<txn_->readers_size(); ++i)
 		latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
-        involved_nodes = involved_nodes | (1 << txn_->readers(i));
-        if (txn_->readers(i) == configuration_->this_node_id)
-            writer_id = configuration_->this_node_id;
-    }
 }
 
 void StorageManager::Abort(){
@@ -127,8 +127,6 @@ void StorageManager::Abort(){
 	tpcc_args->Clear();
 	tpcc_args ->ParseFromString(txn_->arg());
 	spec_committed_ = false;
-    sent_pc = false;
-    assert(has_confirmed, false);
 	max_counter_ = 0;
 	num_aborted_ = abort_bit_;
 }

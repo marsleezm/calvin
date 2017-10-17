@@ -75,8 +75,8 @@ class DeterministicScheduler : public Scheduler {
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
 
-  inline static void AddLatency(int& latency_count, pair<int64, int64>* array, TxnProto* txn){
-      if (txn->seed() % SAMPLE_RATE == 0)
+  inline static void AddLatency(int& sample_count, int& latency_count, pair<int64, int64>* array, TxnProto* txn){
+      if (sample_count == SAMPLE_RATE)
       {
           if(latency_count == LATENCY_SIZE)
               latency_count = 0;
@@ -85,6 +85,7 @@ class DeterministicScheduler : public Scheduler {
           ++latency_count;
           sample_count = 0;
       }
+      ++sample_count;
   }
 
   inline void put_to_sclist(MyTuple<int64, int, StorageManager*>& loc, int64_t tx_id, int sign, StorageManager* mgr){
@@ -150,15 +151,9 @@ class DeterministicScheduler : public Scheduler {
   int* sc_block;
   int* pend_block;
   int* suspend_block;
-  int pc_buffer_size;
-  int multi_parts;
-  int num_involved_nodes;
-  bool cas_resend = false;
 
   pair<int64, int64>** latency;
   MyTuple<int64, int, StorageManager*>* sc_txn_list;
-  int** pc_list;
-  pthread_mutex_t* pc_mutex;
   pthread_mutex_t commit_tx_mutex;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

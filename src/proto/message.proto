@@ -43,8 +43,7 @@ message MessageProto {
   repeated int64 committed_txns = 12;
   repeated int32 final_abort_nums = 13;
   optional int32 num_aborted = 14;
-  optional int32 received_num_aborted = 15;
-  optional bool confirmed = 16;
+  optional bool confirmed = 15;
 
   // For TXN_BATCH messages, 'batch_number' identifies the epoch of the txn
   // batch being sent.
