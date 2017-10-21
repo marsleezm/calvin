@@ -188,7 +188,7 @@ void StorageManager::ApplyChange(bool is_committing){
 // TODO: add logic to delete keys that do not exist
 int StorageManager::HandleReadResult(const MessageProto& message) {
   ASSERT(message.type() == MessageProto::READ_RESULT);
-  LOG(txn_->txn_id(), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read);
+  LOG(txn_->txn_id(), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read<<", msg confirmed is "<<message.confirmed());
   int source_node = message.source_node();
   if (message.confirmed()){
 	  // TODO: if the transaction has old data, should abort the transaction

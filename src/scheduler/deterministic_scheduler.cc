@@ -215,9 +215,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			    // -1 means this txn should be committed; otherwise, it is the last_restarted number of the txn, which wishes to send confirm
                 StorageManager* mgr = first_tx.third, *first_mgr=NULL;
                 // If can send confirm/pending confirm
-                if(first_tx.first >= num_lc_txns_ && first_tx.second != TRY_COMMIT && mgr->CanAddC(first_tx.second, scheduler->cas_resend)){
+                LOG(first_tx.first, " is still being checked, its entry is "<<first_tx.second);
+                if(first_tx.first >= num_lc_txns_ && mgr->CanAddC(first_tx.second, scheduler->cas_resend)){
 				    if (involved_nodes == first_tx.third->involved_nodes){
                         if (send_confirm){ 
+					        LOG(first_tx.first, " adding confirm to message");
 					        //mgr->AddConfirm(first_tx.second, msg_to_send);
                             msg_to_send = new MessageProto();
                             msg_to_send->set_type(MessageProto::READ_CONFIRM);
@@ -227,6 +229,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                             send_confirm = false; 
                         }
                         else{
+					        LOG(first_tx.first, " adding pending-confirm to message");
 		                    pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
                             for(int i = 0; i < scheduler->num_involved_nodes; ++i){
                                 if (i == first_tx.third->writer_id){
@@ -252,6 +255,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					    LOG(first_tx.first, " sending confirm for him, second is "<<first_tx.second);
 				    }
                     else{
+                        LOG(-1, " involved node is changed from "<< involved_nodes<<" to "<<first_tx.third->involved_nodes);
                         // Sending existing one, add reset
                         involved_nodes = first_tx.third->involved_nodes;
                         if ( first_mgr->ConfirmAndSend(msg_to_send) == false) {
@@ -307,6 +311,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                 }
                 else{
                     tx_index = (tx_index+1)%sc_array_size; 
+                    LOG(tx_index, " is going to be checked, because I have finished previous txn");
                     first_tx = scheduler->sc_txn_list[tx_index%sc_array_size];
                 }
 		    }
@@ -449,6 +454,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   int a_index = 0, prev_abort = -1, tx_index=current_tx_id % sc_array_size;
                   pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
                   for(int i = 0; i < message.received_num_aborted_size(); ++i){
+	    	          LOG(current_tx_id, " trying to add pending read confirm!");
                       if(message.received_num_aborted(i) == END) {
                           if (prev_abort != -1){
                               scheduler->pc_list[tx_index][a_index-1] = prev_abort; 
@@ -618,9 +624,9 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				//	LOG(txn->txn_id(), "before pushing first is "<<pending_confirm.top().second);
 				//pending_confirm.push(MyTuple<int64, int64, int>(txn->txn_id(), txn->local_txn_id(),
 				//	manager->num_restarted_));
-				AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list, addr is "<<reinterpret_cast<int64>(manager));
 				//AGGRLOG(txn->txn_id(), "after pushing first is "<<pending_confirm.top().second);
 				int num_aborted = manager->SendLocalReads(false);
+				AGGRLOG(txn->txn_id(), " sending local read for "<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list, nabt is "<<num_aborted);
                 if (num_aborted != -1 ){
                     manager->put_inlist();
                     put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), num_aborted, manager);

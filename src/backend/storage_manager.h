@@ -76,10 +76,10 @@ class StorageManager {
 		  ASSERT(abort_bit_ == num_aborted_);
 	  }
       if (num_aborted_ == abort_bit_) {
-          LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_);
           message_->set_num_aborted(num_aborted_);
           for (int i = 0; i < txn_->writers().size(); i++) {
               if (txn_->writers(i) != configuration_->this_node_id) {
+                  LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
                   //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
                   message_->set_destination_node(txn_->writers(i));
                   connection_->Send1(*message_);
@@ -215,9 +215,11 @@ class StorageManager {
 
   inline bool GotMatchingPCs(int* pcs){
       for (int i = 0; i < writer_id-1; ++i){
+          LOG(txn_->txn_id(), " pc is "<<pcs[i]<<", second is "<<latest_aborted_num[i].second);
           if(pcs[i] != latest_aborted_num[i].second)
               return false;
       }
+	  LOG(txn_->txn_id(), " got matching pcs return true");
       return true;
   }
 
