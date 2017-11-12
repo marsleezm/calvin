@@ -30,6 +30,11 @@
 
 #define BLOCK_STAT
 #define END -1
+#define ADD_BUFFERED_AN(scheduler, abort_num_i, tx_index, prev_abort) \
+while(abort_num_i < scheduler->multi_parts && prev_abort == scheduler->pc_buffer[tx_index][abort_num_i-1+(abort_num_i+1)*abort_num_i/2]) { \
+  prev_abort = scheduler->pc_buffer[tx_index][abort_num_i+(abort_num_i+1)*abort_num_i/2]; \
+  scheduler->pc_list[tx_index][abort_num_i] = prev_abort; \
+  ++abort_num_i; }         
 
 #ifdef BLOCK_STAT
 #define START_BLOCK(if_blocked, last_time, b1, b2, b3, s1, s2, s3) \
@@ -109,7 +114,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
 	pthread_mutex_init(&commit_tx_mutex, NULL);
 	int array_size = atoi(ConfigReader::Value("max_sc").c_str())+num_threads*2;
-	sc_txn_list = new MyTuple<int64_t, int, StorageManager*>[array_size];
+	sc_txn_list = new pair<int64_t, StorageManager*>[array_size];
     multi_parts = atoi(ConfigReader::Value("multi_txn_num_parts").c_str());
     pc_buffer_size = max(1, multi_parts*(multi_parts-1)/2);
 	pc_list = new int*[array_size];
@@ -119,10 +124,12 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
         pthread_mutex_init(&pc_mutex[i], NULL);
 	    pc_list[i] = new int[multi_parts];
 	    pc_buffer[i] = new int[pc_buffer_size];
+        std::fill(pc_buffer[i], pc_buffer[i]+pc_buffer_size, -1);
+        std::fill(pc_list[i], pc_list[i]+multi_parts, -1);
     }
 
 	for( int i = 0; i<array_size; ++i)
-		sc_txn_list[i] = MyTuple<int64_t, int, StorageManager*>(NO_TXN, TRY_COMMIT, NULL);
+		sc_txn_list[i] = pair<int64_t, StorageManager*>(NO_TXN, NULL);
 
 	  // Start all worker threads.
 	  for (int i = 0; i < num_threads; i++) {
@@ -205,39 +212,46 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     while (!terminated_) {
 	    if (scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
 		    // Try to commit txns one by one
-		    MyTuple<int64_t, int, StorageManager*> first_tx = scheduler->sc_txn_list[num_lc_txns_%sc_array_size];
+            int involved_nodes=0, tx_index=num_lc_txns_%sc_array_size, send_confirm = true;
+		    pair<int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
 		    LOG(-1, " num lc is "<<num_lc_txns_<<", "<<
-				  first_tx.first<<"is the first one in queue, status is "<<first_tx.second);
+				  first_tx.first<<"is the first one in queue");
             MessageProto* msg_to_send = NULL;
-            int involved_nodes, tx_index=num_lc_txns_%sc_array_size, send_confirm = true;
+            StorageManager* mgr, *first_mgr=NULL;
 		    while(true){
                 bool did_something = false;
+                mgr = first_tx.second;
 			    // -1 means this txn should be committed; otherwise, it is the last_restarted number of the txn, which wishes to send confirm
-                StorageManager* mgr = first_tx.third, *first_mgr=NULL;
                 // If can send confirm/pending confirm
-                LOG(first_tx.first, " is still being checked, its entry is "<<first_tx.second);
-                if(first_tx.first >= num_lc_txns_ && mgr->CanAddC(first_tx.second, scheduler->cas_resend)){
-				    if (involved_nodes == first_tx.third->involved_nodes){
+                LOG(first_tx.first, " is still being checked, num lc is "<<num_lc_txns_<<", mgr is "<<reinterpret_cast<int64>(mgr));
+                if(first_tx.first >= num_lc_txns_ && mgr->CanAddC(scheduler->cas_resend)){
+                    LOG(first_tx.first, " check returns OK");
+				    if (involved_nodes == 0 || involved_nodes == first_tx.second->involved_nodes){
+                        involved_nodes = first_tx.second->involved_nodes;
                         if (send_confirm){ 
-					        LOG(first_tx.first, " adding confirm to message");
 					        //mgr->AddConfirm(first_tx.second, msg_to_send);
                             msg_to_send = new MessageProto();
                             msg_to_send->set_type(MessageProto::READ_CONFIRM);
                             msg_to_send->set_source_node(this_node);
                             first_mgr = mgr;
-                            msg_to_send->set_num_aborted(first_tx.second);
+                            msg_to_send->set_num_aborted(mgr->num_aborted_);
                             send_confirm = false; 
+                            LOG(-1, " added send_confirm, first mgr is "<<reinterpret_cast<int64>(first_mgr)<<", msg to send is "<<reinterpret_cast<int64>(msg_to_send));
                         }
                         else{
-					        LOG(first_tx.first, " adding pending-confirm to message");
 		                    pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
-                            for(int i = 0; i < scheduler->num_involved_nodes; ++i){
-                                if (i == first_tx.third->writer_id){
-                                    msg_to_send->add_received_num_aborted(first_tx.second);
+					        LOG(first_tx.first, " adding pending-confirm to message, involved nodes are "<<scheduler->multi_parts);
+                            for(int i = 0; i < scheduler->multi_parts; ++i){
+					            LOG(first_tx.first, " trying to add pc, i is "<<i);
+                                if (i == first_tx.second->writer_id){
+					                LOG(first_tx.first, " adding up to myself"<<i<<", num aborted is "<<mgr->num_aborted_);
+                                    // Format: abort number sent by partitions before my writer_id, END, my bit
                                     msg_to_send->add_received_num_aborted(END);
+                                    msg_to_send->add_received_num_aborted(mgr->num_aborted_);
                                     break;
                                 }
                                 else{
+					                LOG(first_tx.first, " adding received aborted "<<scheduler->pc_list[tx_index][i]);
                                     if (scheduler->pc_list[tx_index][i] == -1) {
                                         while(i > 0){
                                             --i;
@@ -249,15 +263,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                                         msg_to_send->add_received_num_aborted(scheduler->pc_list[tx_index][i]);
                                 }
                             }
-		                    pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
+		                    pthread_mutex_unlock(&scheduler->pc_mutex[tx_index]);
                             mgr->AddedPC();
                         }
-					    LOG(first_tx.first, " sending confirm for him, second is "<<first_tx.second);
 				    }
                     else{
-                        LOG(-1, " involved node is changed from "<< involved_nodes<<" to "<<first_tx.third->involved_nodes);
+                        LOG(-1, " involved node is changed from "<< involved_nodes<<" to "<<first_tx.second->involved_nodes);
                         // Sending existing one, add reset
-                        involved_nodes = first_tx.third->involved_nodes;
+                        involved_nodes = first_tx.second->involved_nodes;
                         if ( first_mgr->ConfirmAndSend(msg_to_send) == false) {
                             delete msg_to_send;
                             break;
@@ -265,10 +278,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                         mgr->InitUnconfirmMsg(msg_to_send);
                         // Add received_num_aborted
                         pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
-                        for(int i = 0; i < scheduler->num_involved_nodes; ++i){
-                            if (i == first_tx.third->writer_id) {
-                                msg_to_send->add_received_num_aborted(first_tx.second);
+                        for(int i = 0; i < scheduler->multi_parts; ++i){
+                            if (i == first_tx.second->writer_id) {
                                 msg_to_send->add_received_num_aborted(END);
+                                msg_to_send->add_received_num_aborted(mgr->num_aborted_);
                                 break;
                             }
                             else{
@@ -290,12 +303,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                 }
 
                 // If can commit
-			    if(first_tx.first == num_lc_txns_ && mgr->CanSCToCommit(scheduler->pc_list[num_lc_txns_%sc_array_size]) == SUCCESS){
+			    if(first_tx.first == num_lc_txns_ && mgr->CanSCToCommit(scheduler->pc_list[tx_index]) == SUCCESS){
                     if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
                         ++Sequencer::num_committed;
                     if(mgr->get_txn()->multipartition()){
-                        std::fill(scheduler->pc_buffer[num_lc_txns_%sc_array_size], scheduler->pc_buffer[num_lc_txns_%sc_array_size]+scheduler->pc_buffer_size, -1);
-                        std::fill(scheduler->pc_list[num_lc_txns_%sc_array_size], scheduler->pc_list[num_lc_txns_%sc_array_size]+scheduler->multi_parts, -1);
+                        std::fill(scheduler->pc_buffer[tx_index], scheduler->pc_buffer[tx_index]+scheduler->pc_buffer_size, -1);
+                        std::fill(scheduler->pc_list[tx_index], scheduler->pc_list[tx_index]+scheduler->multi_parts, -1);
+                        //for (int i = 0; i < scheduler->multi_parts; ++i)
+                        //    LOG(tx_index, " new value is "<<scheduler->pc_list[tx_index][i]);
                     }
                     ++num_lc_txns_;
                     LOG(first_tx.first, " committed, num lc txn is "<<num_lc_txns_);
@@ -304,6 +319,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
                 if (!did_something){
                     if (msg_to_send){
+                        LOG(-1, " trying to send something, first mgr is "<<reinterpret_cast<int64>(first_mgr)<<", msg to send is "<<reinterpret_cast<int64>(msg_to_send));
                         first_mgr->ConfirmAndSend(msg_to_send);
                         delete msg_to_send;
                     }
@@ -311,8 +327,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                 }
                 else{
                     tx_index = (tx_index+1)%sc_array_size; 
-                    LOG(tx_index, " is going to be checked, because I have finished previous txn");
-                    first_tx = scheduler->sc_txn_list[tx_index%sc_array_size];
+                    first_tx = scheduler->sc_txn_list[tx_index];
+                    LOG(tx_index, " is going to be checked, because I have finished previous txn, first is "<<first_tx.first);
                 }
 		    }
 		    pthread_mutex_unlock(&scheduler->commit_tx_mutex);
@@ -443,7 +459,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 	      }
 	      else if(message.type() == MessageProto::READ_CONFIRM){
-	    	  AGGRLOG(StringToInt(message.destination_channel()), "I got read confirm");
+	    	  AGGRLOG(StringToInt(message.destination_channel()), "I got read confirm, received num aborted is "<<message.received_num_aborted_size());
               int64 current_tx_id = atoi(message.destination_channel().c_str()); 
               if(message.num_aborted() != -1) {
                   StorageManager* manager = active_g_tids[current_tx_id];
@@ -451,60 +467,72 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               }
               ++current_tx_id;
               if ( message.received_num_aborted_size() > 0 ){
-                  int a_index = 0, prev_abort = -1, tx_index=current_tx_id % sc_array_size;
+                  int abort_num_i = 0, prev_abort = -1, tx_index=current_tx_id % sc_array_size, i = 0;
                   pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
-                  for(int i = 0; i < message.received_num_aborted_size(); ++i){
+                  while(i < message.received_num_aborted_size()){
 	    	          LOG(current_tx_id, " trying to add pending read confirm!");
                       if(message.received_num_aborted(i) == END) {
-                          if (prev_abort != -1){
-                              scheduler->pc_list[tx_index][a_index-1] = prev_abort; 
-                              //Try to add buffered pcs if possible
-                              while(a_index < scheduler->multi_parts && prev_abort == scheduler->pc_buffer[tx_index][a_index-1+(a_index+1)*a_index/2]) {
-                                  prev_abort = scheduler->pc_buffer[tx_index][a_index+(a_index+1)*a_index/2]; 
-                                  scheduler->pc_list[tx_index][a_index] = prev_abort;
-                                  ++a_index;
-                              }         
-                          }
+                          ++i;
+                          scheduler->pc_list[tx_index][abort_num_i] = message.received_num_aborted(i); 
+	    	              LOG(current_tx_id, " added to "<<abort_num_i<<" of "<<message.received_num_aborted(i));
+                          //Try to add buffered pcs if possible
+                          prev_abort = message.received_num_aborted(i);
+                          ++abort_num_i;
+                          ADD_BUFFERED_AN(scheduler, abort_num_i, tx_index, prev_abort);
                           pthread_mutex_unlock(&scheduler->pc_mutex[tx_index]);
+	    	              LOG(current_tx_id, " is unlocked!");
                           tx_index = (tx_index+1) % sc_array_size;
-                          a_index = 0;
-                          pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
+                          abort_num_i = 0;
+                          if (i < message.received_num_aborted(i)) { 
+                              pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
+                              ++current_tx_id;
+                          }
+	    	              LOG(current_tx_id, " is locked!");
                       } 
                       else{
                           // Received older data; skip all following entry of this 
-                          if(message.received_num_aborted(i) < scheduler->pc_list[tx_index][a_index]){
+	    	              LOG(current_tx_id, " is not end, still trying to add!");
+                          if(message.received_num_aborted(i) < scheduler->pc_list[tx_index][abort_num_i]){
+	    	                  LOG(current_tx_id, " smaller, older data! received is "<<message.received_num_aborted(i)<<", mine is "<<scheduler->pc_list[tx_index][abort_num_i]);
+                              pthread_mutex_unlock(&scheduler->pc_mutex[tx_index]);
                               while(message.received_num_aborted(i) != END)
                                   ++i;
+                              ++i;
                               tx_index = (tx_index+1) % sc_array_size;
-                              a_index = 0;
-                              pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
+                              abort_num_i = 0;
+                              if (i < message.received_num_aborted(i)) 
+                                  pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
                           }
                           // Add too new msg to buffer
-                          else if(message.received_num_aborted(i) > scheduler->pc_list[tx_index][a_index]){
+                          else if(message.received_num_aborted(i) > scheduler->pc_list[tx_index][abort_num_i]){
+	    	                  LOG(current_tx_id, " larger for "<<tx_index<<", "<<abort_num_i<<" newer data! "<<message.received_num_aborted(i)<<", "<<scheduler->pc_list[tx_index][abort_num_i]);
                               if (prev_abort != -1)
                               {
                                   pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
-                                  scheduler->pc_buffer[tx_index][a_index-1] = prev_abort;
+                                  scheduler->pc_buffer[tx_index][abort_num_i-1] = prev_abort;
                                   while(message.received_num_aborted(i) != END){
-                                      scheduler->pc_buffer[tx_index][a_index] = message.received_num_aborted(i);
-                                      ++a_index;
+                                      scheduler->pc_buffer[tx_index][abort_num_i] = message.received_num_aborted(i);
+                                      ++abort_num_i;
                                       ++i;
                                   }
+                                  ++i;
+                                  scheduler->pc_buffer[tx_index][abort_num_i] = message.received_num_aborted(i);
                                   pthread_mutex_unlock(&scheduler->pc_mutex[tx_index]);
                                   tx_index = (tx_index+1) % sc_array_size;
-                                  a_index = 0;
-                                  pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
+                                  abort_num_i = 0;
+                                  if (i < message.received_num_aborted(i)) 
+                                      pthread_mutex_lock(&scheduler->pc_mutex[tx_index]);
                               }
                               else
                                   prev_abort = message.received_num_aborted(i);
                           }
                           else {
-                              ++a_index;
-                              continue;
+	    	                  LOG(current_tx_id, " not old or new, keep going!");
+                              ++abort_num_i;
                           }
                       }
+                      ++i;
                   }
-                  pthread_mutex_unlock(&scheduler->pc_mutex[tx_index]);
               }
 	      }
 	  }
@@ -602,7 +630,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			//AGGRLOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
 			to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 			manager->put_inlist();
-			sc_txn_list[txn->local_txn_id()%sc_array_size] = MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), TRY_COMMIT, manager);
+			sc_txn_list[txn->local_txn_id()%sc_array_size] = pair<int64, StorageManager*>(txn->local_txn_id(), manager);
 			return true;
 		}
 	}
@@ -629,7 +657,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 				AGGRLOG(txn->txn_id(), " sending local read for "<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list, nabt is "<<num_aborted);
                 if (num_aborted != -1 ){
                     manager->put_inlist();
-                    put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), num_aborted, manager);
+                    put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), manager);
                 }
 			}
 			else{
@@ -667,6 +695,8 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
                     if(txn->multipartition()){
                         std::fill(scheduler->pc_buffer[num_lc_txns_%sc_array_size], scheduler->pc_buffer[num_lc_txns_%sc_array_size]+scheduler->pc_buffer_size, -1);
                         std::fill(scheduler->pc_list[num_lc_txns_%sc_array_size], scheduler->pc_list[num_lc_txns_%sc_array_size]+scheduler->multi_parts, -1);
+                        //for (int i = 0; i < scheduler->multi_parts; ++i)
+                        //    LOG(num_lc_txns_%sc_array_size, " new value is "<<scheduler->pc_list[num_lc_txns_%sc_array_size][i]);
                     }
 					++num_lc_txns_;
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node){
@@ -695,7 +725,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 						manager->SendLocalReads(true);
 					to_sc_txns_[thread]->push(make_pair(txn->txn_id(), txn->local_txn_id()));
 					manager->put_inlist();
-					put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), TRY_COMMIT, manager);
+					put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), manager);
 					active_l_tids[txn->local_txn_id()] = manager;
 					return true;
 				}
@@ -710,7 +740,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					int num_aborted = manager->SendLocalReads(false);
                     if (num_aborted != -1 ){
                         manager->put_inlist();
-                        put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), num_aborted, manager);
+                        put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), manager);
                     }
 				}
 				else{
@@ -718,7 +748,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 					//LOG(txn->local_txn_id(), "s reminder is  "<<txn->local_txn_id()%scheduler->sc_array_size<<", org reminder is "<<sc_txn_list[txn->local_txn_id()%scheduler->sc_array_size].first%scheduler->sc_array_size<<", size is "<<scheduler->sc_array_size);
 					manager->put_inlist();
 					//sc_txn_list[txn->local_txn_id()%sc_array_size] = MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), TRY_COMMIT, manager);
-					put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), TRY_COMMIT, manager);
+					put_to_sclist(sc_txn_list[txn->local_txn_id()%sc_array_size], txn->local_txn_id(), manager);
 					LOG(txn->local_txn_id(), " is added to sc list, addr is "<<reinterpret_cast<int64>(manager));
 				}
 				manager->ApplyChange(false);

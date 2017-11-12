@@ -75,6 +75,7 @@ class StorageManager {
 		  message_->set_confirmed(true);
 		  ASSERT(abort_bit_ == num_aborted_);
 	  }
+      LOG(txn_->txn_id(), " sending read, to confirm is "<<if_to_confirm);
       if (num_aborted_ == abort_bit_) {
           message_->set_num_aborted(num_aborted_);
           for (int i = 0; i < txn_->writers().size(); i++) {
@@ -97,19 +98,21 @@ class StorageManager {
       }
   }
 
-    inline bool CanAddC(int last_restarted, bool& cas_resend){
+    inline bool CanAddC(bool& cas_resend){
         //Stop already if is not MP txn
         if (txn_->multipartition() == false) {
             cas_resend = false;
+            LOG(txn_->txn_id(), " checking can add c, false because not multi");
             return false;
         }
         else {
-            if (spec_committed_){
+            if (!has_confirmed && spec_committed_){
                 // Spec committed, has sent values and
-                if (last_restarted == abort_bit_){
+                if (num_aborted_ == abort_bit_){
                     // Not yet sent pc: this guy should send confirm, but cascading resend should stop
                     if (last_add_pc == -1){
                         cas_resend = false;
+                        LOG(txn_->txn_id(), " checking can add c, true");
                         return true;
                     }
                     else{
@@ -117,21 +120,27 @@ class StorageManager {
                         ASSERT(last_add_pc <= abort_bit_);
                         if (last_add_pc < abort_bit_ || cas_resend){
                             cas_resend = true;
+                            LOG(txn_->txn_id(), " checking can add c, true");
                             return true;
                         }
-                        else
+                        else{
+                            LOG(txn_->txn_id(), " checking can add c, false because last_add_pc is "<<last_add_pc<<", abort bit is "<<abort_bit_<<", cas is "<<cas_resend);
                             return false;
+                        }
                     }
                 }
                 else{
                     // if the sent value is too old, then should resent the value first! This should be handled by other threads (hopefully..)
                     cas_resend = true;
+                    LOG(txn_->txn_id(), " checking can add c, false because aborted more than restarted");
                     return false;
                 }
             }
-            else
+            else{
                 // If has not even spec-committed, do not send confirm for him now. 
+                LOG(txn_->txn_id(), " checking can add c, false because not sc");
                 return false;
+            }
         }
     }
 
@@ -214,12 +223,13 @@ class StorageManager {
   }
 
   inline bool GotMatchingPCs(int* pcs){
-      for (int i = 0; i < writer_id-1; ++i){
+	  LOG(txn_->txn_id(), " checking matching pcs");
+      for (int i = 0; i < txn_->writers_size(); ++i){
           LOG(txn_->txn_id(), " pc is "<<pcs[i]<<", second is "<<latest_aborted_num[i].second);
           if(pcs[i] != latest_aborted_num[i].second)
               return false;
       }
-	  LOG(txn_->txn_id(), " got matching pcs return true");
+	  LOG(txn_->txn_id(), " got matching pcs return true, writerid is "<<writer_id);
       return true;
   }
 

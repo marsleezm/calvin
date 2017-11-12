@@ -36,21 +36,24 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		message_->set_type(MessageProto::READ_RESULT);
 		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
-		affecting_readers = new int[txn_->readers_size()-1];
-		for(int i = 0; i< txn_->readers_size()-1; ++i)
-			affecting_readers[i] = -1;
+
+        num_unconfirmed_read = txn_->readers_size() - 1;
+
+        for (int i = 0; i<txn_->readers_size(); ++i){
+            latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
+            involved_nodes = involved_nodes | (1 << txn_->readers(i));
+            if (txn_->readers(i) == configuration_->this_node_id)
+                writer_id = i; 
+        }
+        affecting_readers = new int[txn_->readers_size()-1];
+        for(int i = 0; i< writer_id; ++i)
+            affecting_readers[i] = txn_->readers(i);
 	}
 	else{
 		message_ = NULL;
-		affecting_readers = NULL;
+        affecting_readers = NULL;
+        num_unconfirmed_read = 0;
 	}
-	num_unconfirmed_read = txn_->readers_size() - 1;
-	for (int i = 0; i<txn_->readers_size(); ++i){
-		latest_aborted_num.push_back(make_pair(txn_->readers(i), -1));
-        involved_nodes = involved_nodes | (1 << txn_->readers(i));
-        if (txn_->readers(i) == configuration_->this_node_id)
-            writer_id = i; 
-    }
 }
 
 
@@ -61,15 +64,16 @@ bool StorageManager::ConfirmAndSend(MessageProto* msg){
     }
     else{
         ASSERT(has_confirmed == false);
-        LOG(txn_->txn_id(), " trying to send confirm, last restarted is "<<num_aborted_<<", abort bit is "<<abort_bit_);
+        LOG(txn_->txn_id(), " trying to send confirm, last restarted is "<<num_aborted_<<", abort bit is "<<abort_bit_<<", num aborted is "<<msg->received_num_aborted_size());
         has_confirmed = true;
-        for (int i = 0; i < txn_->writers(i); ++i) {
+        msg->set_destination_channel(IntToString(txn_->txn_id()));
+        for (int i = 0; i < txn_->writers_size(); ++i) {
             if (txn_->writers(i) != configuration_->this_node_id) {
-                msg->set_destination_node(configuration_->this_node_id);
+                msg->set_destination_node(txn_->writers(i));
+                LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
                 connection_->Send1(*msg);
             }
         }
-        AGGRLOG(txn_->txn_id(), " sent confirm");
         return true;
     }
 }
@@ -187,7 +191,6 @@ void StorageManager::ApplyChange(bool is_committing){
 // TODO: add abort logic
 // TODO: add logic to delete keys that do not exist
 int StorageManager::HandleReadResult(const MessageProto& message) {
-  ASSERT(message.type() == MessageProto::READ_RESULT);
   LOG(txn_->txn_id(), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read<<", msg confirmed is "<<message.confirmed());
   int source_node = message.source_node();
   if (message.confirmed()){

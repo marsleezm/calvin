@@ -86,9 +86,8 @@ class DeterministicScheduler : public Scheduler {
       }
   }
 
-  inline void put_to_sclist(MyTuple<int64, int, StorageManager*>& loc, int64_t tx_id, int sign, StorageManager* mgr){
-	  loc.third = mgr;
-	  loc.second = sign;
+  inline void put_to_sclist(pair<int64, StorageManager*>& loc, int64_t tx_id, StorageManager* mgr){
+	  loc.second = mgr;
 	  loc.first = tx_id;
   }
 
@@ -151,11 +150,10 @@ class DeterministicScheduler : public Scheduler {
   int* suspend_block;
   int pc_buffer_size;
   int multi_parts;
-  int num_involved_nodes;
   bool cas_resend = false;
 
   pair<int64, int64>** latency;
-  MyTuple<int64, int, StorageManager*>* sc_txn_list;
+  pair<int64, StorageManager*>* sc_txn_list;
   int** pc_list;
   int** pc_buffer;
   pthread_mutex_t* pc_mutex;
