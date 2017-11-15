@@ -60,7 +60,6 @@ class StorageManager {
 		  	  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue);
 
     inline void InitUnconfirmMsg(MessageProto* msg){
-        msg->clear_num_aborted();
         msg->clear_received_num_aborted();
         msg->set_destination_channel(IntToString(txn_->txn_id()));
         // The first txn is not confirmed yet
@@ -102,7 +101,7 @@ class StorageManager {
         //Stop already if is not MP txn
         if (txn_->multipartition() == false) {
             cas_resend = false;
-            LOG(txn_->txn_id(), " checking can add c, false because not multi");
+            //LOG(txn_->txn_id(), " checking can add c, false because not multi");
             return false;
         }
         else {
@@ -146,7 +145,7 @@ class StorageManager {
 
     inline void AddedPC(){ sent_pc = true; last_add_pc = num_aborted_; }
 
-    bool ConfirmAndSend(MessageProto* msg);
+    bool SendSC(MessageProto* msg);
     void SetupTxn(TxnProto* txn);
 
   //Value* ReadObject(const Key& key);
@@ -207,36 +206,35 @@ class StorageManager {
   }
 
   // Can commit, if the transaction is read-only or has spec-committed.
-  inline int CanSCToCommit(int* pcs) {
-	  LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_
-			  <<", unconfirmed read is "<<num_unconfirmed_read);
+  inline int CanSCToCommit() {
+	  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
 	  if (ReadOnly())
 		  return SUCCESS;
 	  else{
 		  if(num_aborted_ != abort_bit_)
 			  return ABORT;
-		  else if(spec_committed_ && (num_unconfirmed_read == 0 || GotMatchingPCs(pcs)))
+		  else if(spec_committed_ && (num_unconfirmed_read == 0 || GotMatchingPCs()))
 			  return SUCCESS;
 		  else
 			  return NOT_CONFIRMED;
 	  }
   }
 
-  inline bool GotMatchingPCs(int* pcs){
+  inline bool GotMatchingPCs(){
 	  LOG(txn_->txn_id(), " checking matching pcs");
       for (int i = 0; i < txn_->writers_size(); ++i){
-          LOG(txn_->txn_id(), " pc is "<<pcs[i]<<", second is "<<latest_aborted_num[i].second);
-          if(pcs[i] != latest_aborted_num[i].second)
+          LOG(txn_->txn_id(), i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
+          if(i != writer_id and (sc_list[i] == -1 or sc_list[i] != recv_rs[i].second))
               return false;
       }
-	  LOG(txn_->txn_id(), " got matching pcs return true, writerid is "<<writer_id);
+	  //LOG(txn_->txn_id(), " got matching pcs return true, writerid is "<<writer_id);
       return true;
   }
 
-  inline int CanCommit(int* pcs) {
+  inline int CanCommit() {
 	  if (num_aborted_ != abort_bit_)
 		  return ABORT;
-	  else if(num_unconfirmed_read == 0 || GotMatchingPCs(pcs))
+	  else if(num_unconfirmed_read == 0 || GotMatchingPCs())
 		  return SUCCESS;
 	  else{
 		  LOG(txn_->txn_id(), " not confirmed, uc read is "<<num_unconfirmed_read);
@@ -291,6 +289,8 @@ class StorageManager {
 	    return true;  // Not this node's problem.
   }
 
+  void AddPendingSC();
+
   //void AddKeys(string* keys) {keys_ = keys;}
   //vector<string> GetKeys() { return keys_;}
 
@@ -301,17 +301,20 @@ class StorageManager {
 
   void Abort();
   void ApplyChange(bool is_committing);
+  void AddSC(MessageProto& msg, int& i);
 
   inline void AddReadConfirm(int node_id, int num_aborted){
-	  for(uint i = 0; i<latest_aborted_num.size(); ++i){
-		  if(latest_aborted_num[i].first == node_id){
-			  if(latest_aborted_num[i].second == num_aborted || num_aborted == 0) {
+      LOG(txn_->txn_id(), " trying to add read confirm");
+	  for(uint i = 0; i<recv_rs.size(); ++i){
+		  if(recv_rs[i].first == node_id){
+			  if(recv_rs[i].second == num_aborted || num_aborted == 0) {
+                  sc_list[i] = num_aborted;
 				  --num_unconfirmed_read;
-				  AGGRLOG(txn_->txn_id(), "done confirming read from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
+				  LOG(txn_->txn_id(), "done confirming read for "<<i<<" from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
 			  }
 			  else{
 				  pending_read_confirm.push_back(make_pair(node_id, num_aborted));
-				  AGGRLOG(txn_->txn_id(), "failed confirming read from node "<<node_id<<", local is "<<latest_aborted_num[i].second
+				  LOG(txn_->txn_id(), "failed confirming read from node "<<node_id<<", local is "<<recv_rs[i].second
 						  <<", got is "<<num_aborted);
 			  }
 			  break;
@@ -363,15 +366,18 @@ class StorageManager {
   // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
   // in my transaction
   bool after_local_node;
-  int* affecting_readers;
+  int* prev_parts;
   int node_count;
 
+  int required_reads;
   int num_unconfirmed_read;
-  vector<pair<int, int>> latest_aborted_num;
   vector<pair<int, int>> pending_read_confirm;
 
  public:
   // Indicate whether the message contains any value that should be sent
+  vector<pair<int, int>> recv_rs;
+  int* sc_list;
+  vector<vector<int>> pending_sc;
   bool message_has_value_;
   bool is_suspended_;
   bool spec_committed_;
@@ -381,6 +387,7 @@ class StorageManager {
   int involved_nodes;
   atomic<int> abort_bit_;
   int num_aborted_;
+  pthread_mutex_t lock;
 
   Key suspended_key;
 

@@ -68,6 +68,7 @@ class DeterministicScheduler : public Scheduler {
 
  public:
   static int64_t num_lc_txns_;
+  static int64_t can_gc_txns_;
   static atomic<int64_t> latest_started_tx;
 
  protected:
@@ -154,9 +155,6 @@ class DeterministicScheduler : public Scheduler {
 
   pair<int64, int64>** latency;
   pair<int64, StorageManager*>* sc_txn_list;
-  int** pc_list;
-  int** pc_buffer;
-  pthread_mutex_t* pc_mutex;
   pthread_mutex_t commit_tx_mutex;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_
