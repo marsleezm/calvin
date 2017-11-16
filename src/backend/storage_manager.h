@@ -123,7 +123,7 @@ class StorageManager {
                             return true;
                         }
                         else{
-                            LOG(txn_->txn_id(), " checking can add c, false because last_add_pc is "<<last_add_pc<<", abort bit is "<<abort_bit_<<", cas is "<<cas_resend);
+                            //LOG(txn_->txn_id(), " checking can add c, false because last_add_pc is "<<last_add_pc<<", abort bit is "<<abort_bit_<<", cas is "<<cas_resend);
                             return false;
                         }
                     }
@@ -137,7 +137,7 @@ class StorageManager {
             }
             else{
                 // If has not even spec-committed, do not send confirm for him now. 
-                LOG(txn_->txn_id(), " checking can add c, false because not sc");
+                //LOG(txn_->txn_id(), " can not add c because not sc or confirmed");
                 return false;
             }
         }
@@ -221,11 +221,12 @@ class StorageManager {
   }
 
   inline bool GotMatchingPCs(){
-	  LOG(txn_->txn_id(), " checking matching pcs");
+	  //LOG(txn_->txn_id(), " checking matching pcs");
       for (int i = 0; i < txn_->writers_size(); ++i){
-          LOG(txn_->txn_id(), i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
-          if(i != writer_id and (sc_list[i] == -1 or sc_list[i] != recv_rs[i].second))
+          if(i != writer_id and (sc_list[i] == -1 or sc_list[i] != recv_rs[i].second)){
+              LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
               return false;
+          }
       }
 	  //LOG(txn_->txn_id(), " got matching pcs return true, writerid is "<<writer_id);
       return true;
@@ -245,8 +246,6 @@ class StorageManager {
   inline void Init(){
 	  exec_counter_ = 0;
 	  is_suspended_ = false;
-	  after_local_node = false;
-	  node_count = -1;
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
@@ -304,7 +303,7 @@ class StorageManager {
   void AddSC(MessageProto& msg, int& i);
 
   inline void AddReadConfirm(int node_id, int num_aborted){
-      LOG(txn_->txn_id(), " trying to add read confirm");
+      LOG(txn_->txn_id(), " trying to add read confirm from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
 	  for(uint i = 0; i<recv_rs.size(); ++i){
 		  if(recv_rs[i].first == node_id){
 			  if(recv_rs[i].second == num_aborted || num_aborted == 0) {
@@ -365,9 +364,6 @@ class StorageManager {
 
   // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
   // in my transaction
-  bool after_local_node;
-  int* prev_parts;
-  int node_count;
 
   int required_reads;
   int num_unconfirmed_read;

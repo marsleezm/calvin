@@ -92,9 +92,8 @@ class DeterministicScheduler : public Scheduler {
 	  loc.first = tx_id;
   }
 
-  bool ExecuteTxn(StorageManager* manager, int thread,
-		  unordered_map<int64_t, StorageManager*>& active_txns, unordered_map<int64_t, StorageManager*>& active_l_txns,
-		  int& latency_count, pair<int64, int64>* latency_array, int this_node, int sc_array_size, DeterministicScheduler* scheduler);
+  bool ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*>& active_txns,
+    int& latency_count, pair<int64, int64>* latency_array, int this_node, int sc_array_size, DeterministicScheduler* scheduler);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
@@ -155,6 +154,7 @@ class DeterministicScheduler : public Scheduler {
 
   pair<int64, int64>** latency;
   pair<int64, StorageManager*>* sc_txn_list;
+  pair<int64, StorageManager*>* local_id_mgr;
   pthread_mutex_t commit_tx_mutex;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_
