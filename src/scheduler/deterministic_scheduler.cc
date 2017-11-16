@@ -201,18 +201,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  // Try to commit txns one by one
 		  MyTuple<int64_t, int, StorageManager*> to_commit_tx = scheduler->sc_txn_list[num_lc_txns_%sc_array_size];
 		  //if(! (to_commit_tx.first == prev_txn && prev_txn == prev_prev_txn))
-		  LOG(-1, " num lc is "<<num_lc_txns_<<", prev txn is  "<<prev_txn<<", prev prev is "<<prev_prev_txn<<", "<<
-				  to_commit_tx.first<<"is the first one in queue, status is "<<to_commit_tx.second);
+		  //LOG(-1, " num lc is "<<num_lc_txns_<< ", "<<to_commit_tx.first<<"is the first one in queue, status is "<<to_commit_tx.second);
 		  //prev_prev_txn = prev_txn;
 		  //prev_txn = to_commit_tx.first;
 		  while(true){
 			  // -1 means this txn should be committed; otherwise, it is the last_restarted number of the txn, which wishes to send confirm
 			  if(to_commit_tx.first == num_lc_txns_){
 				  StorageManager* mgr = to_commit_tx.third;
-				  LOG(to_commit_tx.first, " dealing with it, mgr is "<<reinterpret_cast<int64>(mgr));
-				  if (to_commit_tx.second != TRY_COMMIT){
+				  LOG(to_commit_tx.first, " dealing with it, mgr is "<<reinterpret_cast<int64>(mgr)<<", unconfirmd is "<<mgr->affecting_unconfirmed_read);
+				  if (mgr->has_confirmed == false and mgr->affecting_unconfirmed_read == 0){
 					  LOG(to_commit_tx.first, " trying to send confirm for him, second is "<<to_commit_tx.second);
-					  mgr->SendConfirm(to_commit_tx.second);
+					  mgr->SendConfirm();
 					  LOG(to_commit_tx.first, " sent, setting value to "<<TRY_COMMIT);
 					  scheduler->sc_txn_list[num_lc_txns_%sc_array_size].second = TRY_COMMIT;
 				  }

@@ -87,7 +87,7 @@ class StorageManager {
 	  message_has_value_ = false;
   }
 
-  void SendConfirm(int last_restarted);
+  void SendConfirm();
   void SetupTxn(TxnProto* txn);
 
   //Value* ReadObject(const Key& key);
@@ -149,8 +149,7 @@ class StorageManager {
 
   // Can commit, if the transaction is read-only or has spec-committed.
   inline int CanSCToCommit() {
-	  LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_
-			  <<", unconfirmed read is "<<num_unconfirmed_read);
+	  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_<<", unconfirmed read is "<<num_unconfirmed_read);
 	  if (ReadOnly())
 		  return SUCCESS;
 	  else{
@@ -176,7 +175,6 @@ class StorageManager {
   inline void Init(){
 	  exec_counter_ = 0;
 	  is_suspended_ = false;
-	  after_local_node = false;
 	  node_count = -1;
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
@@ -236,6 +234,8 @@ class StorageManager {
 		  if(latest_aborted_num[i].first == node_id){
 			  if(latest_aborted_num[i].second == num_aborted || num_aborted == 0) {
 				  --num_unconfirmed_read;
+                  if(i<myown_id)
+                      --affecting_unconfirmed_read;
 				  AGGRLOG(txn_->txn_id(), "done confirming read from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
 			  }
 			  else{
@@ -291,11 +291,11 @@ class StorageManager {
 
   // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
   // in my transaction
-  bool after_local_node;
-  int* affecting_readers;
+  uint* affecting_readers;
   int node_count;
 
   int num_unconfirmed_read;
+  int affecting_unconfirmed_read;
   vector<pair<int, int>> latest_aborted_num;
   vector<pair<int, int>> pending_read_confirm;
 
@@ -306,6 +306,7 @@ class StorageManager {
   bool spec_committed_;
   atomic<int> abort_bit_;
   int num_aborted_;
+  uint myown_id;
 
   Key suspended_key;
 
