@@ -97,11 +97,9 @@ class StorageManager {
       }
   }
 
-    inline bool CanAddC(bool& cas_resend){
+    inline bool CanAddC(){
         //Stop already if is not MP txn
         if (txn_->multipartition() == false) {
-            cas_resend = false;
-            //LOG(txn_->txn_id(), " checking can add c, false because not multi");
             return false;
         }
         else {
@@ -110,15 +108,13 @@ class StorageManager {
                 if (num_aborted_ == abort_bit_){
                     // Not yet sent pc: this guy should send confirm, but cascading resend should stop
                     if (last_add_pc == -1){
-                        cas_resend = false;
                         LOG(txn_->txn_id(), " checking can add c, true");
                         return true;
                     }
                     else{
                         // Has already sent pc, but should resend, if cascading abort or if the sent pc is too old already. 
                         ASSERT(last_add_pc <= abort_bit_);
-                        if (last_add_pc < abort_bit_ || cas_resend){
-                            cas_resend = true;
+                        if (last_add_pc < abort_bit_){
                             LOG(txn_->txn_id(), " checking can add c, true");
                             return true;
                         }
@@ -130,8 +126,7 @@ class StorageManager {
                 }
                 else{
                     // if the sent value is too old, then should resent the value first! This should be handled by other threads (hopefully..)
-                    cas_resend = true;
-                    LOG(txn_->txn_id(), " checking can add c, false because aborted more than restarted");
+                    LOG(txn_->txn_id(), " checking can add c, false because num aborted is "<<num_aborted_<<", abort bit is "<<abort_bit_);
                     return false;
                 }
             }
@@ -303,13 +298,21 @@ class StorageManager {
   void AddSC(MessageProto& msg, int& i);
 
   inline void AddReadConfirm(int node_id, int num_aborted){
-      LOG(txn_->txn_id(), " trying to add read confirm from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
+      LOG(txn_->txn_id(), " trying to add read confirm from node "<<node_id<<", remaining is "<<num_unconfirmed_read<<", num abort is "<<num_aborted);
 	  for(uint i = 0; i<recv_rs.size(); ++i){
 		  if(recv_rs[i].first == node_id){
 			  if(recv_rs[i].second == num_aborted || num_aborted == 0) {
                   sc_list[i] = num_aborted;
 				  --num_unconfirmed_read;
-				  LOG(txn_->txn_id(), "done confirming read for "<<i<<" from node "<<node_id<<", remaining is "<<num_unconfirmed_read);
+                  added_pc_size = max(added_pc_size, (int)i+1);
+                  if(added_pc_size == writer_id)
+                      added_pc_size = writer_id+1;
+                  if (i < (uint)writer_id){
+                      --prev_unconfirmed;
+                      LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed);
+                  }
+				  LOG(txn_->txn_id(), "done confirming read for "<<i<<" from node "<<node_id<<", remaining is "<<num_unconfirmed_read<<", prev unconfirmed is "<<prev_unconfirmed);
+                  AddPendingSC();
 			  }
 			  else{
 				  pending_read_confirm.push_back(make_pair(node_id, num_aborted));
@@ -365,8 +368,9 @@ class StorageManager {
   // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
   // in my transaction
 
-  int required_reads;
+  int added_pc_size = 0;
   int num_unconfirmed_read;
+  int prev_unconfirmed;
   vector<pair<int, int>> pending_read_confirm;
 
  public:

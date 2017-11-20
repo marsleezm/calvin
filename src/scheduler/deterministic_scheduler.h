@@ -129,16 +129,11 @@ class DeterministicScheduler : public Scheduler {
   // and enforce equivalence to transaction orders.
   // DeterministicLockManager* lock_manager_;
 
-  // Sockets for communication between main scheduler thread and worker threads.
-//  socket_t* requests_out_;
-//  socket_t* requests_in_;
-//  socket_t* responses_out_[NUM_THREADS];
-//  socket_t* responses_in_;
   // The queue of fetched transactions
   int num_threads;
 
   // Transactions that can be committed if all its previous txns have been local-committed
-  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >** to_sc_txns_;
+  int64** to_sc_txns_;
 
   // Transactions that can only resume execution after all its previous txns have been local-committed
 
@@ -150,7 +145,7 @@ class DeterministicScheduler : public Scheduler {
   int* suspend_block;
   int pc_buffer_size;
   int multi_parts;
-  bool cas_resend = false;
+  int max_sc;
 
   pair<int64, int64>** latency;
   pair<int64, StorageManager*>* sc_txn_list;

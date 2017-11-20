@@ -406,6 +406,7 @@ void Sequencer::RunReader() {
       abort[second] = (Sequencer::num_aborted_-last_aborted) / (now_time- time);
 
       ++second;
+      /*
 	  if(last_committed && Sequencer::num_committed-last_committed == 0){
 		  for(int i = 0; i<num_threads; ++i){
                 if (scheduler_->to_sc_txns_[i]->size())
@@ -420,6 +421,7 @@ void Sequencer::RunReader() {
 			//	  std::cout<<"Pend txn size is "<<scheduler_->pending_txns_[i]->top().second<<"\n";
 		  }
 	  }
+      */
 
       // Reset txn count.
       time = now_time;
@@ -456,8 +458,7 @@ void Sequencer::RunLoader(){
 			<< num_pend_txns_ << " pending\n" << std::flush;
 	  if(last_committed && Sequencer::num_committed-last_committed == 0){
 		  for(int i = 0; i<num_threads; ++i){
-			  std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-				  <<", num committed txn is "<<Sequencer::num_committed
+			  std::cout<< " doing nothing, num committed txn is "<<Sequencer::num_committed
 				  <<", waiting queue is"<<std::endl;
 			  //for(uint32 j = 0; j<scheduler_->waiting_queues[i]->Size(); ++j){
 			//	  pair<int64, int> t = scheduler_->waiting_queues[i]->Get(j);
