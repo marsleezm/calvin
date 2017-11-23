@@ -68,18 +68,34 @@ class StorageManager {
 
   ~StorageManager();
 
-  inline int SendLocalReads(bool if_to_confirm){
+  inline bool TryConfirm(MessageProto* msg_to_send){
+      bool result = has_confirmed.exchange(true); 
+      if(result == false){
+          msg_to_send->set_num_aborted(num_aborted_);
+          return true;
+      }
+      else
+          return false;
+  }
+
+  inline void SendLocalReads(bool if_to_confirm){
 	  if(if_to_confirm){
-		  has_confirmed = true;
-		  message_->set_confirmed(true);
-		  ASSERT(abort_bit_ == num_aborted_);
+          bool result = has_confirmed.exchange(true); 
+          if(result == false){
+              has_confirmed = true;
+              message_->set_confirmed(true);
+              ASSERT(abort_bit_ == num_aborted_);
+          }
 	  }
-      LOG(txn_->txn_id(), " sending read, to confirm is "<<if_to_confirm);
+      if (if_to_confirm)
+          LOG(txn_->txn_id(), " sending confirmed read of restarted "<<num_aborted_);
+      else
+          LOG(txn_->txn_id(), " sending unconfirmed read of restarted "<<num_aborted_);
       if (num_aborted_ == abort_bit_) {
           message_->set_num_aborted(num_aborted_);
           for (int i = 0; i < txn_->writers().size(); i++) {
               if (txn_->writers(i) != configuration_->this_node_id) {
-                  LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
+                  //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
                   //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
                   message_->set_destination_node(txn_->writers(i));
                   connection_->Send1(*message_);
@@ -89,12 +105,9 @@ class StorageManager {
           message_->clear_keys();
           message_->clear_values();
           message_has_value_ = false;
-          return num_aborted_;
       }
-      else{
+      else
           ASSERT(if_to_confirm == false);
-          return -1; 
-      }
   }
 
     inline bool CanAddC(){
@@ -107,15 +120,15 @@ class StorageManager {
                 // Spec committed, has sent values and
                 if (num_aborted_ == abort_bit_){
                     // Not yet sent pc: this guy should send confirm, but cascading resend should stop
-                    if (last_add_pc == -1){
-                        LOG(txn_->txn_id(), " checking can add c, true");
+                    if (last_add_pc == -1 and !aborting){
+                        //LOG(txn_->txn_id(), " checking can add c, true");
                         return true;
                     }
                     else{
                         // Has already sent pc, but should resend, if cascading abort or if the sent pc is too old already. 
                         ASSERT(last_add_pc <= abort_bit_);
-                        if (last_add_pc < abort_bit_){
-                            LOG(txn_->txn_id(), " checking can add c, true");
+                        if (last_add_pc < abort_bit_ and !aborting){
+                            //LOG(txn_->txn_id(), " checking can add c, true");
                             return true;
                         }
                         else{
@@ -208,7 +221,10 @@ class StorageManager {
 	  else{
 		  if(num_aborted_ != abort_bit_)
 			  return ABORT;
-		  else if(spec_committed_ && (num_unconfirmed_read == 0 || GotMatchingPCs()))
+          else if (!spec_committed_)
+			  return ABORT;
+          // Don't remove the compare in the last part: this is added for concurrency issue
+		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting)
 			  return SUCCESS;
 		  else
 			  return NOT_CONFIRMED;
@@ -218,8 +234,8 @@ class StorageManager {
   inline bool GotMatchingPCs(){
 	  //LOG(txn_->txn_id(), " checking matching pcs");
       for (int i = 0; i < txn_->writers_size(); ++i){
-          if(i != writer_id and (sc_list[i] == -1 or sc_list[i] != recv_rs[i].second)){
-              LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
+          if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second){
+              //LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
               return false;
           }
       }
@@ -230,7 +246,8 @@ class StorageManager {
   inline int CanCommit() {
 	  if (num_aborted_ != abort_bit_)
 		  return ABORT;
-	  else if(num_unconfirmed_read == 0 || GotMatchingPCs())
+      // Don't remove the compare in the last part: this is added for concurrency issue
+	  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and num_aborted_ == abort_bit_)
 		  return SUCCESS;
 	  else{
 		  LOG(txn_->txn_id(), " not confirmed, uc read is "<<num_unconfirmed_read);
@@ -366,9 +383,9 @@ class StorageManager {
   TPCCArgs* tpcc_args;
 
   // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
-  // in my transaction
 
   int added_pc_size = 0;
+  bool aborting = false;
   int num_unconfirmed_read;
   int prev_unconfirmed;
   vector<pair<int, int>> pending_read_confirm;
@@ -392,7 +409,7 @@ class StorageManager {
   Key suspended_key;
 
   /****** For statistics ********/
-  bool has_confirmed = false;
+  std::atomic<bool> has_confirmed = ATOMIC_FLAG_INIT;
   bool in_list = false;
 };
 

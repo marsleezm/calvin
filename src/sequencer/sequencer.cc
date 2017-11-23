@@ -496,6 +496,7 @@ void* Sequencer::FetchMessage() {
 		  			  txn->ParseFromString(batch_message->data(i));
 		  			  txn->set_local_txn_id(fetched_txn_num_++);
 		  			  txns_queue_->Push(txn);
+                      LOG(-1, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
 		  			  ++num_fetched_this_round;
 		  		  }
 		  		  delete batch_message;
