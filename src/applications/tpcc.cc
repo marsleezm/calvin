@@ -24,7 +24,7 @@ void TPCC::SetItem(Key key, Value* value) const { ItemList[key] = value; }
 // The load generator can be called externally to return a
 // transaction proto containing a new type of transaction.
 void TPCC::NewTxn(int64 txn_id, int txn_type,
-                       Configuration* config, TxnProto* txn) const {
+                       Configuration* config, TxnProto* txn, int remote_node) const {
   // Create the new transaction object
 
   // Set the transaction's standard attributes
@@ -34,13 +34,8 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
   txn->set_status(TxnProto::NEW);
 
   bool mp = txn->multipartition();
-  int remote_node = -1, remote_warehouse_id = -1;
+  int remote_warehouse_id = -1;
   if (mp) {
-     do {
-       remote_node = rand() % config->all_nodes.size();
-     } while (config->all_nodes.size() > 1 &&
-              remote_node == config->this_node_id);
-
      do {
  		remote_warehouse_id = rand() % (WAREHOUSES_PER_NODE *
  										config->all_nodes.size());

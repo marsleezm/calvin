@@ -214,63 +214,38 @@ void Sequencer::RunWriter() {
     batch.set_batch_number(batch_number);
     batch.clear_data();
 
-#ifdef PREFETCHING
-    // Include txn requests from earlier that have now had time to prefetch.
-    while (!deconstructor_invoked_ &&
-           GetTime() < epoch_start + epoch_duration_) {
-      multimap<double, TxnProto*>::iterator it = fetching_txns.begin();
-      if (it == fetching_txns.end() || it->first > GetTime() ||
-          batch.data_size() >= max_batch_size) {
-        break;
-      }
-      TxnProto* txn = it->second;
-      fetching_txns.erase(it);
-      string txn_string;
-      txn->SerializeToString(&txn_string);
-      batch.add_data(txn_string);
-      delete txn;
-    }
-#endif
-
     // Collect txn requests for this epoch.
+    unordered_map<int64, vector<TxnProto*>> txn_map;
     int txn_id_offset = 0;
+    string txn_string;
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
       if (batch.data_size() < max_batch_size) {
         TxnProto* txn;
-        string txn_string;
-        client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime());
-#ifdef LATENCY_TEST
-        if (txn->txn_id() % SAMPLE_RATE == 0) {
-          sequencer_recv[txn->txn_id() / SAMPLE_RATE] =
-              epoch_start
-            + epoch_duration_ * (static_cast<double>(rand()) / RAND_MAX);
-        }
-#endif
-#ifdef PREFETCHING
-        double wait_time = PrefetchAll(storage_, txn);
-        if (wait_time > 0) {
-          fetching_txns.insert(std::make_pair(epoch_start + wait_time, txn));
-        } else {
-          txn->SerializeToString(&txn_string);
-          batch.add_data(txn_string);
-          txn_id_offset++;
-          delete txn;
-        }
-#else
+        int64 involved_nodes = 0;
+        client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime(), involved_nodes);
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
         }
 
-
-        txn->SerializeToString(&txn_string);
-        batch.add_data(txn_string);
+        if(involved_nodes == 0){
+            txn->SerializeToString(&txn_string);
+            batch.add_data(txn_string);
+            delete txn;
+        }
+        else
+            txn_map[involved_nodes].push_back(txn);
         txn_id_offset++;
-        delete txn;
-#endif
       }
+    }
+    for (auto it = txn_map.begin(); it != txn_map.end(); ++it){
+        for(auto txn: it->second) {
+            txn->SerializeToString(&txn_string);
+            batch.add_data(txn_string);
+            delete txn;
+        }
     }
 
 	//std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * max_batch_size <<
@@ -496,7 +471,7 @@ void* Sequencer::FetchMessage() {
 		  			  txn->ParseFromString(batch_message->data(i));
 		  			  txn->set_local_txn_id(fetched_txn_num_++);
 		  			  txns_queue_->Push(txn);
-                      LOG(-1, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
+                      //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
 		  			  ++num_fetched_this_round;
 		  		  }
 		  		  delete batch_message;

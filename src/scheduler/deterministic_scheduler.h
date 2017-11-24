@@ -128,7 +128,7 @@ class DeterministicScheduler : public Scheduler {
   int num_threads;
 
   // Transactions that can be committed if all its previous txns have been local-committed
-  int64** to_sc_txns_;
+  pair<int64, StorageManager*>** to_sc_txns_;
 
   // Transactions that can only resume execution after all its previous txns have been local-committed
 
@@ -143,8 +143,7 @@ class DeterministicScheduler : public Scheduler {
   int max_sc;
 
   pair<int64, int64>** latency;
-  pair<int64, StorageManager*>* sc_txn_list;
-  pair<int64, StorageManager*>* local_id_mgr;
+  MyTuple<int64, int64, StorageManager*>* sc_txn_list;
   pthread_mutex_t commit_tx_mutex;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

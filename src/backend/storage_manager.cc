@@ -22,6 +22,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	txn_ = NULL;
     sc_list = NULL;
     pthread_mutex_init(&lock, NULL);
+    writer_id = -1;
 }
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
@@ -44,7 +45,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
         for (int i = 0; i<txn_->readers_size(); ++i){
             recv_rs.push_back(make_pair(txn_->readers(i), -1));
-            involved_nodes = involved_nodes | (1 << txn_->readers(i));
+            involved_nodes = involved_nodes | (1 << (txn_->readers(i)+1));
             if (txn_->readers(i) == configuration_->this_node_id)
                 writer_id = i; 
         }
@@ -64,6 +65,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
         sc_list = NULL;
         num_unconfirmed_read = 0;
         prev_unconfirmed = 0;
+        writer_id = -1;
 	}
 }
 
@@ -155,8 +157,10 @@ void StorageManager::Abort(){
 	max_counter_ = 0;
     spec_committed_ = false;
 	num_aborted_ = abort_bit_;
-    recv_rs[writer_id].second = num_aborted_;
-    sc_list[writer_id] = num_aborted_;
+    if (writer_id != -1){
+        recv_rs[writer_id].second = num_aborted_;
+        sc_list[writer_id] = num_aborted_;
+    }
 }
 
 // If successfully spec-commit, all data are put into the list and all copied data are deleted
@@ -461,7 +465,8 @@ StorageManager::~StorageManager() {
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
 
-    delete[] sc_list;
+    if (sc_list)
+        delete[] sc_list;
 	delete tpcc_args;
 	delete txn_;
 	delete message_;

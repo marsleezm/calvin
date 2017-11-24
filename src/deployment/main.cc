@@ -46,7 +46,7 @@ class MClient : public Client {
         percent_mp_(mp*100) {
   }
   virtual ~MClient() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
+  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed, int64& involved_nodes) {
 	  srand(seed);
 
 	  if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
@@ -63,6 +63,7 @@ class MClient : public Client {
 			  }
 			  if (i == counter){
 				  parts[i] = new_part;
+                  involved_nodes = involved_nodes | (1 << (new_part+1));
 				  ++counter;
 			  }
 		  }
@@ -130,29 +131,36 @@ class TClient : public Client {
  public:
   TClient(Configuration* config, double mp) : config_(config), percent_mp_(mp*100) {}
   virtual ~TClient() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
+  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed, int64& involved_nodes) {
     TPCC tpcc;
     *txn = new TxnProto();
-    if (abs(rand())%10000 < percent_mp_)
+    int remote_node = -1;
+    if (abs(rand())%10000 < percent_mp_){
         (*txn)->set_multipartition(true);
+        do {
+            remote_node = rand() % config_->all_nodes.size();
+        } while (config_->all_nodes.size() > 1 &&
+                  remote_node == config_->this_node_id);
+        involved_nodes = involved_nodes | (1 << (remote_node+1));
+    }
 	else
 		(*txn)->set_multipartition(false);
 
     // New order txn
     int random_txn_type = rand() % 100;
     if (random_txn_type < 45)  {
-      tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+      tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn, remote_node);
     } else if(random_txn_type < 88) {
-      tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+      tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn, remote_node);
     } else if(random_txn_type < 92) {
     	(*txn)->set_multipartition(false);
-    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn, remote_node);
     } else if(random_txn_type < 96){
     	(*txn)->set_multipartition(false);
-    	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
+    	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn, remote_node);
     } else {
     	(*txn)->set_multipartition(false);
-    	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+    	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn, remote_node);
     }
     (*txn)->set_seed(seed);
   }
