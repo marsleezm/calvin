@@ -221,7 +221,7 @@ void Sequencer::RunWriter() {
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
-      if (batch.data_size() < max_batch_size) {
+      if (txn_id_offset < max_batch_size) {
         TxnProto* txn;
         int64 involved_nodes = 0;
         client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime(), involved_nodes);
@@ -471,7 +471,7 @@ void* Sequencer::FetchMessage() {
 		  			  txn->ParseFromString(batch_message->data(i));
 		  			  txn->set_local_txn_id(fetched_txn_num_++);
 		  			  txns_queue_->Push(txn);
-                      //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
+                      LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
 		  			  ++num_fetched_this_round;
 		  		  }
 		  		  delete batch_message;
