@@ -45,7 +45,9 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
         for (int i = 0; i<txn_->readers_size(); ++i){
             recv_rs.push_back(make_pair(txn_->readers(i), -1));
-            involved_nodes = involved_nodes | (1 << (txn_->readers(i)+1));
+            involved_nodes = involved_nodes | (1 << txn_->readers(i));
+            //invnodes += IntToString(txn_->readers(i));
+            //LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
             if (txn_->readers(i) == configuration_->this_node_id)
                 writer_id = i; 
         }
@@ -107,6 +109,8 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	for (int i = 0; i<txn_->readers_size(); ++i){
 		recv_rs.push_back(make_pair(txn_->readers(i), -1));
         involved_nodes = involved_nodes | (1 << txn_->readers(i));
+        //invnodes += IntToString(txn_->readers(i));
+        //LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
         if (txn_->readers(i) == configuration_->this_node_id)
             writer_id = configuration_->this_node_id;
     }

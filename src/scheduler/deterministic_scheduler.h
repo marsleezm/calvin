@@ -141,6 +141,7 @@ class DeterministicScheduler : public Scheduler {
   int pc_buffer_size;
   int multi_parts;
   int max_sc;
+  int sc_array_size;
 
   pair<int64, int64>** latency;
   MyTuple<int64, int64, StorageManager*>* sc_txn_list;

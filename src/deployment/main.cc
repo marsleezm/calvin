@@ -63,7 +63,7 @@ class MClient : public Client {
 			  }
 			  if (i == counter){
 				  parts[i] = new_part;
-                  involved_nodes = involved_nodes | (1 << (new_part+1));
+                  involved_nodes = involved_nodes | (1 << new_part);
 				  ++counter;
 			  }
 		  }
@@ -141,7 +141,7 @@ class TClient : public Client {
             remote_node = rand() % config_->all_nodes.size();
         } while (config_->all_nodes.size() > 1 &&
                   remote_node == config_->this_node_id);
-        involved_nodes = involved_nodes | (1 << (remote_node+1));
+        involved_nodes = involved_nodes | (1 << remote_node);
     }
 	else
 		(*txn)->set_multipartition(false);

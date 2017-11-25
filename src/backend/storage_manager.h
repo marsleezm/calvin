@@ -61,7 +61,6 @@ class StorageManager {
 
     inline void InitUnconfirmMsg(MessageProto* msg){
         msg->clear_received_num_aborted();
-        msg->set_destination_channel(IntToString(txn_->txn_id()));
         // The first txn is not confirmed yet
         msg->set_num_aborted(-1);
     }
@@ -401,12 +400,13 @@ class StorageManager {
   bool sent_pc = false;
   int last_add_pc = -1;
   int writer_id;
-  int involved_nodes;
+  int involved_nodes = 0;
   atomic<int> abort_bit_;
   int num_aborted_;
   pthread_mutex_t lock;
 
   Key suspended_key;
+  string invnodes;
 
   /****** For statistics ********/
   std::atomic<bool> has_confirmed = ATOMIC_FLAG_INIT;
