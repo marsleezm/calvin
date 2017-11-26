@@ -217,7 +217,7 @@ void StorageManager::ApplyChange(bool is_committing){
 
 void StorageManager::AddSC(MessageProto& message, int& i){
     int size=message.received_num_aborted(i), final_index = i+size, j = i+1;
-    for (int j = i+1; j <= final_index; ++j){
+    /*for (int j = i+1; j <= final_index; ++j){
         LOG(txn_->txn_id(), "j is "<<j<<", recv "<<message.received_num_aborted(j)<<", recv rs is "<<recv_rs[j-i-1].second);
     }
     LOG(txn_->txn_id(), "finished iteration, total size is "<<message.received_num_aborted_size());
@@ -226,10 +226,11 @@ void StorageManager::AddSC(MessageProto& message, int& i){
         ++i;
         return;
     }
-    else if (size <= added_pc_size+1){
+	*/
+    if (size <= added_pc_size+1){
         ++i;
         while(i < final_index){
-            LOG(txn_->txn_id(), " I is "<<i);
+            LOG(txn_->txn_id(), " i is "<<i<<", ab is "<<message.received_num_aborted(i));
             //int local_abort_num;
             //if (i-j == writer_id)
             //    local_abort_num = num_aborted_;
@@ -407,11 +408,11 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 
 void StorageManager::AddPendingSC(){
   pthread_mutex_lock(&lock);
-  LOG(txn_->txn_id(), " size of pending sc is "<<pending_sc.size()); 
+  //LOG(txn_->txn_id(), " size of pending sc is "<<pending_sc.size()); 
   bool updated = true;
   while(pending_sc.size() and updated) {
       updated = false;
-      LOG(txn_->txn_id(), " before trying to add pending sc"); 
+      //LOG(txn_->txn_id(), " before trying to add pending sc"); 
       for (uint j = 0; j < pending_sc.size(); ++j){
           //LOG(txn_->txn_id(), " going over "<<j<<"th pending sc"<<", added_pc_size is "<<added_pc_size<<", entry size is "<<pending_sc[j].size()); 
           if ((int)pending_sc[j].size() <= added_pc_size+1){
@@ -440,7 +441,8 @@ void StorageManager::AddPendingSC(){
               }
           }
          else{
-             LOG(txn_->txn_id(), " will not go over, because added pc size is "<<added_pc_size<<", pc size is "<<pending_sc[j].size()); 
+             //LOG(txn_->txn_id(), " will not go over, because added pc size is "<<added_pc_size<<", pc size is "<<pending_sc[j].size()<<", remain size is "<<pending_sc.size()); 
+			continue;
          }
       }
   }

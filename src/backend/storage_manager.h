@@ -232,6 +232,8 @@ class StorageManager {
 
   inline bool GotMatchingPCs(){
 	  //LOG(txn_->txn_id(), " checking matching pcs");
+	  if (pending_sc.size())
+		  AddPendingSC();
       for (int i = 0; i < txn_->writers_size(); ++i){
           if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second){
               //LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);

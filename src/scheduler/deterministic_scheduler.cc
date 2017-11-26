@@ -435,7 +435,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               int64 base_remote_local= message.c_tx_local(), remote_local;
               if(message.num_aborted() != -1) {
                   StorageManager* manager = scheduler->sc_txn_list[base_local%sc_array_size].third;
-	    	      AGGRLOG(remote_global_id, " adding manager, addr is "<<reinterpret_cast<int64>(manager)<<", first is "<<scheduler->sc_txn_list[local_txn_id%sc_array_size].first);
+	    	      AGGRLOG(remote_global_id, " adding confirm, first is "<<scheduler->sc_txn_list[local_txn_id%sc_array_size].first);
                   manager->AddReadConfirm(message.source_node(), message.num_aborted());
               }
               if ( message.received_num_aborted_size() > 0 ){
@@ -449,14 +449,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                       StorageManager* manager = scheduler->sc_txn_list[index].third;
                       local_txn_id = manager->txn_->local_txn_id(); 
                       global_id = manager->txn_->txn_id();
-	    	          AGGRLOG(local_txn_id,  "got manager, is "<<reinterpret_cast<int64>(manager)<<", i is "<<i<<", global id is "<<global_id);
-	    	          AGGRLOG(local_txn_id, "remote global is "<<remote_global_id<<", local is "<<local_txn_id<<", base local is "<<base_local<<", remote local is "<<remote_local<<", base remote local is "<<base_remote_local);
+	    	          AGGRLOG(local_txn_id,  " trying to add SC, i is "<<i<<", global id is "<<global_id);
+	    	          //AGGRLOG(local_txn_id, "remote global is "<<remote_global_id<<", local is "<<local_txn_id<<", base local is "<<base_local<<", remote local is "<<remote_local<<", base remote local is "<<base_remote_local);
                       ASSERT(local_txn_id - base_local == remote_local - base_remote_local);
                       ASSERT(global_id == remote_global_id);
 	    	          //AGGRLOG(local_txn_id,  " asserted!");
                       manager->AddSC(message, i);
 	    	          //AGGRLOG(local_txn_id, "added sc, global id is "<<global_id<<", local id is "<<local_txn_id<<", mgr is "<<reinterpret_cast<int64>(manager));
-	    	          AGGRLOG(local_txn_id, "added sc");
+	    	          //AGGRLOG(local_txn_id, "added sc");
                   }
               }
 	    	  //AGGRLOG(StringToInt(message.destination_channel()), " after adding received na");
@@ -561,9 +561,9 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 		}
 	}
 	else{
-		AGGRLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id());
+		AGGRLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id);
 		int result = application_->Execute(manager);
-		AGGRLOG(txn->txn_id(), " result is "<<result);
+		//AGGRLOG(txn->txn_id(), " result is "<<result);
 		if (result == SUSPEND){
 			AGGRLOG(txn->txn_id(),  " suspended");
 			return true;
@@ -576,11 +576,11 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
                 manager->put_inlist();
                 sc_txn_list[txn->local_txn_id()%sc_array_size].first = txn->local_txn_id();
 				manager->SendLocalReads(false);
-				AGGRLOG(txn->txn_id(), " sending local read for "<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list loc "<<txn->local_txn_id()%sc_array_size);
+				//AGGRLOG(txn->txn_id(), " sending local read for "<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list loc "<<txn->local_txn_id()%sc_array_size);
 			}
 			else{
                 if(manager->prev_unconfirmed == 0){
-				    AGGRLOG(txn->txn_id(), " directly confirm myself");
+				    //AGGRLOG(txn->txn_id(), " directly confirm myself");
 				    manager->SendLocalReads(true);
                 }
                 else
