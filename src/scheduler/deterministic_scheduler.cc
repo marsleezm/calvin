@@ -214,7 +214,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     while (!terminated_) {
 	    if (scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
 		    // Try to commit txns one by one
-            int involved_nodes=0, tx_index=num_lc_txns_%sc_array_size;
+            int involved_nodes=0, tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
 		    MyTuple<int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
 		    //LOG(-1, " num lc is "<<num_lc_txns_<<", "<<first_tx.first<<"is the first one in queue");
             MessageProto* msg_to_send = NULL;
@@ -224,7 +224,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                 mgr = first_tx.third;
 			    // -1 means this txn should be committed; otherwise, it is the last_restarted number of the txn, which wishes to send confirm
                 // If can send confirm/pending confirm
-                if(first_tx.first >= num_lc_txns_ && mgr->CanAddC()){
+                if(first_tx.first >= num_lc_txns_ && mgr->CanAddC(record_abort_bit)){
                     LOG(first_tx.first, " check returns OK, global id is "<<first_tx.third->txn_->txn_id()<<", is inv2 is "<<first_tx.third->involved_nodes); //<<", inv is "<<first_tx.third->invnodes);
 				    if (involved_nodes == 0 || involved_nodes == first_tx.third->involved_nodes){
                         involved_nodes = first_tx.third->involved_nodes;
@@ -247,17 +247,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                             else
                                 LOG(-1, " added send_confirm, first mgr is "<<reinterpret_cast<int64>(first_mgr)<<", msg to send is "<<reinterpret_cast<int64>(msg_to_send));
                         }
-                        else{
-                            msg_to_send->add_received_num_aborted(first_tx.first);
-                            msg_to_send->add_received_num_aborted(mgr->txn_->txn_id());
-                            msg_to_send->add_received_num_aborted(mgr->writer_id+1);
-                            for(int i = 0; i < mgr->writer_id; ++i){
-					            LOG(first_tx.first, " trying to add pc, i is "<<i<<", "<<mgr->recv_rs[i].second);
-                                msg_to_send->add_received_num_aborted(mgr->recv_rs[i].second);
-                            }
-                            msg_to_send->add_received_num_aborted(mgr->num_aborted_);
-                            mgr->AddedPC();
-                        }
+                        else
+                            if(mgr->AddC(record_abort_bit) == false)
+                                continue; 
 				    }
                     else{
                         LOG(-1, " involved node is changed from "<< involved_nodes<<" to "<<first_tx.third->involved_nodes);
@@ -272,16 +264,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                         LOG(first_tx.first, " sent prev msg, now trying to send for himself");
                         mgr->InitUnconfirmMsg(msg_to_send);
                         // Add received_num_aborted
-                        msg_to_send->add_received_num_aborted(first_tx.first);
-                        msg_to_send->add_received_num_aborted(mgr->txn_->txn_id());
-                        msg_to_send->add_received_num_aborted(mgr->writer_id+1);
-                        for(int i = 0; i < mgr->writer_id; ++i){
-                            LOG(first_tx.first, " trying to add pc, i is "<<i<<", writer id is "<<mgr->writer_id);
-                            msg_to_send->add_received_num_aborted(mgr->recv_rs[i].second);
-                        }
-                        msg_to_send->add_received_num_aborted(mgr->num_aborted_);
-                        mgr->AddedPC();
-                        first_mgr = mgr;
+                        if(mgr->AddC(record_abort_bit) == false)
+                            continue; 
+                        else
+                            first_mgr = mgr;
                     }
                     did_something = true;
                 }

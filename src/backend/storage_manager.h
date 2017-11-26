@@ -109,35 +109,22 @@ class StorageManager {
           ASSERT(if_to_confirm == false);
   }
 
-    inline bool CanAddC(){
+    bool AddC(int64 return_abort_bit, MessageProto* msg); 
+
+    inline bool CanAddC(int& return_abort_bit){
         //Stop already if is not MP txn
         if (txn_->multipartition() == false) {
             return false;
         }
         else {
-            if (!has_confirmed && spec_committed_){
+            if (!has_confirmed and spec_committed_){
+                return_abort_bit = abort_bit_;
                 // Spec committed, has sent values and
-                if (num_aborted_ == abort_bit_){
-                    // Not yet sent pc: this guy should send confirm, but cascading resend should stop
-                    if (last_add_pc == -1 and !aborting){
+                if (num_aborted_ == abort_bit_ and !aborting and (last_add_pc < abort_bit_ or last_add_pc == -1)){
                         //LOG(txn_->txn_id(), " checking can add c, true");
-                        return true;
-                    }
-                    else{
-                        // Has already sent pc, but should resend, if cascading abort or if the sent pc is too old already. 
-                        ASSERT(last_add_pc <= abort_bit_);
-                        if (last_add_pc < abort_bit_ and !aborting){
-                            //LOG(txn_->txn_id(), " checking can add c, true");
-                            return true;
-                        }
-                        else{
-                            //LOG(txn_->txn_id(), " checking can add c, false because last_add_pc is "<<last_add_pc<<", abort bit is "<<abort_bit_<<", cas is "<<cas_resend);
-                            return false;
-                        }
-                    }
+                    return true;
                 }
                 else{
-                    // if the sent value is too old, then should resent the value first! This should be handled by other threads (hopefully..)
                     LOG(txn_->txn_id(), " checking can add c, false because num aborted is "<<num_aborted_<<", abort bit is "<<abort_bit_);
                     return false;
                 }
@@ -150,7 +137,6 @@ class StorageManager {
         }
     }
 
-    inline void AddedPC(){ sent_pc = true; last_add_pc = num_aborted_; }
 
     bool SendSC(MessageProto* msg);
     void SetupTxn(TxnProto* txn);

@@ -92,6 +92,30 @@ bool StorageManager::SendSC(MessageProto* msg){
     }
 }
 
+bool StorageManager::AddC(int return_abort_bit, MessageProto* msg) { 
+    msg->add_received_num_aborted(txn_->local_txn_id());
+    msg->add_received_num_aborted(txn_->txn_id());
+    msg->add_received_num_aborted(writer_id+1);
+    for(int i = 0; i < writer_id; ++i){
+        LOG(txn_->txn_id(), " trying to add pc, i is "<<i<<", "<<recv_rs[i].second);
+        msg->add_received_num_aborted(recv_rs[i].second);
+    }   
+    if(return_abort_bit == abort_bit_){
+        msg->add_received_num_aborted(num_aborted_);
+        sent_pc = true;
+        last_add_pc = num_aborted_;
+        return true;
+    }
+    else{
+        const google::protobuf::Descriptor  *descriptor = msg->GetDescriptor();
+        const google::protobuf::Reflection  *reflection = msg->GetReflection();
+        const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("received_num_aborted");
+        for (int i = 0; i < writer_id+3; ++i)
+            reflection->RemoveLast(msg, field);
+        return false;
+    }
+}
+
 void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn_ == NULL);
 	ASSERT(txn->multipartition());
