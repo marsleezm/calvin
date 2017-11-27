@@ -67,30 +67,37 @@ class StorageManager {
 
   ~StorageManager();
 
-  inline bool TryConfirm(MessageProto* msg_to_send){
-      bool result = has_confirmed.exchange(true); 
-      if(result == false){
-          msg_to_send->set_num_aborted(num_aborted_);
-          return true;
-      }
-      else
-          return false;
+  inline bool TryConfirm(MessageProto* msg_to_send, int record_abort_bit){
+	  if (aborting or (record_abort_bit!=-1 and record_abort_bit != abort_bit_)){
+		  LOG(txn_->txn_id(), " tryconfirm failed, abing: "<<aborting<<", ra: "<<record_abort_bit<<", ab: "<<abort_bit_);
+	  	  return false;
+	  }
+	  else{
+      	  //bool result = has_confirmed.exchange(true); 
+		  assert(has_confirmed == false);
+		  has_confirmed = true;
+      	  //if(result == false){
+              msg_to_send->set_num_aborted(num_aborted_);
+          	  return true;
+		  //}
+	      //else{
+		  //	  LOG(txn_->txn_id(), " tryconfirm failed, abing: "<<aborting<<", ra: "<<record_abort_bit<<", ab: "<<abort_bit_);
+		  //	  return false;
+		  //}
+	  }
   }
 
   inline void SendLocalReads(bool if_to_confirm){
-	  if(if_to_confirm){
-          bool result = has_confirmed.exchange(true); 
-          if(result == false){
-              has_confirmed = true;
-              message_->set_confirmed(true);
-              ASSERT(abort_bit_ == num_aborted_);
-          }
-	  }
       if (if_to_confirm)
           LOG(txn_->txn_id(), " sending confirmed read of restarted "<<num_aborted_);
       else
           LOG(txn_->txn_id(), " sending unconfirmed read of restarted "<<num_aborted_);
-      if (num_aborted_ == abort_bit_) {
+      if (!aborting and num_aborted_ == abort_bit_) {
+		  if(if_to_confirm == true){
+			  assert(has_confirmed == false);
+			  has_confirmed = true;
+          	  message_->set_confirmed(true);
+		  }
           message_->set_num_aborted(num_aborted_);
           for (int i = 0; i < txn_->writers().size(); i++) {
               if (txn_->writers(i) != configuration_->this_node_id) {
@@ -109,7 +116,7 @@ class StorageManager {
           ASSERT(if_to_confirm == false);
   }
 
-    bool AddC(int64 return_abort_bit, MessageProto* msg); 
+    bool AddC(MessageProto* msg, int return_abort_bit); 
 
     inline bool CanAddC(int& return_abort_bit){
         //Stop already if is not MP txn
@@ -117,7 +124,7 @@ class StorageManager {
             return false;
         }
         else {
-            if (!has_confirmed and spec_committed_){
+            if (spec_committed_ and !has_confirmed){
                 return_abort_bit = abort_bit_;
                 // Spec committed, has sent values and
                 if (num_aborted_ == abort_bit_ and !aborting and (last_add_pc < abort_bit_ or last_add_pc == -1)){
@@ -125,13 +132,19 @@ class StorageManager {
                     return true;
                 }
                 else{
-                    LOG(txn_->txn_id(), " checking can add c, false because num aborted is "<<num_aborted_<<", abort bit is "<<abort_bit_);
+					if(output_count < 1){
+						++output_count;
+                    	LOG(txn_->txn_id(), " can not addC because numa is "<<num_aborted_<<", abit is "<<abort_bit_<<", aborting is "<<aborting<<", la_pc is "<<last_add_pc);
+					}
                     return false;
                 }
             }
             else{
                 // If has not even spec-committed, do not send confirm for him now. 
-                //LOG(txn_->txn_id(), " can not add c because not sc or confirmed");
+				if(output_count < 1){
+					++output_count;
+                	LOG(txn_->txn_id(), " can not add, sc:"<<spec_committed_<<", confirmed "<<has_confirmed);
+				}
                 return false;
             }
         }
@@ -188,6 +201,7 @@ class StorageManager {
 	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_aborted_<<", ABit "<<abort_bit_);
 	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
 	  return num_aborted > num_aborted_ && num_aborted == abort_bit_;}
+
   inline bool TryToResume(int num_aborted, ValuePair v) {
 	  if(num_aborted == num_aborted_&& num_aborted == abort_bit_){
 		  v.first = v.first | read_set_[suspended_key].first;
@@ -204,9 +218,7 @@ class StorageManager {
 	  if (ReadOnly())
 		  return SUCCESS;
 	  else{
-		  if(num_aborted_ != abort_bit_)
-			  return ABORT;
-          else if (!spec_committed_)
+		  if(num_aborted_ != abort_bit_ or !spec_committed_)
 			  return ABORT;
           // Don't remove the compare in the last part: this is added for concurrency issue
 		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting)
@@ -226,7 +238,12 @@ class StorageManager {
               return false;
           }
       }
-	  //LOG(txn_->txn_id(), " got matching pcs return true, writerid is "<<writer_id);
+	  string res = "";
+      for (int i = 0; i < txn_->writers_size(); ++i){
+		  res += IntToString(sc_list[i]);
+		  res += IntToString(recv_rs[i].second);
+	  }
+	  LOG(txn_->txn_id(), " to comm:"<<res);
       return true;
   }
 
@@ -298,7 +315,7 @@ class StorageManager {
   inline bool if_inlist() { return in_list;}
 
   void Abort();
-  void ApplyChange(bool is_committing);
+  bool ApplyChange(bool is_committing);
   void AddSC(MessageProto& msg, int& i);
 
   inline void AddReadConfirm(int node_id, int num_aborted){
@@ -327,6 +344,7 @@ class StorageManager {
 		  }
 	  }
   }
+	void inline spec_commit() {spec_committed_ = true; }
 
  private:
 
@@ -394,7 +412,7 @@ class StorageManager {
   pthread_mutex_t lock;
 
   Key suspended_key;
-  string invnodes;
+  int output_count = 0;
 
   /****** For statistics ********/
   std::atomic<bool> has_confirmed = ATOMIC_FLAG_INIT;
