@@ -21,7 +21,6 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	tpcc_args = new TPCCArgs();
 	txn_ = NULL;
     sc_list = NULL;
-    pthread_mutex_init(&lock, NULL);
     writer_id = -1;
 }
 
@@ -52,6 +51,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
                 writer_id = i; 
         }
         pthread_mutex_init(&lock, NULL);
+        pthread_mutex_init(&confirm_lock, NULL);
         sc_list = new int[txn_->readers_size()];
         for(int i = 0; i< txn_->readers_size(); ++i){
             sc_list[i] = -1;
@@ -78,9 +78,18 @@ bool StorageManager::SendSC(MessageProto* msg){
         return false;
     }
     else{
-        LOG(txn_->txn_id(), prev_unconfirmed<<" sending sc, last restarted is "<<num_aborted_<<", abort bit is "<<abort_bit_<<", num pc is "<<msg->received_num_aborted_size());
-        msg->set_c_tx_local(txn_->local_txn_id());
-        msg->set_destination_channel(IntToString(txn_->txn_id()));
+        msg->set_tx_id(txn_->txn_id());
+        msg->set_tx_local(txn_->local_txn_id());
+		if(msg->received_num_aborted_size() == 0){
+			if(msg->num_aborted() == -1)
+				return false;
+			LOG(txn_->txn_id(), prev_unconfirmed<<" sending to txn, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
+        	msg->set_destination_channel(IntToString(txn_->txn_id()));
+		}
+		else{
+        	msg->set_destination_channel("locker");
+			LOG(txn_->txn_id(), prev_unconfirmed<<" sending to locker, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
+		}
         for (int i = 0; i < txn_->writers_size(); ++i) {
             if (txn_->writers(i) != configuration_->this_node_id) {
                 msg->set_destination_node(txn_->writers(i));
@@ -101,12 +110,13 @@ bool StorageManager::AddC(MessageProto* msg, int return_abort_bit) {
         msg->add_received_num_aborted(recv_rs[i].second);
 		add+=IntToString(recv_rs[i].second);
     }   
-    if(return_abort_bit == -1 or return_abort_bit == abort_bit_){
+	LOG(txn_->txn_id(), " abting:"<<aborting<<", rab:"<<return_abort_bit<<", abt:"<<abort_bit_<<", na:"<<num_aborted_);
+    if(!aborting and (return_abort_bit == -1 or return_abort_bit == abort_bit_)){
         msg->add_received_num_aborted(num_aborted_);
 		add+=IntToString(num_aborted_);
         sent_pc = true;
         last_add_pc = num_aborted_;
-		LOG(txn_->txn_id(), " added "<<add<<", size is "<<msg->received_num_aborted_size());
+		LOG(txn_->txn_id(), " added "<<add<<", size is "<<msg->received_num_aborted_size()<<", rab is "<<return_abort_bit<<", abort bit is "<<abort_bit_);
         return true;
     }
     else{
@@ -132,6 +142,8 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	message_->set_type(MessageProto::READ_RESULT);
 	connection_->LinkChannel(IntToString(txn_->txn_id()));
 	tpcc_args ->ParseFromString(txn->arg());
+    pthread_mutex_init(&lock, NULL);
+    pthread_mutex_init(&confirm_lock, NULL);
 
 	num_unconfirmed_read = txn_->readers_size() - 1;
 	for (int i = 0; i<txn_->readers_size(); ++i){
@@ -307,9 +319,9 @@ void StorageManager::AddSC(MessageProto& message, int& i){
             ++i;
         }
         if(!outdated){
-            pthread_mutex_lock(&lock);
+            //pthread_mutex_lock(&lock);
             pending_sc.push_back(new_entry);
-            pthread_mutex_unlock(&lock);
+            //pthread_mutex_unlock(&lock);
         }
     }
 }
@@ -319,7 +331,7 @@ void StorageManager::AddSC(MessageProto& message, int& i){
 int StorageManager::HandleReadResult(const MessageProto& message) {
   int source_node = message.source_node();
   if (message.confirmed()){
-      LOG(txn_->txn_id(), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read<<", msg is confirmed, added pc size is "<<added_pc_size<<", num ab is "<<message.num_aborted());
+      LOG(StringToInt(message.destination_channel()), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read<<", msg is confirmed, added pc size is "<<added_pc_size<<", num ab is "<<message.num_aborted());
 	  // TODO: if the transaction has old data, should abort the transaction
 	  for (int i = 0; i < message.keys_size(); i++) {
 		  remote_objects_[message.keys(i)] = message.values(i);
@@ -345,10 +357,10 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 					  return DO_NOTHING;
 			  }
 			  else{
-                  LOG(txn_->txn_id(), " may abort because last time was "<<recv_rs[i].second<<", prev unconfirm is "<<prev_unconfirmed); 
+                  LOG(StringToInt(message.destination_channel()), " may abort because last time was "<<recv_rs[i].second<<", prev unconfirm is "<<prev_unconfirmed); 
                   if ( i < (uint)writer_id){
-                      aborting = true;
                       ++abort_bit_;
+                      aborting = true;
                   	  --prev_unconfirmed;
                   }
                   recv_rs[i].second = message.num_aborted();
@@ -373,47 +385,39 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  // otherwise abort.
 	  //if(txn_)
 	  //	  LOG(txn_->txn_id(), " got local message of aborted "<<message.num_aborted()<<" from "<<message.source_node());
-      LOG(txn_->txn_id(), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read<<", msg is not confirmed");
+      LOG(StringToInt(message.destination_channel()), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read<<", msg is not confirmed");
 	  for(int i = 0; i<(int)recv_rs.size(); ++i){
 		  if(recv_rs[i].first == message.source_node()){
 			  if(message.num_aborted() > recv_rs[i].second) {
 				  for (int i = 0; i < message.keys_size(); i++)
 					  remote_objects_[message.keys(i)] = message.values(i);
 				  //Deal with pending confirm
-				  for(uint j = 0; j <pending_read_confirm.size(); ++j)
-					  if (pending_read_confirm[i].first == message.source_node()){
-						  if (pending_read_confirm[i].second == message.num_aborted()){
-                              sc_list[i] = message.num_aborted();
-							  --num_unconfirmed_read;
-                              if(j<(uint)writer_id){
-                                  --prev_unconfirmed;
-                                  LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed); 
-                              }
-                          }
-						  break;
-					  }
-                  LOG(txn_->txn_id(), i<<" set "<<recv_rs[i].second<<" num aborted to "<<message.num_aborted()<<", is suspended is "<<is_suspended_);
+                  LOG(StringToInt(message.destination_channel()), i<<" set "<<recv_rs[i].second<<" num aborted to "<<message.num_aborted()<<", is suspended is "<<is_suspended_);
                   int prev_recv = recv_rs[i].second;
+				  if(prev_recv != -1 and i < writer_id) {
+					  LOG(txn_->txn_id(), " aborting"); 
+					  ++abort_bit_;
+					  aborting = true;
+				  }
                   recv_rs[i].second = message.num_aborted();
+				  if(pending_sc.size())
+				  	  AddPendingSC();
+				  if(pending_read_confirm.size())
+				  	  AddPendingReadConfirm();
                   //Trying to add pending sc to sc
 				  if(prev_recv == -1){
-                      AddPendingSC();
 					  if(is_suspended_ == false)  return SUCCESS;
 					  else return DO_NOTHING;
 				  }
 				  else{
-					  if (i < writer_id) {
-                          ++abort_bit_;
-                          aborting = true;
-                          AddPendingSC();
+					  if (i < writer_id) 
                           return ABORT;
-					  }
-                      AddPendingSC();
-                      return DO_NOTHING;
+					  else
+                      	  return DO_NOTHING;
 				  }
 			  }
 			  else{
-				  AGGRLOG(txn_->txn_id(), " receiving older message: aborted is "<<recv_rs[i].second<<", received is "<<message.num_aborted());
+				  AGGRLOG(StringToInt(message.destination_channel()), " receiving older message: aborted is "<<recv_rs[i].second<<", received is "<<message.num_aborted());
 				  return DO_NOTHING;
 			  }
               break;
@@ -425,6 +429,36 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
       aborting = true;
 	  return ABORT;
   }
+}
+
+void StorageManager::AddPendingReadConfirm(){
+  	pthread_mutex_lock(&confirm_lock);
+	uint j = 0;
+	LOG(txn_->txn_id(), " PRC size is"<<pending_read_confirm.size()); 
+	while (j <pending_read_confirm.size()){
+  		for(int i = 0; i<(int)recv_rs.size(); ++i){
+	  		if (pending_read_confirm[j].first == recv_rs[i].first){
+				if (pending_read_confirm[j].second == recv_rs[i].second){
+					sc_list[i] = pending_read_confirm[j].second;
+					--num_unconfirmed_read;
+					added_pc_size = max(added_pc_size, (int)i+1);
+					if (added_pc_size == writer_id)
+						++added_pc_size;
+					if(j<(uint)writer_id){
+						--prev_unconfirmed;
+						LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed); 
+					}
+					pending_read_confirm.erase(pending_read_confirm.begin()+j);
+					--j; 
+				}
+				else
+					LOG(txn_->txn_id(), " can not add PRC, PRC: "<<pending_read_confirm[j].second<<", RECVRS:"<<recv_rs[i].second); 
+				break;
+		  	}
+	  	}
+		++j;
+	}
+  	pthread_mutex_unlock(&confirm_lock);
 }
 
 

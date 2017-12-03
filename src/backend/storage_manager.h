@@ -73,31 +73,34 @@ class StorageManager {
 	  	  return false;
 	  }
 	  else{
-      	  //bool result = has_confirmed.exchange(true); 
-		  assert(has_confirmed == false);
-		  has_confirmed = true;
-      	  //if(result == false){
+		  LOG(txn_->txn_id(), " trying to add confirm"); 
+      	  bool result = has_confirmed.exchange(true); 
+		  //assert(has_confirmed == false);
+		  //has_confirmed = true;
+      	  if(result == false){
               msg_to_send->set_num_aborted(num_aborted_);
           	  return true;
-		  //}
-	      //else{
-		  //	  LOG(txn_->txn_id(), " tryconfirm failed, abing: "<<aborting<<", ra: "<<record_abort_bit<<", ab: "<<abort_bit_);
-		  //	  return false;
-		  //}
+		  }
+	      else{
+		  	  LOG(txn_->txn_id(), " tryconfirm failed, abing: "<<aborting<<", ra: "<<record_abort_bit<<", ab: "<<abort_bit_);
+		  	  return false;
+		  }
 	  }
   }
 
   inline void SendLocalReads(bool if_to_confirm){
-      if (if_to_confirm)
-          LOG(txn_->txn_id(), " sending confirmed read of restarted "<<num_aborted_);
+      if (if_to_confirm){
+      	  bool result = has_confirmed.exchange(true); 
+		  if(result== false){
+          	  LOG(txn_->txn_id(), " sending confirmed read of restarted "<<num_aborted_);
+          	  message_->set_confirmed(true);
+		  }
+		  else
+          	  LOG(txn_->txn_id(), " wanted to send confirmed, but too late");
+	  }
       else
           LOG(txn_->txn_id(), " sending unconfirmed read of restarted "<<num_aborted_);
       if (!aborting and num_aborted_ == abort_bit_) {
-		  if(if_to_confirm == true){
-			  assert(has_confirmed == false);
-			  has_confirmed = true;
-          	  message_->set_confirmed(true);
-		  }
           message_->set_num_aborted(num_aborted_);
           for (int i = 0; i < txn_->writers().size(); i++) {
               if (txn_->writers(i) != configuration_->this_node_id) {
@@ -128,22 +131,22 @@ class StorageManager {
                 return_abort_bit = abort_bit_;
                 // Spec committed, has sent values and
                 if (num_aborted_ == abort_bit_ and !aborting and (last_add_pc < abort_bit_ or last_add_pc == -1)){
-                        //LOG(txn_->txn_id(), " checking can add c, true");
+					//LOG(txn_->txn_id(), " checking can add c, true");
                     return true;
                 }
                 else{
-					if(output_count < 1){
+					if(output_count < 5){
 						++output_count;
-                    	LOG(txn_->txn_id(), " can not addC because numa is "<<num_aborted_<<", abit is "<<abort_bit_<<", aborting is "<<aborting<<", la_pc is "<<last_add_pc);
+                    	//LOG(txn_->txn_id(), " can not addC because numa is "<<num_aborted_<<", abit is "<<abort_bit_<<", aborting is "<<aborting<<", la_pc is "<<last_add_pc);
 					}
                     return false;
                 }
             }
             else{
                 // If has not even spec-committed, do not send confirm for him now. 
-				if(output_count < 1){
+				if(output_count < 5){
 					++output_count;
-                	LOG(txn_->txn_id(), " can not add, sc:"<<spec_committed_<<", confirmed "<<has_confirmed);
+                	//LOG(txn_->txn_id(), " can not add, sc:"<<spec_committed_<<", confirmed "<<has_confirmed);
 				}
                 return false;
             }
@@ -221,7 +224,7 @@ class StorageManager {
 		  if(num_aborted_ != abort_bit_ or !spec_committed_)
 			  return ABORT;
           // Don't remove the compare in the last part: this is added for concurrency issue
-		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting)
+		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting and num_aborted_ == abort_bit_)
 			  return SUCCESS;
 		  else
 			  return NOT_CONFIRMED;
@@ -232,6 +235,8 @@ class StorageManager {
 	  //LOG(txn_->txn_id(), " checking matching pcs");
 	  if (pending_sc.size())
 		  AddPendingSC();
+	  if (pending_read_confirm.size())
+		  AddPendingReadConfirm();
       for (int i = 0; i < txn_->writers_size(); ++i){
           if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second){
               //LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
@@ -305,6 +310,7 @@ class StorageManager {
   }
 
   void AddPendingSC();
+  void AddPendingReadConfirm();
 
   //void AddKeys(string* keys) {keys_ = keys;}
   //vector<string> GetKeys() { return keys_;}
@@ -319,7 +325,7 @@ class StorageManager {
   void AddSC(MessageProto& msg, int& i);
 
   inline void AddReadConfirm(int node_id, int num_aborted){
-      LOG(txn_->txn_id(), " trying to add read confirm from node "<<node_id<<", remaining is "<<num_unconfirmed_read<<", num abort is "<<num_aborted);
+      LOG(txn_->txn_id(), " adding RC from:"<<node_id<<", left "<<num_unconfirmed_read<<", na is "<<num_aborted);
 	  for(uint i = 0; i<recv_rs.size(); ++i){
 		  if(recv_rs[i].first == node_id){
 			  if(recv_rs[i].second == num_aborted || num_aborted == 0) {
@@ -336,8 +342,10 @@ class StorageManager {
                   AddPendingSC();
 			  }
 			  else{
+                  pthread_mutex_lock(&confirm_lock);
 				  pending_read_confirm.push_back(make_pair(node_id, num_aborted));
-				  LOG(txn_->txn_id(), "failed confirming read from node "<<node_id<<", local is "<<recv_rs[i].second
+                  pthread_mutex_unlock(&confirm_lock);
+				  LOG(txn_->txn_id(), " buffer read confirm:"<<node_id<<", local is "<<recv_rs[i].second
 						  <<", got is "<<num_aborted);
 			  }
 			  break;
@@ -410,6 +418,7 @@ class StorageManager {
   atomic<int> abort_bit_;
   int num_aborted_;
   pthread_mutex_t lock;
+  pthread_mutex_t confirm_lock;
 
   Key suspended_key;
   int output_count = 0;

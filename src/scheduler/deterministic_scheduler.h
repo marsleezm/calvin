@@ -64,7 +64,7 @@ class DeterministicScheduler : public Scheduler {
 		  LockedVersionedStorage* storage, AtomicQueue<TxnProto*>* txns_queue,
 						 Client* client, const Application* application, int queue_mode);
   virtual ~DeterministicScheduler();
-  bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local);
+  bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local, int64 base);
   void static terminate() { terminated_ = true; }
 
  public:
@@ -88,8 +88,7 @@ class DeterministicScheduler : public Scheduler {
       }
   }
 
-  bool ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*>& active_txns,
-    int& latency_count, pair<int64, int64>* latency_array, int this_node, int sc_array_size, DeterministicScheduler* scheduler);
+  bool ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*>& active_txns, int& latency_count);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
