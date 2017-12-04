@@ -301,7 +301,6 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 		  AGGRLOG(txn_->txn_id(), " WTF, I didn't find anyone in the list? Impossible.");
       aborting = true;
 	  ++abort_bit_;
-	  //num_aborted_ = abort_bit_;
 	  return ABORT;
   }
   else{
@@ -322,9 +321,6 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 					  aborting = true;
 				  }
                   recv_rs[i].second = message.num_aborted();
-				  if(pending_read_confirm.size())
-				  	  AddPendingReadConfirm();
-                  //Trying to add pending sc to sc
 				  if(prev_recv == -1){
 					  if(is_suspended_ == false)  return SUCCESS;
 					  else return DO_NOTHING;
@@ -350,76 +346,6 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  return ABORT;
   }
 }
-
-void StorageManager::AddPendingReadConfirm(){
-  	pthread_mutex_lock(&confirm_lock);
-	uint j = 0;
-	LOG(txn_->txn_id(), " PRC size is"<<pending_read_confirm.size()); 
-	while (j <pending_read_confirm.size()){
-  		for(int i = 0; i<(int)recv_rs.size(); ++i){
-	  		if (pending_read_confirm[j].first == recv_rs[i].first){
-				if (pending_read_confirm[j].second == recv_rs[i].second){
-					sc_list[i] = pending_read_confirm[j].second;
-					--num_unconfirmed_read;
-					if(j<(uint)writer_id){
-						--prev_unconfirmed;
-						LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed); 
-					}
-					pending_read_confirm.erase(pending_read_confirm.begin()+j);
-					--j; 
-				}
-				else
-					LOG(txn_->txn_id(), " can not add PRC, PRC: "<<pending_read_confirm[j].second<<", RECVRS:"<<recv_rs[i].second); 
-				break;
-		  	}
-	  	}
-		++j;
-	}
-  	pthread_mutex_unlock(&confirm_lock);
-}
-
-
-/*
-void StorageManager::AddPendingSC(){
-  bool updated = true;
-  while(pending_sc.size() and updated) {
-      updated = false;
-      //LOG(txn_->txn_id(), " before trying to add pending sc"); 
-      for (uint j = 0; j < pending_sc.size(); ++j){
-          //LOG(txn_->txn_id(), " going over "<<j<<"th pending sc"<<", added_pc_size is "<<added_pc_size<<", entry size is "<<pending_sc[j].size()); 
-          if ((int)pending_sc[j].size() <= added_pc_size+1){
-              for (int k = 0; k < (int)pending_sc[j].size(); ++k){
-                  LOG(txn_->txn_id(), " checking, psc:"<<pending_sc[j][k]<<", sc:"<<sc_list[k]<<", rrs:"<<recv_rs[k].second); 
-                  if (k == (int)pending_sc[j].size()-1 and pending_sc[j][k] == recv_rs[k].second){
-                      LOG(txn_->txn_id(), k<<" setting to "<<pending_sc[j][k]); 
-                      sc_list[k] = max(pending_sc[j][k], sc_list[k]);
-                      added_pc_size = added_pc_size+1;
-                      if(added_pc_size == writer_id)
-                          ++added_pc_size;
-                      pending_sc.erase(pending_sc.begin()+j);
-                      --j; 
-                      updated = true;
-                      break;
-                  }
-                  else if (pending_sc[j][k] < sc_list[k]){
-                      LOG(txn_->txn_id(), j<<"'s "<<k<<"th entry "<<pending_sc[j][k]<<"is smaller than "<<sc_list[k]); 
-                      pending_sc.erase(pending_sc.begin()+j);
-                      --j;  break;
-                  }
-                  else if (pending_sc[j][k] > sc_list[k]){ 
-                      LOG(txn_->txn_id(), j<<"'s "<<k<<"th entry "<<pending_sc[j][k]<<"is larger than "<<sc_list[k]); 
-                      break;
-                  }
-              }
-          }
-         else{
-             //LOG(txn_->txn_id(), " will not go over, because added pc size is "<<added_pc_size<<", pc size is "<<pending_sc[j].size()<<", remain size is "<<pending_sc.size()); 
-			continue;
-         }
-      }
-  }
-}
-*/
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet

@@ -124,8 +124,6 @@ class StorageManager {
 
 	inline bool GotAllPC(){
 		//LOG(txn_->txn_id(), " checking if has got pc");
-	  	if (pending_read_confirm.size())
-		  	AddPendingReadConfirm();
       	for (int i = 0; i < writer_id; ++i){
           	if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second)
               	return false;
@@ -236,8 +234,6 @@ class StorageManager {
 	  //LOG(txn_->txn_id(), " checking matching pcs");
 	  //if (pending_sc.size())
 	//	  AddPendingSC();
-	  if (pending_read_confirm.size())
-		  AddPendingReadConfirm();
       for (int i = 0; i < txn_->writers_size(); ++i){
           if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second){
               //LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
@@ -310,12 +306,6 @@ class StorageManager {
 	    return true;  // Not this node's problem.
   }
 
-  //void AddPendingSC();
-  void AddPendingReadConfirm();
-
-  //void AddKeys(string* keys) {keys_ = keys;}
-  //vector<string> GetKeys() { return keys_;}
-
   inline TxnProto* get_txn(){ return txn_; }
   inline TPCCArgs* get_args() { return tpcc_args;}
   inline void put_inlist() { in_list = true; }
@@ -342,9 +332,7 @@ class StorageManager {
                   //AddPendingSC();
 			  }
 			  else{
-                  pthread_mutex_lock(&confirm_lock);
-				  pending_read_confirm.push_back(make_pair(node_id, num_aborted));
-                  pthread_mutex_unlock(&confirm_lock);
+                  sc_list[i] = num_aborted;
 				  LOG(txn_->txn_id(), " buffer read confirm:"<<node_id<<", local is "<<recv_rs[i].second
 						  <<", got is "<<num_aborted);
 			  }
@@ -404,7 +392,6 @@ class StorageManager {
   bool aborting = false;
   int num_unconfirmed_read;
   int prev_unconfirmed;
-  vector<pair<int, int>> pending_read_confirm;
 
  public:
   // Indicate whether the message contains any value that should be sent

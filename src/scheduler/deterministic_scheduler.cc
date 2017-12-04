@@ -273,15 +273,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 							if (involved_nodes == 0 || involved_nodes == first_tx.fourth->involved_nodes){
 								involved_nodes = first_tx.fourth->involved_nodes;
 								INIT_MSG(msg_to_send, this_node);
-								if(first_mgr == NULL){
+								if(first_mgr == NULL)
 									first_mgr = mgr;
-									LOG(first_tx.first, " initing first_mgr "<<reinterpret_cast<int64>(first_mgr)<<", gid:"<<mgr->txn_->txn_id());
-								}
 								if (msg_to_send->num_aborted() == -1 and msg_to_send->received_num_aborted_size() == 0 and mgr->prev_unconfirmed == 0){ 
 									if(!mgr->TryConfirm(msg_to_send, record_abort_bit)){
 										first_mgr = NULL;
 										involved_nodes = 0;
-										//LOG(first_tx.first, " did not send_confirm");
 									}
 									else
 										LOG(first_tx.first, " added confirm");
