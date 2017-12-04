@@ -203,8 +203,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     AtomicQueue<pair<int64_t, int>> abort_queue;
     AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;
 
-    AtomicQueue<MessageProto>* locker_queue = scheduler->message_queues[scheduler->num_threads];
-
     // Begin main loop.
     MessageProto message;
     unordered_map<int64_t, StorageManager*> active_g_tids;
@@ -218,41 +216,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     pair<int64, int64>* latency_array = scheduler->latency[thread];
 
     while (!terminated_) {
-	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-			while(locker_queue->Pop(&message)){
-              	int64 remote_global_id = message.tx_id(), base_local=-1, local_txn_id, remote_local, base_remote_local= message.tx_local();
-				int i = 0;
-				AGGRLOG(remote_global_id, " locker msg:"<<message.source_node()<<", size:"<<message.received_num_aborted_size()<<", na is "<<message.num_aborted());
-              	ASSERT(message.received_num_aborted_size() > 0);
-			  	if(message.num_aborted() != -1){
-					int j = 0;
-					while(j < sc_array_size and scheduler->sc_txn_list[(j+num_lc_txns_)%sc_array_size].third != remote_global_id)
-						++j;
-					ASSERT(j != sc_array_size);
-					base_local = j+num_lc_txns_;
-					StorageManager* manager = scheduler->sc_txn_list[(j+num_lc_txns_)%sc_array_size].fourth;
-					AGGRLOG(remote_global_id, " adding confirm");
-					manager->AddReadConfirm(message.source_node(), message.num_aborted());
-			  	}
-				if (base_local == -1){
-					if (scheduler->TryToFindId(message, i, base_local, remote_global_id, base_remote_local, num_lc_txns_) == false){
-						AGGRLOG(remote_global_id, " did not find id"); 
-						continue;
-					}
-				}
-				while(i < message.received_num_aborted_size()){
-				  	remote_local = message.received_num_aborted(i); 
-                    ++i;
-					remote_global_id = message.received_num_aborted(i); 
-					++i;
-					local_txn_id = base_local+remote_local-base_remote_local; 
-					StorageManager* manager = scheduler->sc_txn_list[local_txn_id % sc_array_size].fourth;
-					AGGRLOG(local_txn_id,  " trying to add SC, i is "<<i<<", global id is "<<remote_global_id);
-					ASSERT(manager->txn_->txn_id() == remote_global_id);
-					manager->AddSC(message, i);
-				}
-			}
-
+	    if (scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ and pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
 		    // Try to commit txns one by one
             int involved_nodes=0, tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
 		    MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
@@ -311,6 +275,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						}
 						// If can commit
 						if(first_tx.first == num_lc_txns_ and mgr->CanSCToCommit() == SUCCESS){
+							did_something = true;
 							if(mgr->txn_->multipartition() and mgr->sent_pc == false and mgr->has_confirmed == false){
 								if(msg_to_send == NULL){
 									msg_to_send = new MessageProto();
@@ -332,9 +297,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						}
 					}
                 }
-				else{
+				else
 					LOG(first_tx.first, " can not add pc, so no way to commit!");
-				}
 
                 if (!did_something){
                     //LOG(-1, " did not do anything"); 
@@ -354,13 +318,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		    }
 		    pthread_mutex_unlock(&scheduler->commit_tx_mutex);
 	    }
-		/*
-	    else{
-             if ( scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first != prevtx)
-	    	    LOG(scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first, " is the first one in queue, num_lc_txns are "<<num_lc_txns_<<", sc array size is "<<sc_array_size);
-              prevtx = scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first;
-	     }
-		*/
 
       //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
       CLEANUP_TXN(local_gc, can_gc_txns, my_to_sc_txns, sc_array_size, active_g_tids, latency_count, latency_array);
@@ -455,10 +412,33 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 	      }
 	      else if(message.type() == MessageProto::READ_CONFIRM) {
-	    	  AGGRLOG(StringToInt(message.destination_channel()), " ReadConfirm"<<", in map:"<<active_g_tids.count(atoi(message.destination_channel().c_str()))); 
-			  ASSERT(message.received_num_aborted_size() == 0);
-			  StorageManager* manager = active_g_tids[atoi(message.destination_channel().c_str())]; 
-			  manager->AddReadConfirm(message.source_node(), message.num_aborted());
+	    	  AGGRLOG(StringToInt(message.destination_channel()), " ReadConfirm"<<", size:"<<message.received_num_aborted_size()<<", na is "<<message.num_aborted()); 
+			  int64 remote_global_id = message.tx_id(), base_local=-1, local_txn_id, remote_local, base_remote_local= message.tx_local();
+			  if (message.num_aborted() != -1){
+				  StorageManager* manager = active_g_tids[atoi(message.destination_channel().c_str())]; 
+				  manager->AddReadConfirm(message.source_node(), message.num_aborted());
+			  }
+
+			  if(message.received_num_aborted_size() != 0){
+				  int i = 0;
+				  if (base_local == -1){
+					if (scheduler->TryToFindId(message, i, base_local, remote_global_id, base_remote_local, num_lc_txns_) == false){
+						AGGRLOG(remote_global_id, " did not find id"); 
+						continue;
+					}
+				  }
+				  while(i < message.received_num_aborted_size()){
+					  remote_local = message.received_num_aborted(i); 
+					  ++i;
+					  remote_global_id = message.received_num_aborted(i); 
+					  ++i;
+					  local_txn_id = base_local+remote_local-base_remote_local; 
+					  StorageManager* manager = scheduler->sc_txn_list[local_txn_id % sc_array_size].fourth;
+					  AGGRLOG(local_txn_id,  " trying to add SC, i is "<<i<<", global id is "<<remote_global_id);
+					  ASSERT(manager->txn_->txn_id() == remote_global_id);
+					  manager->AddSC(message, i);
+				  }
+			  }
 	      }
 	  }
 

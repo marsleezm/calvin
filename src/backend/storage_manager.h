@@ -83,7 +83,7 @@ class StorageManager {
           	  return true;
 		  }
 	      else{
-		  	  LOG(txn_->txn_id(), " tryconfirm failed, abing: "<<aborting<<", ra: "<<record_abort_bit<<", ab: "<<abort_bit_);
+		  	  LOG(txn_->txn_id(), " added confirm");
 		  	  return false;
 		  }
 	  }
@@ -220,7 +220,7 @@ class StorageManager {
   inline int CanSCToCommit() {
 		if(output_count < 5){
 			++output_count;
-		  LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
+		  LOG(txn_->txn_id(), " can commit? sc:"<<spec_committed_<<", na:"<<num_aborted_<<", ab:"<<abort_bit_ <<", uc:"<<num_unconfirmed_read);
 		}
 	  if (ReadOnly())
 		  return SUCCESS;

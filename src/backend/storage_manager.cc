@@ -80,16 +80,16 @@ bool StorageManager::SendSC(MessageProto* msg){
     else{
         msg->set_tx_id(txn_->txn_id());
         msg->set_tx_local(txn_->local_txn_id());
-		if(msg->received_num_aborted_size() == 0){
-			if(msg->num_aborted() == -1)
-				return false;
-			LOG(txn_->txn_id(), prev_unconfirmed<<" sending to txn, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
+		//if(msg->received_num_aborted_size() == 0){
+		//	if(msg->num_aborted() == -1)
+		//		return false;
+		//	LOG(txn_->txn_id(), prev_unconfirmed<<" sending to txn, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
         	msg->set_destination_channel(IntToString(txn_->txn_id()));
-		}
-		else{
-        	msg->set_destination_channel("locker");
-			LOG(txn_->txn_id(), prev_unconfirmed<<" sending to locker, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
-		}
+		//}
+		//else{
+        //	msg->set_destination_channel("locker");
+		//	LOG(txn_->txn_id(), prev_unconfirmed<<" sending to locker, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
+		//}
         for (int i = 0; i < txn_->writers_size(); ++i) {
             if (txn_->writers(i) != configuration_->this_node_id) {
                 msg->set_destination_node(txn_->writers(i));
