@@ -200,12 +200,8 @@ void StorageManager::Abort(){
 	max_counter_ = 0;
     spec_committed_ = false;
 	num_aborted_ = abort_bit_;
-    if (writer_id != -1){
-		for(int i = writer_id+1; i < txn_->readers_size(); ++i)
-        	sc_list[i] = -1;
-        recv_rs[writer_id].second = num_aborted_;
-        sc_list[writer_id] = num_aborted_;
-    }
+	recv_rs[writer_id].second = num_aborted_;
+	sc_list[writer_id] = num_aborted_;
 }
 
 // If successfully spec-commit, all data are put into the list and all copied data are deleted
@@ -344,7 +340,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   //LOG(txn_->txn_id(), " found souce node, first time receiving so OK"); 
               	  if(i<(uint)writer_id)
                   	  --prev_unconfirmed;
-                  AddPendingSC();
+                  //AddPendingSC();
 				  if(is_suspended_ == false)
 					  return SUCCESS;
 				  else
@@ -360,7 +356,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   recv_rs[i].second = message.num_aborted();
                   sc_list[i] = message.num_aborted();
 	              --num_unconfirmed_read;
-                  AddPendingSC();
+                  //AddPendingSC();
                   if ( i < (uint)writer_id)
                       return ABORT;
                   return DO_NOTHING;
@@ -377,8 +373,6 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
   else{
 	  // If I am receiving read-results from a node for the first time then I am OK;
 	  // otherwise abort.
-	  //if(txn_)
-	  //	  LOG(txn_->txn_id(), " got local message of aborted "<<message.num_aborted()<<" from "<<message.source_node());
       LOG(StringToInt(message.destination_channel()), " before adding read result, num_unconfirmed is "<<num_unconfirmed_read<<", msg is not confirmed");
 	  for(int i = 0; i<(int)recv_rs.size(); ++i){
 		  if(recv_rs[i].first == message.source_node()){
@@ -394,8 +388,8 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 					  aborting = true;
 				  }
                   recv_rs[i].second = message.num_aborted();
-				  if(pending_sc.size())
-				  	  AddPendingSC();
+				  //if(pending_sc.size())
+				  	  //AddPendingSC();
 				  if(pending_read_confirm.size())
 				  	  AddPendingReadConfirm();
                   //Trying to add pending sc to sc

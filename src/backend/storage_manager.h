@@ -93,7 +93,7 @@ class StorageManager {
       if (if_to_confirm){
       	  bool result = has_confirmed.exchange(true); 
 		  if(result== false){
-          	  LOG(txn_->txn_id(), " sending confirmed read of restarted "<<num_aborted_);
+          	  LOG(txn_->txn_id(), " sending confirmed read of restarted "<<num_aborted_<<", abt:"<<aborting<<", ab:"<<abort_bit_);
           	  message_->set_confirmed(true);
 		  }
 		  else
@@ -343,7 +343,7 @@ class StorageManager {
                       LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed);
                   }
 				  LOG(txn_->txn_id(), "done confirming read for "<<i<<" from node "<<node_id<<", remaining is "<<num_unconfirmed_read<<", prev unconfirmed is "<<prev_unconfirmed);
-                  AddPendingSC();
+                  //AddPendingSC();
 			  }
 			  else{
                   pthread_mutex_lock(&confirm_lock);

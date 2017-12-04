@@ -589,6 +589,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 			// There are outstanding remote reads.
 			AGGRLOG(txn->txn_id(),  " suspend and sent for remote read");
 			active_g_tids[txn->txn_id()] = manager;
+			manager->aborting = false;
 			if(txn->local_txn_id() != num_lc_txns_){
                 manager->put_inlist();
                 sc_txn_list[txn->local_txn_id()%sc_array_size].first = txn->local_txn_id();
@@ -603,7 +604,6 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
                 else
 				    manager->SendLocalReads(false);
 			}
-
 			//to_confirm.clear();
 			return true;
 		}
