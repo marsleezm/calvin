@@ -50,7 +50,6 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
             if (txn_->readers(i) == configuration_->this_node_id)
                 writer_id = i; 
         }
-        pthread_mutex_init(&lock, NULL);
         pthread_mutex_init(&confirm_lock, NULL);
         sc_list = new int[txn_->readers_size()];
         for(int i = 0; i< txn_->readers_size(); ++i){
@@ -142,7 +141,6 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	message_->set_type(MessageProto::READ_RESULT);
 	connection_->LinkChannel(IntToString(txn_->txn_id()));
 	tpcc_args ->ParseFromString(txn->arg());
-    pthread_mutex_init(&lock, NULL);
     pthread_mutex_init(&confirm_lock, NULL);
 
 	num_unconfirmed_read = txn_->readers_size() - 1;
@@ -279,9 +277,7 @@ void StorageManager::AddSC(MessageProto& message, int& i){
                     new_entry.push_back(message.received_num_aborted(j));
                     ++j;
                 }
-                pthread_mutex_lock(&lock);
                 pending_sc.push_back(new_entry);
-                pthread_mutex_unlock(&lock);
                 break;
             }
             else 
@@ -319,9 +315,7 @@ void StorageManager::AddSC(MessageProto& message, int& i){
             ++i;
         }
         if(!outdated){
-            //pthread_mutex_lock(&lock);
             pending_sc.push_back(new_entry);
-            //pthread_mutex_unlock(&lock);
         }
     }
 }
@@ -463,8 +457,6 @@ void StorageManager::AddPendingReadConfirm(){
 
 
 void StorageManager::AddPendingSC(){
-  pthread_mutex_lock(&lock);
-  //LOG(txn_->txn_id(), " size of pending sc is "<<pending_sc.size()); 
   bool updated = true;
   while(pending_sc.size() and updated) {
       updated = false;
@@ -502,7 +494,6 @@ void StorageManager::AddPendingSC(){
          }
       }
   }
-  pthread_mutex_unlock(&lock);
 }
 
 StorageManager::~StorageManager() {

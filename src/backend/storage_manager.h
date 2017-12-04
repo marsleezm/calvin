@@ -420,7 +420,6 @@ class StorageManager {
   int involved_nodes = 0;
   atomic<int> abort_bit_;
   int num_aborted_;
-  pthread_mutex_t lock;
   pthread_mutex_t confirm_lock;
 
   Key suspended_key;

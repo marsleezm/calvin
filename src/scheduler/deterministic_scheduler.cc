@@ -469,6 +469,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  retry_txns.pop();
 		  }
 		  else{
+			  LOG(retry_txns.front().first, " being retried");
 			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, latency_count) == true)
 				  retry_txns.pop();
 			  else
