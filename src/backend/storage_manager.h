@@ -73,6 +73,7 @@ class StorageManager {
 	  	  return false;
 	  }
 	  else{
+		  msg_to_send->set_source_channel(txn_->txn_id());
 		  LOG(txn_->txn_id(), " trying to add confirm"); 
       	  bool result = has_confirmed.exchange(true); 
 		  //assert(has_confirmed == false);
@@ -121,34 +122,34 @@ class StorageManager {
 
     bool AddC(MessageProto* msg, int return_abort_bit); 
 
-    inline bool CanAddC(int& return_abort_bit){
+	inline bool GotAllPC(){
+		//LOG(txn_->txn_id(), " checking if has got pc");
+	  	if (pending_sc.size())
+		  	AddPendingSC();
+	  	if (pending_read_confirm.size())
+		  	AddPendingReadConfirm();
+      	for (int i = 0; i < writer_id; ++i){
+			//LOG(txn_->txn_id(), " sc "<<sc_list[i]<<", rs "<<recv_rs[i].second);
+          	if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second)
+              	return false;
+      	}
+	  	return true;
+	}
+
+    inline int CanAddC(int& return_abort_bit){
         //Stop already if is not MP txn
-        if (txn_->multipartition() == false) {
-            return false;
-        }
+        if (txn_->multipartition() == false or sent_pc or has_confirmed)
+            return ADDED;
         else {
-            if (spec_committed_ and !has_confirmed){
-                return_abort_bit = abort_bit_;
-                // Spec committed, has sent values and
-                if (num_aborted_ == abort_bit_ and !aborting and (last_add_pc < abort_bit_ or last_add_pc == -1)){
-					//LOG(txn_->txn_id(), " checking can add c, true");
-                    return true;
-                }
-                else{
-					if(output_count < 5){
-						++output_count;
-                    	//LOG(txn_->txn_id(), " can not addC because numa is "<<num_aborted_<<", abit is "<<abort_bit_<<", aborting is "<<aborting<<", la_pc is "<<last_add_pc);
-					}
-                    return false;
-                }
-            }
+			return_abort_bit = abort_bit_;
+            if (spec_committed_ and num_aborted_ == abort_bit_ and GotAllPC() and !aborting)
+                    return CAN_ADD;
             else{
-                // If has not even spec-committed, do not send confirm for him now. 
-				if(output_count < 5){
+				/*if(output_count < 8){
 					++output_count;
-                	//LOG(txn_->txn_id(), " can not add, sc:"<<spec_committed_<<", confirmed "<<has_confirmed);
-				}
-                return false;
+					//LOG(txn_->txn_id(), " can not add "<<spec_committed_<<", na:"<<num_aborted_<<", ab:"<<abort_bit_<<", abt"<<aborting);
+				}*/
+                return CAN_NOT_ADD;
             }
         }
     }
@@ -217,7 +218,10 @@ class StorageManager {
 
   // Can commit, if the transaction is read-only or has spec-committed.
   inline int CanSCToCommit() {
-	  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
+		if(output_count < 5){
+			++output_count;
+		  LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
+		}
 	  if (ReadOnly())
 		  return SUCCESS;
 	  else{
@@ -412,7 +416,6 @@ class StorageManager {
   bool is_suspended_;
   bool spec_committed_;
   bool sent_pc = false;
-  int last_add_pc = -1;
   int writer_id;
   int involved_nodes = 0;
   atomic<int> abort_bit_;

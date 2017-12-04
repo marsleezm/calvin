@@ -52,14 +52,19 @@
                  else mgr->SendLocalReads(false); \
               } \
           active_g_tids.erase(mgr->txn_->txn_id()); \
+          LOG(mgr->txn_->txn_id(), " deleting mgr "<<reinterpret_cast<int64>(mgr)<<", index is "<<local_gc%sc_array_size<<", local txn id is "<<local_gc<<", can gc txn is "<<can_gc_txns_); \
           AddLatency(latency_count, latency_array, mgr->get_txn()); \
           my_to_sc_txns[local_gc%sc_array_size].first = NO_TXN; \
           delete mgr; } \
-      ++local_gc; }
+      ++local_gc; } \
 
-/*
-          LOG(mgr->txn_->txn_id(), " deleting mgr "<<reinterpret_cast<int64>(mgr)<<", index is "<<local_gc%sc_array_size<<", local txn id is "<<local_gc<<", can gc txn is "<<can_gc_txns_); \
-*/
+#define INIT_MSG(msg, this_node) \
+			if(msg == NULL){ \
+				msg = new MessageProto(); \
+				msg->set_type(MessageProto::READ_CONFIRM); \
+				msg->set_source_node(this_node); \
+				msg->set_num_aborted(-1); } \
+
 
 using std::pair;
 using std::string;
@@ -257,78 +262,79 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		    while(true){
                 bool did_something = false;
                 mgr = first_tx.fourth;
+
                 // If can send confirm/pending confirm
-
-                if(first_tx.first >= num_lc_txns_ && mgr->CanAddC(record_abort_bit)){
-                    LOG(first_tx.first, " OK, gid:"<<first_tx.third);
-				    if (involved_nodes == 0 || involved_nodes == first_tx.fourth->involved_nodes){
-                        involved_nodes = first_tx.fourth->involved_nodes;
-                        if(msg_to_send == NULL){
-                            msg_to_send = new MessageProto();
-                            msg_to_send->set_type(MessageProto::READ_CONFIRM);
-                            msg_to_send->set_source_node(this_node);
-                            msg_to_send->set_num_aborted(-1);
-                        }
-                        if(first_mgr == NULL){
-                            first_mgr = mgr;
-                            LOG(first_tx.first, " initing first_mgr "<<reinterpret_cast<int64>(first_mgr)<<", gid:"<<mgr->txn_->txn_id());
-                        }
-                        if (msg_to_send->num_aborted() == -1 and msg_to_send->received_num_aborted_size() == 0 and mgr->prev_unconfirmed == 0){ 
-                            if(!mgr->TryConfirm(msg_to_send, record_abort_bit)){
-                                first_mgr = NULL;
-                                involved_nodes = 0;
-                                LOG(first_tx.first, " did not send_confirm");
-                            }
-                            else
-                                LOG(first_tx.first, " added confirm");
-                        }
-                        else
-                            if(mgr->AddC(msg_to_send, record_abort_bit) == false)
-                                continue; 
-				    }
-                    else{
-                        LOG(-1, " involved node is changed from "<< involved_nodes<<" to "<<first_tx.fourth->involved_nodes);
-                        // Sending existing one, add reset
-                        involved_nodes = first_tx.fourth->involved_nodes;
-                        if (first_mgr and first_mgr->SendSC(msg_to_send) == false) {
-                            LOG(first_tx.first, " confirm and send fail");
-                            delete msg_to_send;
-                            break;
-                        } 
-                        can_gc_txns_ = num_lc_txns_;
-                        LOG(first_tx.first, " sent prev msg, now trying to send for himself");
-                        mgr->InitUnconfirmMsg(msg_to_send);
-                        // Add received_num_aborted
-                        if(mgr->AddC(msg_to_send, record_abort_bit) == false)
-                            continue; 
-                        else
-                            first_mgr = mgr;
-                    }
-                    did_something = true;
-                }
-
-                // If can commit
-			    if(first_tx.first == num_lc_txns_ && mgr->CanSCToCommit() == SUCCESS){
-                    if(mgr->txn_->multipartition() and mgr->sent_pc == false and mgr->has_confirmed == false){
-                        if(msg_to_send == NULL){
-							msg_to_send = new MessageProto();
-							msg_to_send->set_type(MessageProto::READ_CONFIRM);
-							msg_to_send->set_source_node(this_node);
-							first_mgr = mgr;
-							involved_nodes = mgr->involved_nodes;
-							LOG(first_tx.first, " confirm committing tx");
-							assert(mgr->TryConfirm(msg_to_send, NO_CHECK) == true);
+                if(first_tx.first >= num_lc_txns_){
+					int result = mgr->CanAddC(record_abort_bit);
+					if(result == CAN_ADD or result == ADDED){
+						did_something = true;
+						if(result == CAN_ADD){
+							LOG(first_tx.first, " OK, gid:"<<first_tx.third);
+							if (involved_nodes == 0 || involved_nodes == first_tx.fourth->involved_nodes){
+								involved_nodes = first_tx.fourth->involved_nodes;
+								INIT_MSG(msg_to_send, this_node);
+								if(first_mgr == NULL){
+									first_mgr = mgr;
+									LOG(first_tx.first, " initing first_mgr "<<reinterpret_cast<int64>(first_mgr)<<", gid:"<<mgr->txn_->txn_id());
+								}
+								if (msg_to_send->num_aborted() == -1 and msg_to_send->received_num_aborted_size() == 0 and mgr->prev_unconfirmed == 0){ 
+									if(!mgr->TryConfirm(msg_to_send, record_abort_bit)){
+										first_mgr = NULL;
+										involved_nodes = 0;
+										//LOG(first_tx.first, " did not send_confirm");
+									}
+									else
+										LOG(first_tx.first, " added confirm");
+								}
+								else
+									if(mgr->AddC(msg_to_send, record_abort_bit) == false)
+										continue; 
+							}
+							else{
+								LOG(-1, " involved node is changed from "<< involved_nodes<<" to "<<first_tx.fourth->involved_nodes);
+								// Sending existing one, add reset
+								involved_nodes = first_tx.fourth->involved_nodes;
+								if (first_mgr and first_mgr->SendSC(msg_to_send) == false) {
+									LOG(first_tx.first, " confirm and send fail");
+									delete msg_to_send;
+									break;
+								} 
+								can_gc_txns_ = num_lc_txns_;
+								LOG(first_tx.first, " sent prev msg, now trying to send for himself");
+								mgr->InitUnconfirmMsg(msg_to_send);
+								// Add received_num_aborted
+								if(mgr->AddC(msg_to_send, record_abort_bit) == false)
+									continue; 
+								else
+									first_mgr = mgr;
+							}
 						}
-						else{
-                            assert(mgr->AddC(msg_to_send, NO_CHECK) == true);
+						// If can commit
+						if(first_tx.first == num_lc_txns_ and mgr->CanSCToCommit() == SUCCESS){
+							if(mgr->txn_->multipartition() and mgr->sent_pc == false and mgr->has_confirmed == false){
+								if(msg_to_send == NULL){
+									msg_to_send = new MessageProto();
+									msg_to_send->set_type(MessageProto::READ_CONFIRM);
+									msg_to_send->set_source_node(this_node);
+									first_mgr = mgr;
+									involved_nodes = mgr->involved_nodes;
+									LOG(first_tx.first, " confirm committing tx");
+									assert(mgr->TryConfirm(msg_to_send, NO_CHECK) == true);
+								}
+								else{
+									assert(mgr->AddC(msg_to_send, NO_CHECK) == true);
+								}
+							}
+							LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
+							if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
+								++Sequencer::num_committed;
+							++num_lc_txns_;
 						}
-                    }
-                    LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
-                    if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
-                        ++Sequencer::num_committed;
-                    ++num_lc_txns_;
-                    did_something = true;
+					}
                 }
+				else{
+					LOG(first_tx.first, " can not add pc, so no way to commit!");
+				}
 
                 if (!did_something){
                     //LOG(-1, " did not do anything"); 
@@ -343,7 +349,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                 else{
                     tx_index = (tx_index+1)%sc_array_size; 
                     first_tx = scheduler->sc_txn_list[tx_index];
-                    LOG(first_tx.first, "tocheck");
+                    //LOG(first_tx.first, "tocheck");
                 }
 		    }
 		    pthread_mutex_unlock(&scheduler->commit_tx_mutex);
@@ -449,7 +455,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 	      }
 	      else if(message.type() == MessageProto::READ_CONFIRM) {
-	    	  AGGRLOG(StringToInt(message.destination_channel()), " ReadConfirm"); 
+	    	  AGGRLOG(StringToInt(message.destination_channel()), " ReadConfirm"<<", in map:"<<active_g_tids.count(atoi(message.destination_channel().c_str()))); 
 			  ASSERT(message.received_num_aborted_size() == 0);
 			  StorageManager* manager = active_g_tids[atoi(message.destination_channel().c_str())]; 
 			  manager->AddReadConfirm(message.source_node(), message.num_aborted());
@@ -571,7 +577,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 		}
 	}
 	else{
-		AGGRLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id);
+		AGGRLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id<<", in map:"<<active_g_tids.count(txn->txn_id()));
 		int result = application_->Execute(manager);
 		//AGGRLOG(txn->txn_id(), " result is "<<result);
 		if (result == SUSPEND){

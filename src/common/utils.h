@@ -48,6 +48,9 @@ using tr1::unordered_map;
 #define SKIP 1
 #define SPECIAL 2
 
+#define CAN_ADD 0
+#define ADDED 1
+#define CAN_NOT_ADD 2
 
 
 // Tranasction execution return

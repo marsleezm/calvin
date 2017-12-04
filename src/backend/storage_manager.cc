@@ -115,11 +115,11 @@ bool StorageManager::AddC(MessageProto* msg, int return_abort_bit) {
         msg->add_received_num_aborted(num_aborted_);
 		add+=IntToString(num_aborted_);
         sent_pc = true;
-        last_add_pc = num_aborted_;
 		LOG(txn_->txn_id(), " added "<<add<<", size is "<<msg->received_num_aborted_size()<<", rab is "<<return_abort_bit<<", abort bit is "<<abort_bit_);
         return true;
     }
     else{
+		ASSERT(return_abort_bit == -1);
         const google::protobuf::Descriptor  *descriptor = msg->GetDescriptor();
         const google::protobuf::Reflection  *reflection = msg->GetReflection();
         const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("received_num_aborted");
@@ -197,7 +197,7 @@ void StorageManager::Abort(){
 	read_set_.clear();
 	tpcc_args->Clear();
 	tpcc_args ->ParseFromString(txn_->arg());
-    sent_pc = false;
+	assert(sent_pc == false);
     assert(has_confirmed == false);
 	max_counter_ = 0;
     spec_committed_ = false;
