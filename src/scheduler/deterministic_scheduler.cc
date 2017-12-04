@@ -119,7 +119,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	threads_ = new pthread_t[num_threads];
 	thread_connections_ = new Connection*[num_threads+1];
     max_sc = atoi(ConfigReader::Value("max_sc").c_str());
-	sc_array_size = max_sc+num_threads*2;
+	sc_array_size = max_sc+num_threads*3;
 	to_sc_txns_ = new pair<int64, StorageManager*>*[num_threads];
 
 	for (int i = 0; i < num_threads; i++) {
@@ -332,9 +332,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						}
 					}
                 }
-				else{
-					LOG(first_tx.first, " can not add pc, so no way to commit!");
-				}
+				//else{
+				//	LOG(first_tx.first, " can not add pc, so no way to commit!");
+				//}
 
                 if (!did_something){
                     //LOG(-1, " did not do anything"); 
@@ -375,7 +375,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  StorageManager* manager = scheduler->sc_txn_list[to_wait_txn.first%sc_array_size].fourth;
 			  if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
 				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, latency_count) == false){
-					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->abort_bit_, manager));
+					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->num_aborted_, manager));
 					  //--scheduler->num_suspend[thread];
 				  }
 				  //AGGRLOG(to_wait_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
@@ -402,7 +402,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager->Abort();
 				  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, latency_count) == false){
 					  AGGRLOG(to_abort_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_aborted_);
-					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_abort_txn.first, manager->abort_bit_, manager));
+					  retry_txns.push(MyTuple<int64, int, StorageManager*>(to_abort_txn.first, manager->num_aborted_, manager));
 				  }
 			  }
 		  }
@@ -442,15 +442,16 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  //LOG(txn_id, " added read, result is "<<result);
 				  if(result == SUCCESS){
 					  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, latency_count) == false){
-						  //AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
-						  retry_txns.push(MyTuple<int64, int, StorageManager*>(manager->get_txn()->local_txn_id(), manager->abort_bit_, manager));
+						  AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_aborted_);
+						  retry_txns.push(MyTuple<int64, int, StorageManager*>(manager->get_txn()->local_txn_id(), manager->num_aborted_, manager));
 					  }
 				  }
 				  else if (result == ABORT){
                       //AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
 					  manager->Abort();
 					  ++Sequencer::num_aborted_;
-					  retry_txns.push(MyTuple<int64, int, StorageManager*>(manager->get_txn()->local_txn_id(), manager->abort_bit_, manager));
+					  AGGRLOG(txn_id, " got aborted due to abort "<<manager->num_aborted_);
+					  retry_txns.push(MyTuple<int64, int, StorageManager*>(manager->get_txn()->local_txn_id(), manager->num_aborted_, manager));
 				  }
 			  }
 	      }
@@ -464,12 +465,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 	  if(retry_txns.size()){
 		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-		  if(retry_txns.front().first < num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->abort_bit_){
-			  LOG(retry_txns.front().first, " not retrying it, because num lc is "<<num_lc_txns_<<", restart is "<<retry_txns.front().second<<", aborted is"<<retry_txns.front().third->abort_bit_);
+		  if(retry_txns.front().first < num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->num_aborted_){
+			  LOG(retry_txns.front().first, " not retrying it, because num lc is "<<num_lc_txns_<<", restart is "<<retry_txns.front().second<<", aborted is"<<retry_txns.front().third->num_aborted_);
 			  retry_txns.pop();
 		  }
 		  else{
-			  LOG(retry_txns.front().first, " being retried");
+			  LOG(retry_txns.front().first, " being retried, s:"<<retry_txns.front().second);
 			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, latency_count) == true)
 				  retry_txns.pop();
 			  else
@@ -500,18 +501,18 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
-				  LOG(txn->txn_id(), " starting, local is "<<txn->local_txn_id()<<" putting into "<<txn->local_txn_id()%sc_array_size<<", MP:"<<txn->multipartition());
+				  LOG(txn->txn_id(), " starting, local is "<<txn->local_txn_id()<<" putting into "<<txn->local_txn_id()%sc_array_size<<", mgr:"<<reinterpret_cast<int64>(manager));
 				  active_g_tids[txn->txn_id()] = manager;
 			  }
 			  else{
-				  LOG(txn->txn_id(), " trying to setup txn! local is "<<txn->local_txn_id());
+				  LOG(txn->txn_id(), " trying to setup txn! local is "<<txn->local_txn_id()<<", mgr:"<<reinterpret_cast<int64>(manager));
 				  manager = active_g_tids[txn->txn_id()];
 				  manager->SetupTxn(txn);
 			  }
               scheduler->sc_txn_list[txn->local_txn_id()%sc_array_size] = MyFour<int64, int64, int64, StorageManager*>(NO_TXN, txn->local_txn_id(), txn->txn_id(), manager);
 			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, latency_count) == false){
-				  AGGRLOG(txn->txn_id(), " got aborted, pushing "<<manager->abort_bit_);
-				  retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->abort_bit_, manager));
+				  AGGRLOG(txn->txn_id(), " got aborted, pushing "<<manager->num_aborted_);
+				  retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->num_aborted_, manager));
 			  }
 		  }
 	  }
@@ -701,6 +702,7 @@ DeterministicScheduler::~DeterministicScheduler() {
 		//delete pending_txns_[i];
 		delete thread_connections_[i];
 	}
+	delete thread_connections_[num_threads];
 	std::cout<<" Scheduler done, total block time is "<<total_block/1e6<<std::endl;
 	std::cout<<" SC block is "<<total_sc_block<<", pend block is "<<total_pend_block
 			<<", suspend block is "<<total_suspend_block<<std::endl;

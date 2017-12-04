@@ -106,7 +106,7 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 
 					value_pair.assign_first(IS_COPY);
 					value_pair.second = new Value(*list->value);
-					LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", IS COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
+					//LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", IS COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				break;
 			}
@@ -266,9 +266,10 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 				// Read the version and
 
 				// Clean up any stable version, only leave the oldest one
-				int max_ts = DeterministicScheduler::num_lc_txns_;
+				int64 max_ts = DeterministicScheduler::num_lc_txns_;
 				if (list->txn_id < max_ts){
-					//LOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
+					LOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
+					//LOG(txn_id, " v is"<<*list->value);
 					//LOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
 					//LOG(txn_id, key<<" first is "<<value_pair.first);
@@ -287,8 +288,9 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 
 					ASSERT(list->txn_id != txn_id);
 					value_pair.first = WRITE;
+					LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", list:"<<reinterpret_cast<int64>(list));
+					LOG(txn_id, " va:"<<reinterpret_cast<int64>(list->value));
 					value_pair.second = new Value(*list->value);
-					//LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO GC addr is "<<reinterpret_cast<int64>(value_pair.second));
 				}
 				break;
 			}

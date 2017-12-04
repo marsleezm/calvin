@@ -124,12 +124,9 @@ class StorageManager {
 
 	inline bool GotAllPC(){
 		//LOG(txn_->txn_id(), " checking if has got pc");
-	  	if (pending_sc.size())
-		  	AddPendingSC();
 	  	if (pending_read_confirm.size())
 		  	AddPendingReadConfirm();
       	for (int i = 0; i < writer_id; ++i){
-			//LOG(txn_->txn_id(), " sc "<<sc_list[i]<<", rs "<<recv_rs[i].second);
           	if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second)
               	return false;
       	}
@@ -237,8 +234,8 @@ class StorageManager {
 
   inline bool GotMatchingPCs(){
 	  //LOG(txn_->txn_id(), " checking matching pcs");
-	  if (pending_sc.size())
-		  AddPendingSC();
+	  //if (pending_sc.size())
+	//	  AddPendingSC();
 	  if (pending_read_confirm.size())
 		  AddPendingReadConfirm();
       for (int i = 0; i < txn_->writers_size(); ++i){
@@ -313,7 +310,7 @@ class StorageManager {
 	    return true;  // Not this node's problem.
   }
 
-  void AddPendingSC();
+  //void AddPendingSC();
   void AddPendingReadConfirm();
 
   //void AddKeys(string* keys) {keys_ = keys;}
@@ -326,7 +323,6 @@ class StorageManager {
 
   void Abort();
   bool ApplyChange(bool is_committing);
-  void AddSC(MessageProto& msg, int& i);
 
   inline void AddReadConfirm(int node_id, int num_aborted){
       LOG(txn_->txn_id(), " adding RC from:"<<node_id<<", left "<<num_unconfirmed_read<<", na is "<<num_aborted);
@@ -335,9 +331,9 @@ class StorageManager {
 			  if(recv_rs[i].second == num_aborted || num_aborted == 0) {
                   sc_list[i] = num_aborted;
 				  --num_unconfirmed_read;
-                  added_pc_size = max(added_pc_size, (int)i+1);
-                  if(added_pc_size == writer_id)
-                      added_pc_size = writer_id+1;
+                  //added_pc_size = max(added_pc_size, (int)i+1);
+                  //if(added_pc_size == writer_id)
+                  //    added_pc_size = writer_id+1;
                   if (i < (uint)writer_id){
                       --prev_unconfirmed;
                       LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed);
@@ -357,6 +353,11 @@ class StorageManager {
 	  }
   }
 	void inline spec_commit() {spec_committed_ = true; }
+
+	void inline AddSC(MessageProto& message, int& i){
+		sc_list[message.received_num_aborted(i)] = message.received_num_aborted(i+1);
+		i += 2;
+	}
 
  private:
 
@@ -387,7 +388,6 @@ class StorageManager {
   // The message containing read results that should be sent to remote nodes
   MessageProto* message_;
 
-
   // Counting how many transaction steps the current tranasction is executing
   int exec_counter_;
 
@@ -401,7 +401,6 @@ class StorageManager {
 
   // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
 
-  int added_pc_size = 0;
   bool aborting = false;
   int num_unconfirmed_read;
   int prev_unconfirmed;
@@ -411,7 +410,6 @@ class StorageManager {
   // Indicate whether the message contains any value that should be sent
   vector<pair<int, int>> recv_rs;
   int* sc_list;
-  vector<vector<int>> pending_sc;
   bool message_has_value_;
   bool is_suspended_;
   bool spec_committed_;
