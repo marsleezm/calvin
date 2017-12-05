@@ -53,7 +53,9 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	}
 	else{
 		message_ = NULL;
+		has_confirmed = true;
         affecting_unconfirmed_read = 0;
+		num_unconfirmed_read = 0;
         myown_id = 0;
 		affecting_readers = NULL;
 	}
