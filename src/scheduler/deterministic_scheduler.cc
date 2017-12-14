@@ -254,8 +254,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			}
 
 		    // Try to commit txns one by one
-            int involved_nodes=0, tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
+            int tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
 		    MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
+            int involved_nodes = first_tx.fourth->involved_nodes;
             MessageProto* msg_to_send = NULL;
             StorageManager* mgr, *first_mgr=NULL;
 
@@ -288,22 +289,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 										continue; 
 							}
 							else{
-								LOG(-1, " involved node is changed from "<< involved_nodes<<" to "<<first_tx.fourth->involved_nodes);
-								// Sending existing one, add reset
-								involved_nodes = first_tx.fourth->involved_nodes;
-								if (first_mgr and first_mgr->SendSC(msg_to_send) == false) {
-									LOG(first_tx.first, " confirm and send fail");
+								LOG(-1, " stop as involved node changed from "<< involved_nodes<<" to "<<first_tx.fourth->involved_nodes);
+								if (first_mgr){
+                                    first_mgr->SendSC(msg_to_send);
 									delete msg_to_send;
-									break;
 								} 
-								can_gc_txns_ = num_lc_txns_;
-								LOG(first_tx.first, " sent prev msg, now trying to send for himself");
-								mgr->InitUnconfirmMsg(msg_to_send);
-								// Add received_num_aborted
-								if(mgr->AddC(msg_to_send, record_abort_bit) == false)
-									continue; 
-								else
-									first_mgr = mgr;
+                                can_gc_txns_ = num_lc_txns_;
+                                break;
 							}
 						}
 						// If can commit
