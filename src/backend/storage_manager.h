@@ -67,27 +67,7 @@ class StorageManager {
 
   ~StorageManager();
 
-  inline bool TryConfirm(MessageProto* msg_to_send, int record_abort_bit){
-	  if (aborting or (record_abort_bit!=-1 and record_abort_bit != abort_bit_)){
-		  LOG(txn_->txn_id(), " tryconfirm failed, abing: "<<aborting<<", ra: "<<record_abort_bit<<", ab: "<<abort_bit_);
-	  	  return false;
-	  }
-	  else{
-		  msg_to_send->set_source_channel(txn_->txn_id());
-		  LOG(txn_->txn_id(), " trying to add confirm"); 
-      	  bool result = has_confirmed.exchange(true); 
-		  //assert(has_confirmed == false);
-		  //has_confirmed = true;
-      	  if(result == false){
-              msg_to_send->set_num_aborted(num_aborted_);
-          	  return true;
-		  }
-	      else{
-		  	  LOG(txn_->txn_id(), " tryconfirm failed, abing: "<<aborting<<", ra: "<<record_abort_bit<<", ab: "<<abort_bit_);
-		  	  return false;
-		  }
-	  }
-  }
+  bool TryAddSC(MessageProto* msg, int record_num_aborted);
 
   inline void SendLocalReads(bool if_to_confirm){
       if (if_to_confirm){
@@ -120,8 +100,6 @@ class StorageManager {
           ASSERT(if_to_confirm == false);
   }
 
-    bool AddC(MessageProto* msg, int return_abort_bit); 
-
 	inline bool GotAllPC(){
 		//LOG(txn_->txn_id(), " checking if has got pc");
       	for (int i = 0; i < writer_id; ++i){
@@ -133,11 +111,11 @@ class StorageManager {
 
     inline int CanAddC(int& return_abort_bit){
         //Stop already if is not MP txn
-        if (txn_->multipartition() == false or sent_pc or has_confirmed)
+        if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
             return ADDED;
         else {
 			return_abort_bit = abort_bit_;
-            if (spec_committed_ and num_aborted_ == abort_bit_ and GotAllPC() and !aborting)
+            if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting)
                     return CAN_ADD;
             else{
 				/*if(output_count < 8){
@@ -171,7 +149,7 @@ class StorageManager {
   inline int LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-		if(abort_bit_ == num_aborted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, num_aborted_, abort_queue_)){
+		if(abort_bit_ == num_aborted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, num_aborted_, abort_queue_, aborted_txs)){
 			// It should always be a new object
 			ASSERT(read_set_.count(key) == 0);
 			read_set_[key] = ValuePair(NEW_MASK | WRITE, new Value);
@@ -222,20 +200,25 @@ class StorageManager {
 		  if(num_aborted_ != abort_bit_ or !spec_committed_)
 			  return ABORT;
           // Don't remove the compare in the last part: this is added for concurrency issue
-		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting and num_aborted_ == abort_bit_)
+		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting and num_aborted_ == abort_bit_){
+		      LOG(txn_->txn_id(), " can commit"); 
 			  return SUCCESS;
+          }
 		  else
 			  return NOT_CONFIRMED;
 	  }
   }
 
+  void AddPendingSC();
+
   inline bool GotMatchingPCs(){
 	  //LOG(txn_->txn_id(), " checking matching pcs");
-	  //if (pending_sc.size())
-	//	  AddPendingSC();
+	  if (pending_sc.size())
+		  AddPendingSC();
       for (int i = 0; i < txn_->writers_size(); ++i){
           if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second){
-              //LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
+              if(output_count++ < 8)
+                LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
               return false;
           }
       }
@@ -312,6 +295,7 @@ class StorageManager {
 
   void Abort();
   bool ApplyChange(bool is_committing);
+  void AddSC(MessageProto& msg, int& i);
 
   inline void AddReadConfirm(int node_id, int num_aborted){
       LOG(txn_->txn_id(), " adding RC from:"<<node_id<<", left "<<num_unconfirmed_read<<", na is "<<num_aborted);
@@ -320,9 +304,9 @@ class StorageManager {
 			  if(recv_rs[i].second == num_aborted || num_aborted == 0) {
                   sc_list[i] = num_aborted;
 				  --num_unconfirmed_read;
-                  //added_pc_size = max(added_pc_size, (int)i+1);
-                  //if(added_pc_size == writer_id)
-                  //    added_pc_size = writer_id+1;
+                  added_pc_size = max(added_pc_size, (int)i+1);
+                  if(added_pc_size == writer_id)
+                      added_pc_size = writer_id+1;
                   if (i < (uint)writer_id){
                       --prev_unconfirmed;
                       LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed);
@@ -340,11 +324,6 @@ class StorageManager {
 	  }
   }
 	void inline spec_commit() {spec_committed_ = true; }
-
-	void inline AddSC(MessageProto& message, int& i){
-		sc_list[message.received_num_aborted(i)] = message.received_num_aborted(i+1);
-		i += 2;
-	}
 
  private:
 
@@ -388,6 +367,7 @@ class StorageManager {
 
   // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
 
+  int added_pc_size = 0;
   bool aborting = false;
   int num_unconfirmed_read;
   int prev_unconfirmed;
@@ -395,16 +375,18 @@ class StorageManager {
  public:
   // Indicate whether the message contains any value that should be sent
   vector<pair<int, int>> recv_rs;
+  vector<int64_t>* aborted_txs;
   int* sc_list;
+  vector<vector<int>> pending_sc;
   bool message_has_value_;
   bool is_suspended_;
   bool spec_committed_;
-  bool sent_pc = false;
+  int last_add_pc = -1;
   int writer_id;
   int involved_nodes = 0;
   atomic<int> abort_bit_;
   int num_aborted_;
-  pthread_mutex_t confirm_lock;
+  pthread_mutex_t lock;
 
   Key suspended_key;
   int output_count = 0;

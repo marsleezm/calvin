@@ -47,6 +47,9 @@ message MessageProto {
   optional bool confirmed = 16;
   optional int64 tx_id = 17;
   optional int64 tx_local = 18;
+  // local txs aborted due to me
+  repeated int64 ca_tx = 19;
+  repeated int32 ca_num = 20;
 
   // For TXN_BATCH messages, 'batch_number' identifies the epoch of the txn
   // batch being sent.

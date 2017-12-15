@@ -44,13 +44,13 @@ class LockedVersionedStorage {
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
   virtual ValuePair SafeRead(const Key& key, int64 txn_id, bool new_object);
   virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted,
-    			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
+    			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object, vector<int64>* aborted_txs);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
-			AtomicQueue<pair<int64_t, int>>* abort_queue);
+			AtomicQueue<pair<int64_t, int>>* abort_queue, vector<int64_t>* aborted_txs);
   virtual bool PutObject(const Key& key, Value* value, int64 txn_id, bool is_committing, bool new_object);
   virtual void PutObject(const Key& key, Value* value);
   virtual void Unlock(const Key& key, int64 txn_id, bool new_object);
-  virtual void RemoveValue(const Key& key, int64 txn_id, bool new_object);
+  virtual void RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64>* aborted_txs);
   inline bool DeleteObject(const Key& key) {
 	  int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
 	  pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);

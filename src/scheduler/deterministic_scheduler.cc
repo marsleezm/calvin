@@ -52,7 +52,6 @@
                  else mgr->SendLocalReads(false); \
               } \
           active_g_tids.erase(mgr->txn_->txn_id()); \
-          LOG(mgr->txn_->txn_id(), " deleting mgr "<<reinterpret_cast<int64>(mgr)<<", index is "<<local_gc%sc_array_size<<", local txn id is "<<local_gc<<", can gc txn is "<<can_gc_txns_); \
           AddLatency(latency_count, latency_array, mgr->get_txn()); \
           my_to_sc_txns[local_gc%sc_array_size].first = NO_TXN; \
           delete mgr; } \
@@ -64,6 +63,8 @@
 				msg->set_type(MessageProto::READ_CONFIRM); \
 				msg->set_source_node(this_node); \
 				msg->set_num_aborted(-1); } \
+
+          //LOG(mgr->txn_->txn_id(), " deleting mgr "<<reinterpret_cast<int64>(mgr)<<", index is "<<local_gc%sc_array_size<<", local txn id is "<<local_gc<<", can gc txn is "<<can_gc_txns_); 
 
 
 using std::pair;
@@ -247,7 +248,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					++i;
 					local_txn_id = base_local+remote_local-base_remote_local; 
 					StorageManager* manager = scheduler->sc_txn_list[local_txn_id % sc_array_size].fourth;
-					AGGRLOG(local_txn_id,  " trying to add SC, i is "<<i<<", global id is "<<remote_global_id);
+					AGGRLOG(local_txn_id,  " trying to add SC, i is "<<i<<", global id:"<<remote_global_id<<", mgr id:"<<manager->txn_->txn_id());
 					ASSERT(manager->txn_->txn_id() == remote_global_id);
 					manager->AddSC(message, i);
 				}
@@ -272,21 +273,23 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						if(result == CAN_ADD){
 							LOG(first_tx.first, " OK, gid:"<<first_tx.third);
 							if (involved_nodes == 0 || involved_nodes == first_tx.fourth->involved_nodes){
-								involved_nodes = first_tx.fourth->involved_nodes;
 								INIT_MSG(msg_to_send, this_node);
-								if(first_mgr == NULL)
-									first_mgr = mgr;
-								if (msg_to_send->num_aborted() == -1 and msg_to_send->received_num_aborted_size() == 0 and mgr->prev_unconfirmed == 0){ 
-									if(!mgr->TryConfirm(msg_to_send, record_abort_bit)){
-										first_mgr = NULL;
-										involved_nodes = 0;
-									}
-									else
-										LOG(first_tx.first, " added confirm");
+								if (mgr->TryAddSC(msg_to_send, record_abort_bit)){ 
+                                    LOG(first_tx.first, " added confirm");
+                                    if(first_mgr == NULL)
+                                        first_mgr = mgr;
+								    involved_nodes = first_tx.fourth->involved_nodes;
+                                    if (mgr->aborted_txs and mgr->aborted_txs->size()){
+                                        for(uint i = 0; i < mgr->aborted_txs->size(); ++i){
+                                            MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= scheduler->sc_txn_list[mgr->aborted_txs->at(i)%sc_array_size];
+                                            if (tx.fourth->involved_nodes == involved_nodes){ 
+                                                msg_to_send->add_ca_tx(tx.second);
+                                                msg_to_send->add_ca_tx(tx.first);
+                                                msg_to_send->add_ca_num(tx.fourth->abort_bit_);
+                                            }
+                                        }
+                                    }
 								}
-								else
-									if(mgr->AddC(msg_to_send, record_abort_bit) == false)
-										continue; 
 							}
 							else{
 								LOG(-1, " stop as involved node changed from "<< involved_nodes<<" to "<<first_tx.fourth->involved_nodes);
@@ -300,7 +303,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						}
 						// If can commit
 						if(first_tx.first == num_lc_txns_ and mgr->CanSCToCommit() == SUCCESS){
-							if(mgr->txn_->multipartition() and mgr->sent_pc == false and mgr->has_confirmed == false){
+							if(mgr->txn_->multipartition() and mgr->last_add_pc == -1 and mgr->has_confirmed == false){
 								if(msg_to_send == NULL){
 									msg_to_send = new MessageProto();
 									msg_to_send->set_type(MessageProto::READ_CONFIRM);
@@ -308,11 +311,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 									first_mgr = mgr;
 									involved_nodes = mgr->involved_nodes;
 									LOG(first_tx.first, " confirm committing tx");
-									assert(mgr->TryConfirm(msg_to_send, NO_CHECK) == true);
 								}
-								else{
-									assert(mgr->AddC(msg_to_send, NO_CHECK) == true);
-								}
+                                assert(mgr->TryAddSC(msg_to_send, NO_CHECK) == true);
 							}
 							LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
 							if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
