@@ -173,6 +173,7 @@ void StorageManager::Abort(){
 	max_counter_ = 0;
     spec_committed_ = false;
 	num_aborted_ = abort_bit_;
+    last_add_pc = -1;
 	if(writer_id!=-1){
 		recv_rs[writer_id].second = num_aborted_;
 		sc_list[writer_id] = num_aborted_;

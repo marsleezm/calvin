@@ -6,6 +6,7 @@
  */
 
 #include <iostream>
+#include <fstream>
 #include <thread>
 
 #ifndef COMMON_LOGGING_H_
@@ -14,12 +15,19 @@
 struct None { };
 
 static pthread_mutex_t stdout_mutex;
+static std::ofstream ofs; // ("test.txt", std::ofstream::out);
 
 template <typename First,typename Second>
 struct Pair {
   First first;
   Second second;
 };
+
+static inline void OpenFile(string num){
+    std::string filename = num+"test.txt";
+    ofs.open(filename.c_str());
+    std::cout.rdbuf(ofs.rdbuf());
+}
 
 template <typename List>
 struct LogData {
@@ -40,7 +48,7 @@ LogData<Pair<Begin,const char *>>
   return {{begin.list,value}};
 }
 
-inline void printList(std::ostream &os,None)
+inline void printList(std::ostream &os, None)
 {
 }
 
@@ -48,31 +56,25 @@ inline void printList(std::ostream &os,None)
 template <typename Begin,typename Last>
 void printList(std::ostream &os,const Pair<Begin,Last> &data)
 {
-  printList(os,data.first);
+  printList(os, data.first);
   os << data.second;
 }
 
 template <typename List>
-inline void log(const char *file,int line,int64 tx_id, const LogData<List> &data)
+inline void log(const char *file,int line, int64 tx_id, const LogData<List> &data)
 {
-	//pthread_mutex_lock(&stdout_mutex);
-	//std::cout <<  std::this_thread::get_id() << "--"<< file << " (" << line << "): ";
-	//std::cout << file << " (" << line << "): ";
-//	if(tx_id == -1 ){
-//		std::cout << std::this_thread::get_id() << "--" << line << "): ";
-//		printList(std::cout,data.list);
-//		//std::cout << "\n";
-//		std::cout<< std::endl;
-//	}
-//	else
-		//if( tx_id == 113364 || tx_id == 113362 || tx_id == 113360){
-		pthread_mutex_lock(&stdout_mutex);
-		std::cout << std::this_thread::get_id() << "--" << line << "): "<<tx_id<<" ";
-		printList(std::cout,data.list);
-		std::cout<< std::endl;
-		pthread_mutex_unlock(&stdout_mutex);
-	//}
-	//pthread_mutex_unlock(&stdout_mutex);
+    pthread_mutex_lock(&stdout_mutex);
+    std::cout << std::this_thread::get_id() << "--" << line << "): "<<tx_id<<" ";
+    printList(std::cout, data.list);
+    std::cout<< std::endl;
+    pthread_mutex_unlock(&stdout_mutex);
+    /*
+    pthread_mutex_lock(&stdout_mutex);
+    ofs << std::this_thread::get_id() << "--" << line << "): "<<tx_id<<" ";
+    printList(ofs, data.list);
+    ofs << std::endl;
+    pthread_mutex_unlock(&stdout_mutex);
+    */
 }
 
 //#define LOCKLOGGING

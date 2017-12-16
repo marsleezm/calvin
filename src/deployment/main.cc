@@ -230,6 +230,7 @@ int main(int argc, char** argv) {
 	//freopen("output.txt","w",stdout);
 
 	// Build this node's configuration object.
+    OpenFile(argv[1]);
 	Configuration config(StringToInt(argv[1]), "deploy-run.conf");
 
 	// Build connection context and start multiplexer thread running.
