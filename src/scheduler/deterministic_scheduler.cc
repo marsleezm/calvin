@@ -54,6 +54,7 @@
           active_g_tids.erase(mgr->txn_->txn_id()); \
           AddLatency(latency_count, latency_array, mgr->get_txn()); \
           my_to_sc_txns[local_gc%sc_array_size].first = NO_TXN; \
+          LOG(mgr->txn_->txn_id(), " deleting mgr "<<reinterpret_cast<int64>(mgr)<<", index is "<<local_gc%sc_array_size<<", local txn id is "<<local_gc<<", can gc txn is "<<can_gc_txns_); \
           delete mgr; } \
       ++local_gc; } \
 
@@ -64,7 +65,6 @@
 				msg->set_source_node(this_node); \
 				msg->set_num_aborted(-1); } \
 
-          //LOG(mgr->txn_->txn_id(), " deleting mgr "<<reinterpret_cast<int64>(mgr)<<", index is "<<local_gc%sc_array_size<<", local txn id is "<<local_gc<<", can gc txn is "<<can_gc_txns_); 
 
 
 using std::pair;
@@ -286,6 +286,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                                                 msg_to_send->add_ca_tx(tx.second);
                                                 msg_to_send->add_ca_tx(tx.first);
                                                 msg_to_send->add_ca_num(tx.fourth->abort_bit_);
+                                    			LOG(first_tx.first, " ca: adding "<<tx.first);
                                             }
                                         }
                                     }

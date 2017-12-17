@@ -406,6 +406,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 			  if(recv_rs[i].second == -1){
 	              --num_unconfirmed_read;
                   recv_rs[i].second = message.num_aborted();
+				  // TODO: The only place that may have concurrency issue 
                   sc_list[i] = message.num_aborted();
               	  if(i<(uint)writer_id)
                   	  --prev_unconfirmed;
@@ -422,6 +423,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   	  --prev_unconfirmed;
                   }
                   recv_rs[i].second = message.num_aborted();
+				  // TODO: The only place that may have concurrency issue 
                   sc_list[i] = message.num_aborted();
 	              --num_unconfirmed_read;
                   //AddPendingSC();
@@ -503,10 +505,8 @@ StorageManager::~StorageManager() {
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
 
-    if (sc_list)
-        delete[] sc_list;
-    if (aborted_txs)
-        delete aborted_txs;
+	delete[] sc_list;
+	delete aborted_txs;
 	delete tpcc_args;
 	delete txn_;
 	delete message_;
