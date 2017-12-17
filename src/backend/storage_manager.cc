@@ -21,6 +21,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	tpcc_args = new TPCCArgs();
 	txn_ = NULL;
     sc_list = NULL;
+    ca_list = NULL;
     writer_id = -1;
 }
 
@@ -52,8 +53,10 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
         }
         pthread_mutex_init(&lock, NULL);
         sc_list = new int[txn_->readers_size()];
+        ca_list = new int[txn_->readers_size()];
         for(int i = 0; i< txn_->readers_size(); ++i){
             sc_list[i] = -1;
+            ca_list[i] = 0;
         }
         prev_unconfirmed = writer_id;
         if(writer_id == 0)
@@ -66,6 +69,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
         aborted_txs = NULL;
 		message_ = NULL;
         sc_list = NULL;
+        ca_list = NULL;
         num_unconfirmed_read = 0;
         prev_unconfirmed = 0;
         writer_id = -1;
@@ -81,7 +85,7 @@ bool StorageManager::SendSC(MessageProto* msg){
     else{
         msg->set_tx_id(txn_->txn_id());
         msg->set_tx_local(txn_->local_txn_id());
-		if(msg->received_num_aborted_size() == 0){
+		if(msg->received_num_aborted_size() == 0 and msg->ca_tx_size() == 0){
 			if(msg->num_aborted() == -1)
 				return false;
 			LOG(txn_->txn_id(), prev_unconfirmed<<" sending to txn, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
@@ -130,8 +134,10 @@ void StorageManager::SetupTxn(TxnProto* txn){
     aborted_txs = new vector<int64_t>();
     prev_unconfirmed = writer_id;
     sc_list = new int[txn_->readers_size()];
+    ca_list = new int[txn_->readers_size()];
     for(int i = 0; i< txn_->readers_size(); ++i){
         sc_list[i] = -1;
+        ca_list[i] = 0;
     }
     recv_rs[writer_id].second = num_aborted_;
     sc_list[writer_id] = num_aborted_;
@@ -506,6 +512,7 @@ StorageManager::~StorageManager() {
 	}
 
 	delete[] sc_list;
+	delete[] ca_list;
 	delete aborted_txs;
 	delete tpcc_args;
 	delete txn_;

@@ -836,10 +836,11 @@ public:
     }
 };
 
+template<typename T1, typename T2, typename T3>
 class CompareTuple
 {
 public:
-    bool operator() (MyTuple<int64_t, int64_t, bool> left, MyTuple<int64_t, int64_t, bool> right)
+    bool operator() (MyTuple<T1, T2, T3> left, MyTuple<T1, T2, T3> right)
     {
     	return (left.first > right.first);
     }
@@ -851,6 +852,15 @@ public:
     bool operator() (MyTuple<int64_t, int64, int> left, MyTuple<int64_t, int64, int> right)
     {
     	return (left.second > right.second);
+    }
+};
+
+class CompareFour 
+{
+public:
+    bool operator() (MyFour<int64_t, int64_t, int, int> left, MyFour<int64_t, int64_t, int, int> right)
+    {
+    	return (left.first > right.first);
     }
 };
 

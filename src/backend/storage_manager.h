@@ -216,9 +216,9 @@ class StorageManager {
 	  if (pending_sc.size())
 		  AddPendingSC();
       for (int i = 0; i < txn_->writers_size(); ++i){
-          if(sc_list[i] == -1 or sc_list[i] != recv_rs[i].second){
+          if((ca_list[i] and ca_list[i] != sc_list[i]) or sc_list[i] == -1 or sc_list[i] != recv_rs[i].second){
               if(output_count++ < 8)
-                LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second);
+                  LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_rs[i].second<<", ca list value is "<<ca_list[i]);
               return false;
           }
       }
@@ -296,6 +296,14 @@ class StorageManager {
   void Abort();
   bool ApplyChange(bool is_committing);
   void AddSC(MessageProto& msg, int& i);
+  void inline AddCA(int partition, int anum) {
+      for(int i = 0; i < txn_->writers_size(); ++i){
+          if (partition == recv_rs[i].first){
+              ca_list[i] = max(ca_list[i], anum);
+              break;
+          }
+      }
+  } 
 
   inline void AddReadConfirm(int node_id, int num_aborted){
       LOG(txn_->txn_id(), " adding RC from:"<<node_id<<", left "<<num_unconfirmed_read<<", na is "<<num_aborted);
@@ -377,6 +385,7 @@ class StorageManager {
   vector<pair<int, int>> recv_rs;
   vector<int64_t>* aborted_txs;
   int* sc_list;
+  int* ca_list;
   vector<vector<int>> pending_sc;
   bool message_has_value_;
   bool is_suspended_;

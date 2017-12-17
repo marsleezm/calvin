@@ -66,6 +66,20 @@
 				msg->set_num_aborted(-1); } \
 
 
+#define ADD_PENDING_CAS(pending_ca, tx_id, mgr) \
+     while (pending_ca.size()) {\
+        MyTuple<int64, int, int> tuple = pending_ca.top(); \
+        if(tuple.first < tx_id)\
+            pending_ca.pop(); \
+        else if(tuple.first > tx_id)\
+            break; \
+        else{ \
+            LOG(tuple.first, " adding pca, my local id"<<mgr->txn_->local_txn_id()); \
+            mgr->AddCA(tuple.second, tuple.third); \
+            pending_ca.pop(); \
+        } \
+     }
+        
 
 using std::pair;
 using std::string;
@@ -205,6 +219,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;
 
     AtomicQueue<MessageProto>* locker_queue = scheduler->message_queues[scheduler->num_threads];
+    priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
 
     // Begin main loop.
     MessageProto message;
@@ -224,7 +239,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               	int64 remote_global_id = message.tx_id(), base_local=-1, local_txn_id, remote_local, base_remote_local= message.tx_local();
 				int i = 0;
 				AGGRLOG(remote_global_id, " locker msg:"<<message.source_node()<<", size:"<<message.received_num_aborted_size()<<", na is "<<message.num_aborted());
-              	ASSERT(message.received_num_aborted_size() > 0);
 			  	if(message.num_aborted() != -1){
 					int j = 0;
 					while(j < sc_array_size and scheduler->sc_txn_list[(j+num_lc_txns_)%sc_array_size].third != remote_global_id)
@@ -241,6 +255,21 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						continue;
 					}
 				}
+                if (message.ca_tx_size() != 0){
+                    for (int i = 0; i < message.ca_num_size(); ++i){
+                        remote_local = message.ca_tx(2*i);
+                        remote_global_id = message.ca_tx(2*i+1);
+                        local_txn_id = base_local+remote_local-base_remote_local; 
+                        if (scheduler->sc_txn_list[local_txn_id%sc_array_size].third != remote_global_id){
+					        AGGRLOG(local_txn_id, " buffering ca for txn not started: "<<remote_global_id); 
+                            pending_ca.push(MyTuple<int64_t, int, int>(remote_global_id, message.source_node(), message.ca_num(i)));
+                        }
+                        else{
+					        AGGRLOG(local_txn_id, " ca for:"<<remote_global_id<<", source:"<<message.source_node()<<", canum:"<<message.ca_num(i)); 
+                            scheduler->sc_txn_list[local_txn_id%sc_array_size].fourth->AddCA(message.source_node(), message.ca_num(i));
+                        }
+                    }
+                }
 				while(i < message.received_num_aborted_size()){
 				  	remote_local = message.received_num_aborted(i); 
                     ++i;
@@ -267,6 +296,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
                 // If can send confirm/pending confirm
                 if(first_tx.first >= num_lc_txns_){
+                    ADD_PENDING_CAS(pending_ca, first_tx.second, mgr);
 					int result = mgr->CanAddC(record_abort_bit);
 					if(result == CAN_ADD or result == ADDED){
 						did_something = true;
@@ -283,10 +313,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                                         for(uint i = 0; i < mgr->aborted_txs->size(); ++i){
                                             MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= scheduler->sc_txn_list[mgr->aborted_txs->at(i)%sc_array_size];
                                             if (tx.fourth->involved_nodes == involved_nodes){ 
-                                                msg_to_send->add_ca_tx(tx.second);
                                                 msg_to_send->add_ca_tx(tx.first);
+                                                msg_to_send->add_ca_tx(tx.second);
                                                 msg_to_send->add_ca_num(tx.fourth->abort_bit_);
-                                    			LOG(first_tx.first, " ca: adding "<<tx.first);
+                                    			LOG(first_tx.first, first_tx.second<<" CA: adding "<<tx.first);
                                             }
                                         }
                                     }
