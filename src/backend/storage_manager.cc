@@ -424,7 +424,6 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 			  else{
                   LOG(StringToInt(message.destination_channel()), " may abort because last time was "<<recv_rs[i].second<<", prev unconfirm is "<<prev_unconfirmed); 
                   if ( i < (uint)writer_id){
-                      ++abort_bit_;
                       aborting = true;
                   	  --prev_unconfirmed;
                   }
@@ -442,7 +441,6 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  if(txn_)
 		  AGGRLOG(txn_->txn_id(), " WTF, I didn't find anyone in the list? Impossible.");
       aborting = true;
-	  ++abort_bit_;
 	  return ABORT;
   }
   else{
@@ -459,7 +457,6 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   int prev_recv = recv_rs[i].second;
 				  if(prev_recv != -1 and i < writer_id) {
 					  LOG(txn_->txn_id(), " aborting"); 
-					  ++abort_bit_;
 					  aborting = true;
 				  }
                   recv_rs[i].second = message.num_aborted();
@@ -483,7 +480,6 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  }
 	  if(txn_)
 		  AGGRLOG(txn_->txn_id(), " NOT POSSIBLE! I did not find my entry...");
-	  ++abort_bit_;
       aborting = true;
 	  return ABORT;
   }

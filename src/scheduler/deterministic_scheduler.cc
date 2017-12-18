@@ -296,7 +296,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
                 // If can send confirm/pending confirm
                 if(first_tx.first >= num_lc_txns_){
-                    ADD_PENDING_CAS(pending_ca, first_tx.second, mgr);
+                    ADD_PENDING_CAS(pending_ca, first_tx.third, mgr);
 					int result = mgr->CanAddC(record_abort_bit);
 					if(result == CAN_ADD or result == ADDED){
 						did_something = true;
@@ -314,9 +314,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                                             MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= scheduler->sc_txn_list[mgr->aborted_txs->at(i)%sc_array_size];
                                             if (tx.fourth->involved_nodes == involved_nodes){ 
                                                 msg_to_send->add_ca_tx(tx.first);
-                                                msg_to_send->add_ca_tx(tx.second);
+                                                msg_to_send->add_ca_tx(tx.third);
                                                 msg_to_send->add_ca_num(tx.fourth->abort_bit_);
-                                    			LOG(first_tx.first, first_tx.second<<" CA: adding "<<tx.first);
+                                    			LOG(first_tx.first, first_tx.third<<" CA: adding "<<tx.third<<", "<<tx.fourth->abort_bit_);
                                             }
                                         }
                                     }

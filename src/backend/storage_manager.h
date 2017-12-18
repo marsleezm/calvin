@@ -297,6 +297,7 @@ class StorageManager {
   bool ApplyChange(bool is_committing);
   void AddSC(MessageProto& msg, int& i);
   void inline AddCA(int partition, int anum) {
+	  LOG(txn_->txn_id(), " adding pca:"<<partition<<", an:"<<anum);
       for(int i = 0; i < txn_->writers_size(); ++i){
           if (partition == recv_rs[i].first){
               ca_list[i] = max(ca_list[i], anum);
