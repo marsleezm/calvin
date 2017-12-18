@@ -106,6 +106,31 @@ bool StorageManager::SendSC(MessageProto* msg){
     }
 }
 
+void StorageManager::SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size){
+    MessageProto msg;
+    msg.set_type(MessageProto::READ_CONFIRM);
+    msg.set_source_node(configuration_->this_node_id);
+    msg.set_num_aborted(num_aborted_);
+    msg.set_tx_id(txn_->txn_id());
+    msg.set_tx_local(txn_->local_txn_id());
+    msg.set_destination_channel("locker");
+    for(uint i = 0; i < aborted_txs->size(); ++i){
+        MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= sc_txn_list[aborted_txs->at(i)%sc_array_size];
+        if (tx.fourth->involved_nodes == involved_nodes){
+            msg.add_ca_tx(tx.first);
+            msg.add_ca_tx(tx.third);
+            msg.add_ca_num(tx.fourth->abort_bit_);
+            LOG(txn_->txn_id(), txn_->local_txn_id()<<" CA: adding "<<tx.third<<", "<<tx.fourth->abort_bit_);
+        }
+    }
+    for (int i = 0; i < txn_->writers_size(); ++i) {
+        if (txn_->writers(i) != configuration_->this_node_id) {
+            msg.set_destination_node(txn_->writers(i));
+            connection_->Send1(msg);
+        }
+    }
+}
+
 void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn_ == NULL);
 	ASSERT(txn->multipartition());

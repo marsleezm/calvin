@@ -68,25 +68,23 @@ class StorageManager {
   ~StorageManager();
 
   bool TryAddSC(MessageProto* msg, int record_num_aborted);
+  void SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size);
 
-  inline void SendLocalReads(bool if_to_confirm){
-      if (if_to_confirm){
-      	  bool result = has_confirmed.exchange(true); 
-		  if(result== false){
-          	  LOG(txn_->txn_id(), " sending confirmed read of restarted "<<num_aborted_<<", abt:"<<aborting<<", ab:"<<abort_bit_);
-          	  message_->set_confirmed(true);
-		  }
-		  else
-          	  LOG(txn_->txn_id(), " wanted to send confirmed, but too late");
-	  }
-      else
-          LOG(txn_->txn_id(), " sending unconfirmed read of restarted "<<num_aborted_);
+  inline void SendLocalReads(bool if_to_confirm, MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size){
       if (!aborting and num_aborted_ == abort_bit_) {
+          if (if_to_confirm and has_confirmed.exchange(true) == false){ 
+              LOG(txn_->txn_id(), " sending confirmed read of restarted "<<num_aborted_<<", abt:"<<aborting<<", ab:"<<abort_bit_);
+              if (aborted_txs->size())
+                  SendCA(sc_txn_list, sc_array_size);
+              else
+                  message_->set_confirmed(true);
+          }
+          else
+              LOG(txn_->txn_id(), " sending unconfirmed read of restarted "<<num_aborted_);
           message_->set_num_aborted(num_aborted_);
           for (int i = 0; i < txn_->writers().size(); i++) {
               if (txn_->writers(i) != configuration_->this_node_id) {
                   //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
-                  //std::cout << txn_->txn_id()<< " sending reads to " << txn_->writers(i) << std::endl;
                   message_->set_destination_node(txn_->writers(i));
                   connection_->Send1(*message_);
               }

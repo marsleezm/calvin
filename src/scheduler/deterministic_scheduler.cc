@@ -41,15 +41,15 @@
 #define END_BLOCK(if_blocked, stat, last_time)
 #endif
 
-#define CLEANUP_TXN(local_gc, can_gc_txns, my_to_sc_txns, sc_array_size, active_g_tids, latency_count, latency_array) \
+#define CLEANUP_TXN(local_gc, can_gc_txns, my_to_sc_txns, sc_array_size, active_g_tids, latency_count, latency_array, sc_txn_list) \
   while(local_gc < can_gc_txns_){ \
       if (my_to_sc_txns[local_gc%sc_array_size].first == local_gc){ \
           StorageManager* mgr = my_to_sc_txns[local_gc%sc_array_size].second; \
           if(mgr->ReadOnly())   scheduler->application_->ExecuteReadOnly(mgr); \
           else \
               if (mgr->message_has_value_){ \
-                 if(mgr->prev_unconfirmed == 0) mgr->SendLocalReads(true); \
-                 else mgr->SendLocalReads(false); \
+                 if(mgr->prev_unconfirmed == 0) mgr->SendLocalReads(true, sc_txn_list, sc_array_size); \
+                 else mgr->SendLocalReads(false, sc_txn_list, sc_array_size); \
               } \
           active_g_tids.erase(mgr->txn_->txn_id()); \
           AddLatency(latency_count, latency_array, mgr->get_txn()); \
@@ -383,7 +383,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		*/
 
       //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-      CLEANUP_TXN(local_gc, can_gc_txns, my_to_sc_txns, sc_array_size, active_g_tids, latency_count, latency_array);
+      CLEANUP_TXN(local_gc, can_gc_txns, my_to_sc_txns, sc_array_size, active_g_tids, latency_count, latency_array, scheduler->sc_txn_list);
 
 	  if(!waiting_queue.Empty()){
 		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
@@ -513,7 +513,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  latest_started_tx = txn->local_txn_id();
               while (my_to_sc_txns[txn->local_txn_id()%sc_array_size].first != NO_TXN){
 			      LOG(txn->txn_id(), " prev txn is not clean, id is "<<my_to_sc_txns[local_gc%sc_array_size].first);
-                  CLEANUP_TXN(local_gc, can_gc_txns, my_to_sc_txns, sc_array_size, active_g_tids, latency_count, latency_array);
+                  CLEANUP_TXN(local_gc, can_gc_txns, my_to_sc_txns, sc_array_size, active_g_tids, latency_count, latency_array, scheduler->sc_txn_list);
               }
 			  // Create manager.
 			  StorageManager* manager;
@@ -614,16 +614,16 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 			if(txn->local_txn_id() != num_lc_txns_){
                 manager->put_inlist();
                 sc_txn_list[txn->local_txn_id()%sc_array_size].first = txn->local_txn_id();
-				manager->SendLocalReads(false);
+				manager->SendLocalReads(false, sc_txn_list, sc_array_size);
 				//AGGRLOG(txn->txn_id(), " sending local read for "<< txn->local_txn_id()<<", num lc is "<<num_lc_txns_<<", added to list loc "<<txn->local_txn_id()%sc_array_size);
 			}
 			else{
                 if(manager->prev_unconfirmed == 0){
 				    //AGGRLOG(txn->txn_id(), " directly confirm myself");
-				    manager->SendLocalReads(true);
+				    manager->SendLocalReads(true, sc_txn_list, sc_array_size);
                 }
                 else
-				    manager->SendLocalReads(false);
+				    manager->SendLocalReads(false, sc_txn_list, sc_array_size);
 			}
 			//to_confirm.clear();
 			return true;
@@ -659,9 +659,9 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 					active_g_tids.erase(txn->txn_id());
 					if (manager->message_has_value_){
                         if(manager->prev_unconfirmed == 0)
-						    manager->SendLocalReads(true);
+						    manager->SendLocalReads(true, sc_txn_list, sc_array_size);
                         else
-						    manager->SendLocalReads(false);
+						    manager->SendLocalReads(false, sc_txn_list, sc_array_size);
 					}
 					manager->spec_commit();
 					AddLatency(latency_count, latency[thread], txn);
@@ -674,9 +674,9 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 						sc_txn_list[txn->local_txn_id()%sc_array_size].first = txn->local_txn_id();
 						if (manager->message_has_value_){
 							if(manager->prev_unconfirmed == 0)
-								manager->SendLocalReads(true);
+								manager->SendLocalReads(true, sc_txn_list, sc_array_size);
 							else
-								manager->SendLocalReads(false);
+								manager->SendLocalReads(false, sc_txn_list, sc_array_size);
 						}
 						manager->spec_commit();
 						to_sc_txns_[thread][txn->local_txn_id()%sc_array_size] = make_pair(txn->local_txn_id(), manager);
@@ -692,7 +692,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 					sc_txn_list[txn->local_txn_id()%sc_array_size].first = txn->local_txn_id();
 					if (manager->message_has_value_){
 						//LOG(txn->local_txn_id(), " is added to sc list, addr is "<<reinterpret_cast<int64>(manager));
-						manager->SendLocalReads(false);
+						manager->SendLocalReads(false, sc_txn_list, sc_array_size);
 					}
 					manager->spec_commit();
 					AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<num_lc_txns_);
