@@ -11,6 +11,7 @@
 #include <tr1/unordered_map>
 #include <queue>
 #include "common/utils.h"
+#include "common/logging.h"
 #include "sequencer/sequencer.h"
 
 #include "backend/versioned_storage.h"
@@ -68,7 +69,7 @@ class LockedVersionedStorage {
 	  while(current){
 		  next = current->next;
 		  if(current->txn_id <= from_version){
-			  //LOG("Trying to delete "<<current->txn_id<<"'s value "<<reinterpret_cast<int64>(current->value));
+			  LOG(-1, "Trying to delete "<<current->txn_id<<"'s value "<<reinterpret_cast<int64>(current->value));
 			  prev->next = NULL;
 			  delete current;
 		  }

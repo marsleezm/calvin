@@ -273,7 +273,6 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 				if (list->txn_id < max_ts){
 					//LOG(txn_id, " trying to delete "<< list->txn_id<< " for key "<<key<<", addr is "<<reinterpret_cast<int64>(list->value));
 					//LOG(txn_id, " v is"<<*list->value);
-					//LOG("Before GC, max_ts is "<<max_ts<<", from version is "<<max_ts-GC_THRESHOLD);
 					DirtyGC(list, max_ts-GC_THRESHOLD);
 					//LOG(txn_id, key<<" first is "<<value_pair.first);
 					value_pair.first = WRITE;
@@ -424,7 +423,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 
 	//LOG(txn_id, " trying to put ["<<key<<"], entry addr is "<<reinterpret_cast<int64>(entry));
 	if (entry->lock.tx_id_ != txn_id){
-		//LOG(txn_id, " WTF, I don't have the lock??? Key is "<<key<<", lock holder is "<<entry->lock.tx_id_<<", equal "<<(txn_id == entry->lock.tx_id_));
+		LOG(txn_id, " WTF, I don't have the lock??? Key is "<<key<<", lock holder is "<<entry->lock.tx_id_<<", equal "<<(txn_id == entry->lock.tx_id_));
 		return false;
 	}
 	else{
@@ -461,7 +460,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 			if (!current){
 				DataNode* node = new DataNode();
 				node->value = value;
-				//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
+				LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 				node->txn_id = txn_id;
 				node->next = current;
 				entry->head = node;
@@ -665,7 +664,7 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 	while (list) {
 	  if (list->txn_id == txn_id) {
 		  entry->head =	list->next;
-		  //LOG(txn_id, " trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
+		  LOG(txn_id, key<<" trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
 		  delete list;
 		  break;
 	  }

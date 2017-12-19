@@ -63,7 +63,7 @@
 				msg = new MessageProto(); \
 				msg->set_type(MessageProto::READ_CONFIRM); \
 				msg->set_source_node(this_node); \
-				msg->set_num_aborted(-1); } \
+				msg->set_remote_an(-1); } \
 
 
 #define ADD_PENDING_CAS(pending_ca, tx_id, mgr) \
@@ -232,22 +232,31 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     int64 local_gc= 0; //prevtx=0; 
     int out_counter1 = 0, latency_count = 0;
     pair<int64, int64>* latency_array = scheduler->latency[thread];
+	vector<MessageProto> buffered_msgs;
 
     while (!terminated_) {
 	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-			while(locker_queue->Pop(&message)){
+			while(buffered_msgs.size() or locker_queue->Pop(&message)){
+				if (buffered_msgs.size()){
+					message = buffered_msgs[0];
+					buffered_msgs.erase(buffered_msgs.begin());
+				}
               	int64 remote_global_id = message.tx_id(), base_local=-1, local_txn_id, remote_local, base_remote_local= message.tx_local();
 				int i = 0;
-				AGGRLOG(remote_global_id, " locker msg:"<<message.source_node()<<", size:"<<message.received_num_aborted_size()<<", na is "<<message.num_aborted());
-			  	if(message.num_aborted() != -1){
+				AGGRLOG(remote_global_id, " locker msg:"<<message.source_node()<<", size:"<<message.received_num_aborted_size()<<", na is "<<message.local_an());
+			  	if(message.remote_an() != -1){
 					int j = 0;
 					while(j < sc_array_size and scheduler->sc_txn_list[(j+num_lc_txns_)%sc_array_size].third != remote_global_id)
 						++j;
-					ASSERT(j != sc_array_size);
+					if(j == sc_array_size){
+						AGGRLOG(remote_global_id, " not yet started, buffering");
+						buffered_msgs.push_back(message);
+						break;
+					}
 					base_local = j+num_lc_txns_;
 					StorageManager* manager = scheduler->sc_txn_list[(j+num_lc_txns_)%sc_array_size].fourth;
 					AGGRLOG(remote_global_id, " adding confirm");
-					manager->AddReadConfirm(message.source_node(), message.num_aborted());
+					manager->AddReadConfirm(message.source_node(), message.remote_an());
 			  	}
 				if (base_local == -1){
 					if (scheduler->TryToFindId(message, i, base_local, remote_global_id, base_remote_local, num_lc_txns_) == false){
@@ -357,8 +366,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				//}
 
                 if (!did_something){
-                    //LOG(-1, " did not do anything"); 
                     if (msg_to_send){
+                    	LOG(-1, " did not do anything and sending, first mgr"<<reinterpret_cast<int64>(first_mgr)); 
                         if(first_mgr)
                             first_mgr->SendSC(msg_to_send);
                         delete msg_to_send;
@@ -434,16 +443,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  AGGRLOG(StringToInt(message.destination_channel()), " msg:"<<message.source_node()<<","<<message.type());
 	      if(message.type() == MessageProto::READ_RESULT)
 	      {
-	    	  for(int i =0; i<message.committed_txns_size(); ++i){
-	    		  MessageProto new_msg;
-	    		  AGGRLOG(StringToInt(message.destination_channel()), " Got read result, sending out read confirmation to "
-	    				  <<message.committed_txns(i));
-	    		  new_msg.set_destination_node(this_node);
-	    		  new_msg.set_destination_channel(IntToString(message.committed_txns(i)));
-	    		  new_msg.set_num_aborted(message.final_abort_nums(i));
-	    		  new_msg.set_type(MessageProto::READ_CONFIRM);
-	    		  scheduler->thread_connections_[thread]->Send(new_msg);
-	    	  }
 	    	  int txn_id = atoi(message.destination_channel().c_str());
 			  StorageManager* manager;
 			  if (active_g_tids.count(txn_id) == false){
@@ -460,7 +459,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  // Handle read result is correct, e.g. I can continue execution
 				  int result = manager->HandleReadResult(message);
 				  //LOG(txn_id, " added read, result is "<<result);
-				  if(result == SUCCESS){
+				  if(result == SUCCESS and manager->spec_committed_==false){
 					  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, latency_count) == false){
 						  AGGRLOG(txn_id, " got aborted due to invalid remote read, pushing "<<manager->num_aborted_);
 						  retry_txns.push(MyTuple<int64, int, StorageManager*>(manager->get_txn()->local_txn_id(), manager->num_aborted_, manager));
@@ -479,7 +478,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	    	  AGGRLOG(StringToInt(message.destination_channel()), " ReadConfirm"<<", in map:"<<active_g_tids.count(atoi(message.destination_channel().c_str()))); 
 			  ASSERT(message.received_num_aborted_size() == 0);
 			  StorageManager* manager = active_g_tids[atoi(message.destination_channel().c_str())]; 
-			  manager->AddReadConfirm(message.source_node(), message.num_aborted());
+			  manager->AddReadConfirm(message.source_node(), message.remote_an());
 	      }
 	  }
 
@@ -490,7 +489,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  retry_txns.pop();
 		  }
 		  else{
-			  LOG(retry_txns.front().first, " being retried, s:"<<retry_txns.front().second);
+			  LOG(retry_txns.front().first, " being retried, s:"<<retry_txns.front().second<<", na is "<<retry_txns.front().third->num_aborted_);
 			  if(scheduler->ExecuteTxn(retry_txns.front().third, thread, active_g_tids, latency_count) == true)
 				  retry_txns.pop();
 			  else

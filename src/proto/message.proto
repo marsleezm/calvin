@@ -41,8 +41,8 @@ message MessageProto {
   // Carries the number of times aborts for a transaction, when the read result
   // sent by it is stable already, i.e. all transactions before it has committed.
   repeated int64 committed_txns = 12;
-  repeated int32 final_abort_nums = 13;
-  optional int32 num_aborted = 14;
+  optional int32 remote_an = 13;
+  optional int32 local_an = 14;
   repeated int32 received_num_aborted = 15;
   optional bool confirmed = 16;
   optional int64 tx_id = 17;
