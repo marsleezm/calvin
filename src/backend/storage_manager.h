@@ -62,27 +62,27 @@ class StorageManager {
     inline void InitUnconfirmMsg(MessageProto* msg){
         msg->clear_received_num_aborted();
         // The first txn is not confirmed yet
-        msg->set_remote_an(-1);
+        msg->set_num_aborted(-1);
     }
 
   ~StorageManager();
 
-  bool TryAddSC(MessageProto* msg, int record_num_aborted);
+  bool TryAddSC(MessageProto* msg, int record_num_aborted, int64 num_committed_txs);
   void SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size);
 
   inline void SendLocalReads(bool if_to_confirm, MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size){
       if (!aborting and num_aborted_ == abort_bit_) {
           if (if_to_confirm and has_confirmed.exchange(true) == false){ 
-              LOG(txn_->txn_id(), " sending confirmed read of lan "<<num_aborted_<<", ran:"<<read_aborted_);
+              LOG(txn_->txn_id(), " sending confirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
               if (aborted_txs->size())
                   SendCA(sc_txn_list, sc_array_size);
               else
                   message_->set_confirmed(true);
           }
           else
-              LOG(txn_->txn_id(), " sending unconfirmed read of lan "<<num_aborted_<<", ran:"<<read_aborted_);
-          message_->set_local_an(num_aborted_);
-		  message_->set_remote_an(read_aborted_);
+              LOG(txn_->txn_id(), " sending unconfirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
+          message_->set_num_aborted(num_aborted_);
+          message_->set_local_aborted(local_aborted_);
           for (int i = 0; i < txn_->writers().size(); i++) {
               if (txn_->writers(i) != configuration_->this_node_id) {
                   //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
@@ -93,7 +93,6 @@ class StorageManager {
 
           message_->clear_keys();
           message_->clear_values();
-          message_has_value_ = false;
       }
       else
           ASSERT(if_to_confirm == false);
@@ -101,20 +100,15 @@ class StorageManager {
 
     inline int CanAddC(int& return_abort_bit){
         //Stop already if is not MP txn
-        if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
-            return ADDED;
-        else {
-			return_abort_bit = abort_bit_;
-            if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting)
-                    return CAN_ADD;
-            else{
-				/*if(output_count < 8){
-					++output_count;
-					//LOG(txn_->txn_id(), " can not add "<<spec_committed_<<", na:"<<num_aborted_<<", ab:"<<abort_bit_<<", abt"<<aborting);
-				}*/
-                return CAN_NOT_ADD;
-            }
-        }
+		return_abort_bit = abort_bit_;
+		if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting){
+			if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
+				return ADDED;
+			else
+				return CAN_ADD;
+		}
+		else
+			return CAN_NOT_ADD;
     }
 
 
@@ -139,7 +133,7 @@ class StorageManager {
   inline int LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-		if(abort_bit_ == num_aborted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, num_aborted_, abort_queue_, aborted_txs)){
+		if(abort_bit_ == num_aborted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, &local_aborted_, num_aborted_, abort_queue_, aborted_txs)){
 			// It should always be a new object
 			ASSERT(read_set_.count(key) == 0);
 			read_set_[key] = ValuePair(NEW_MASK | WRITE, new Value);
@@ -164,7 +158,7 @@ class StorageManager {
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
-	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_aborted_<<", ABit "<<abort_bit_);
+	  //LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_aborted_<<", ABit "<<abort_bit_<<", lan:"<<local_aborted_);
 	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
 	  return num_aborted > num_aborted_ && num_aborted == abort_bit_;}
 
@@ -182,7 +176,7 @@ class StorageManager {
   inline int CanSCToCommit() {
 		if(output_count < 20){
 			++output_count;
-		  LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
+		  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
 		}
 	  if (ReadOnly())
 		  return SUCCESS;
@@ -191,7 +185,7 @@ class StorageManager {
 			  return ABORT;
           // Don't remove the compare in the last part: this is added for concurrency issue
 		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting and num_aborted_ == abort_bit_){
-		      LOG(txn_->txn_id(), " can commit"); 
+		      //LOG(txn_->txn_id(), " can commit"); 
 			  return SUCCESS;
           }
 		  else
@@ -206,9 +200,11 @@ class StorageManager {
 	  if (pending_sc.size())
 		  AddPendingSC();
       for (int i = 0; i < txn_->writers_size(); ++i){
-          if((ca_list[i] and ca_list[i] != recv_local_an[i]) or sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
-              if(output_count++ < 8)
-                  LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_an[i].second<<", ca list value is "<<ca_list[i]<<", recvlocal is"<<recv_local_an[i]);
+          if((ca_list[i] and ca_list[i] != recv_lan[i]) or sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
+			  if (output_count <20){
+				  LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_an[i].second<<", ca list value is "<<ca_list[i]<<", recv_lan:"<<recv_lan[i]);
+				  ++output_count;
+			  }
               return false;
           }
       }
@@ -240,7 +236,6 @@ class StorageManager {
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
   		  message_->add_values(*read_set_[suspended_key].second);
-  		  message_has_value_ = true;
   		  suspended_key = "";
   	  }
   }
@@ -296,16 +291,16 @@ class StorageManager {
       }
   } 
 
-  inline void AddReadConfirm(int node_id, int remote_an){
-      LOG(txn_->txn_id(), " adding RC from:"<<node_id<<", left "<<num_unconfirmed_read<<", na is "<<remote_an);
+  inline void AddReadConfirm(int node_id, int num_aborted){
+      LOG(txn_->txn_id(), " adding RC from:"<<node_id<<", left "<<num_unconfirmed_read<<", na is "<<num_aborted);
 	  for(uint i = 0; i<recv_an.size(); ++i){
 		  if(recv_an[i].first == node_id){
-			  if(recv_an[i].second == remote_an || remote_an == 0) {
-                  sc_list[i] = remote_an;
+			  added_pc_size = max(added_pc_size, (int)i+1);
+			  if(added_pc_size == writer_id)
+				  added_pc_size = writer_id+1;
+			  if(recv_an[i].second == num_aborted || num_aborted == 0) {
+                  sc_list[i] = num_aborted;
 				  --num_unconfirmed_read;
-                  added_pc_size = max(added_pc_size, (int)i+1);
-                  if(added_pc_size == writer_id)
-                      added_pc_size = writer_id+1;
                   if (i < (uint)writer_id){
                       --prev_unconfirmed;
                       LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed);
@@ -314,9 +309,9 @@ class StorageManager {
                   //AddPendingSC();
 			  }
 			  else{
-                  sc_list[i] = remote_an;
+                  sc_list[i] = num_aborted;
 				  LOG(txn_->txn_id(), " buffer read confirm:"<<node_id<<", local is "<<recv_an[i].second
-						  <<", got is "<<remote_an);
+						  <<", got is "<<num_aborted);
 			  }
 			  break;
 		  }
@@ -374,20 +369,19 @@ class StorageManager {
  public:
   // Indicate whether the message contains any value that should be sent
   vector<pair<int, int>> recv_an;
-  int* recv_local_an;
   vector<int64_t>* aborted_txs;
+  int* recv_lan;
   int* sc_list;
   int* ca_list;
   vector<vector<int>> pending_sc;
-  bool message_has_value_;
   bool is_suspended_;
   bool spec_committed_;
   int last_add_pc = -1;
   int writer_id;
   int involved_nodes = 0;
-  atomic<int> abort_bit_;
+  atomic<int32> abort_bit_;
   int num_aborted_;
-  int read_aborted_ = 0;
+  atomic<int32> local_aborted_;
   pthread_mutex_t lock;
 
   Key suspended_key;

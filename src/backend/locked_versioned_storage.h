@@ -41,12 +41,12 @@ class LockedVersionedStorage {
 
   // Standard operators in the DB
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
-  virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted,
+  virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
   virtual ValuePair SafeRead(const Key& key, int64 txn_id, bool new_object);
-  virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, int num_aborted,
+  virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
     			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object, vector<int64>* aborted_txs);
-  virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, int num_aborted,
+  virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
 			AtomicQueue<pair<int64_t, int>>* abort_queue, vector<int64_t>* aborted_txs);
   virtual bool PutObject(const Key& key, Value* value, int64 txn_id, bool is_committing, bool new_object);
   virtual void PutObject(const Key& key, Value* value);
@@ -69,7 +69,7 @@ class LockedVersionedStorage {
 	  while(current){
 		  next = current->next;
 		  if(current->txn_id <= from_version){
-			  LOG(-1, "Trying to delete "<<current->txn_id<<"'s value "<<reinterpret_cast<int64>(current->value));
+			  //LOG(-1, "Trying to delete "<<current->txn_id<<"'s value "<<reinterpret_cast<int64>(current->value));
 			  prev->next = NULL;
 			  delete current;
 		  }

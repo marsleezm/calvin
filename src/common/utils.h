@@ -702,14 +702,16 @@ public:
 	int64_t my_tx_id_;
 	int64_t read_from_id_;
 	atomic<int>* abort_bit_;
+	atomic<int>* local_aborted_;
 	int num_aborted_;
 	AtomicQueue<pair<int64_t, int>>* abort_queue_;
 
 	ReadFromEntry(int64_t my_tx_id, int64_t read_from_id, atomic<int>* abort_bit,
-			int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue){
+			atomic<int>* local_aborted, int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue){
 		my_tx_id_ = my_tx_id;
 		read_from_id_ = read_from_id;
 		abort_bit_ = abort_bit;
+		local_aborted_ = local_aborted;
 		num_aborted_ = num_aborted;
 		abort_queue_ = abort_queue;
 	}
@@ -719,6 +721,7 @@ public:
 		return (my_tx_id_ == another.my_tx_id_
 				&& read_from_id_ == another.read_from_id_
 				&& abort_bit_ == another.abort_bit_
+				&& local_aborted_ == another.local_aborted_
 				&& num_aborted_ == another.num_aborted_
 				&& abort_queue_ == another.abort_queue_);
 	}
@@ -726,68 +729,74 @@ public:
 	friend inline std::ostream &operator<<(std::ostream &os, ReadFromEntry const &m) {
 		if(m.abort_bit_)
 			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< m.read_from_id_ <<", "<< *m.abort_bit_<<
-					", "<<m.num_aborted_<<", abort_queue_]";
+				", "<<m.num_aborted_<<", abort_queue_]";
 		else
 			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<< m.read_from_id_ <<", "<< m.abort_bit_<<
-							", "<<m.num_aborted_<<", abort_queue_]";
+				", "<<m.num_aborted_<<", abort_queue_]";
 	}
 };
 
 class PendingReadEntry{
-public:
-	int64_t my_tx_id_;
-	atomic<int>* abort_bit_;
-	int num_aborted_;
-	bool request_lock_;
-	AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue_;
-	AtomicQueue<pair<int64_t, int>>* abort_queue_;
+	public:
+		int64_t my_tx_id_;
+		atomic<int>* abort_bit_;
+		atomic<int>* local_aborted_;
+		int num_aborted_;
+		bool request_lock_;
+		AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue_;
+		AtomicQueue<pair<int64_t, int>>* abort_queue_;
 
-	PendingReadEntry(int64_t my_tx_id, atomic<int>* abort_bit, int num_aborted,
-			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue, bool request_lock){
-		my_tx_id_ = my_tx_id;
-		abort_bit_ = abort_bit;
-		num_aborted_ = num_aborted;
-		pend_queue_ = pend_queue;
-		abort_queue_ = abort_queue;
-		request_lock_ = request_lock;
-	}
+		PendingReadEntry(int64_t my_tx_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
+				AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue, bool request_lock){
+			my_tx_id_ = my_tx_id;
+			abort_bit_ = abort_bit;
+			local_aborted_ = local_aborted;
+			num_aborted_ = num_aborted;
+			pend_queue_ = pend_queue;
+			abort_queue_ = abort_queue;
+			request_lock_ = request_lock;
+		}
 
-	bool operator== (PendingReadEntry another) const
-	{
-		return (my_tx_id_ == another.my_tx_id_
-				&& abort_bit_ == another.abort_bit_
-				&& num_aborted_ == another.num_aborted_
-				&& pend_queue_ == another.pend_queue_
-				&& abort_queue_ == another.abort_queue_);
-	}
+		bool operator== (PendingReadEntry another) const
+		{
+			return (my_tx_id_ == another.my_tx_id_
+					&& abort_bit_ == another.abort_bit_
+					&& local_aborted_== another.local_aborted_
+					&& num_aborted_ == another.num_aborted_
+					&& pend_queue_ == another.pend_queue_
+					&& abort_queue_ == another.abort_queue_);
+		}
 
-	friend inline std::ostream &operator<<(std::ostream &os, PendingReadEntry const &m) {
-		if(m.abort_bit_)
-			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<<*m.abort_bit_<<
-				m.num_aborted_<<", pend_queue, abort_queue]";
-		else
-			return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<<m.abort_bit_<<
-							m.num_aborted_<<", , pend_queue, abort_queue]";
-	}
+		friend inline std::ostream &operator<<(std::ostream &os, PendingReadEntry const &m) {
+			if(m.abort_bit_)
+				return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<<*m.abort_bit_<<
+					m.num_aborted_<<", pend_queue, abort_queue]";
+			else
+				return os << "ReadFromEntry: ["<< m.my_tx_id_ << ", "<<m.abort_bit_<<
+					m.num_aborted_<<", , pend_queue, abort_queue]";
+		}
 };
 
 class LockEntry{
 public:
 	int64_t tx_id_;
 	atomic<int>* abort_bit_;
+	atomic<int>* local_aborted_;
 	int num_aborted_;
 	AtomicQueue<pair<int64_t, int>>* abort_queue_;
 
 	LockEntry(){
 		tx_id_ = NO_LOCK;
 		abort_bit_ = NULL;
+		local_aborted_ = NULL;
 		num_aborted_ = 0;
 		abort_queue_ = NULL;
 	}
 
-	LockEntry(int64_t tx_id, std::atomic<int>* abort_bit, int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue){
+	LockEntry(int64_t tx_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue){
 		tx_id_ = tx_id;
 		abort_bit_ = abort_bit;
+		local_aborted_ = local_aborted;
 		num_aborted_ = num_aborted;
 		abort_queue_ = abort_queue;
 	}
@@ -795,7 +804,7 @@ public:
 	bool operator== (LockEntry another) const
 	{
 		return (tx_id_ == another.tx_id_ && num_aborted_ == another.num_aborted_ &&
-				abort_bit_ == another.abort_bit_ && abort_queue_ == another.abort_queue_);
+				abort_bit_ == another.abort_bit_ && local_aborted_ == another.local_aborted_ && abort_queue_ == another.abort_queue_);
 	}
 
 
