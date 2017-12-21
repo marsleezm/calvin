@@ -208,12 +208,14 @@ class StorageManager {
               return false;
           }
       }
+	  /*
 	  string res = "";
       for (int i = 0; i < txn_->writers_size(); ++i){
 		  res += IntToString(sc_list[i]);
 		  res += IntToString(recv_an[i].second);
 	  }
 	  LOG(txn_->txn_id(), " to comm:"<<res);
+	  */
       return true;
   }
 
