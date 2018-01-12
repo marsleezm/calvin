@@ -76,7 +76,7 @@
             break; \
         else{ \
             LOG(tuple.first, " adding pca, my local id"<<mgr->txn_->local_txn_id()); \
-            mgr->AddCA(tuple.second, tuple.third); \
+            mgr->AddCA(tuple.second, tuple.third, tx_id); \
             pending_ca.pop(); \
         } \
      }
@@ -276,7 +276,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                         }
                         else{
 					        AGGRLOG(local_txn_id, " ca for:"<<remote_global_id<<", source:"<<message.source_node()<<", canum:"<<message.ca_num(i)); 
-                            scheduler->sc_txn_list[local_txn_id%sc_array_size].fourth->AddCA(message.source_node(), message.ca_num(i));
+                            scheduler->sc_txn_list[local_txn_id%sc_array_size].fourth->AddCA(message.source_node(), message.ca_num(i), remote_global_id);
                         }
                     }
                 }
@@ -354,6 +354,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 							LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
 							if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
 								++Sequencer::num_committed;
+							scheduler->sc_txn_list[tx_index].third = NO_TXN;
 							++num_lc_txns_;
 						}
 					}

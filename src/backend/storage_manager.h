@@ -61,6 +61,8 @@ class StorageManager {
 
     inline void InitUnconfirmMsg(MessageProto* msg){
         msg->clear_received_num_aborted();
+        msg->clear_ca_tx();
+        msg->clear_ca_num();
         // The first txn is not confirmed yet
         msg->set_num_aborted(-1);
     }
@@ -201,6 +203,7 @@ class StorageManager {
 		  AddPendingSC();
       for (int i = 0; i < txn_->writers_size(); ++i){
           if((ca_list[i] and ca_list[i] != recv_lan[i]) or sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
+          //if(sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
 			  if (output_count <20){
 				  LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_an[i].second<<", ca list value is "<<ca_list[i]<<", recv_lan:"<<recv_lan[i]);
 				  ++output_count;
@@ -283,14 +286,16 @@ class StorageManager {
   void Abort();
   bool ApplyChange(bool is_committing);
   void AddSC(MessageProto& msg, int& i);
-  void inline AddCA(int partition, int anum) {
-	  LOG(txn_->txn_id(), " adding pca:"<<partition<<", an:"<<anum);
-      for(int i = 0; i < txn_->writers_size(); ++i){
-          if (partition == recv_an[i].first){
-              ca_list[i] = max(ca_list[i], anum);
-              break;
-          }
-      }
+  void inline AddCA(int partition, int anum, int64 remote_id) {
+	  if(remote_id == txn_->txn_id()){
+		  LOG(txn_->txn_id(), " adding pca:"<<partition<<", an:"<<anum);
+		  for(int i = 0; i < txn_->writers_size(); ++i){
+			  if (partition == recv_an[i].first){
+				  ca_list[i] = max(ca_list[i], anum);
+				  break;
+			  }
+		  }
+	  }
   } 
 
   inline void AddReadConfirm(int node_id, int num_aborted){
