@@ -171,8 +171,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   StorageManager *mgr = NULL;
   queue<MyTuple<int64_t, int, StorageManager*>> retry_txns;
 
-  uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
-  int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
   int this_node = scheduler->configuration_->this_node_id;
 
@@ -211,8 +209,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  AddLatency(sample_count, latency_count, latency_array, mgr->get_txn());
 				  delete mgr;
 				  my_to_sc_txns->pop();
-                  if (my_to_sc_txns->size())
+                  if (my_to_sc_txns->size()){
                       LOG(my_to_sc_txns->top().first, " is the first after popping up "<<to_sc_txn.first);
+				  }
 				  // Go to the next loop, try to commit as many as possible.
 				  continue;
 			  }
@@ -341,7 +340,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	  // Try to start a new transaction
-	  else if (my_to_sc_txns->size() <= max_sc && my_pend_txns->size() <= max_pend && scheduler->num_suspend[thread]<=max_suspend) {
+	  else if (my_to_sc_txns->size() <= max_sc) {
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
@@ -379,13 +378,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //		  }
 	  }
 //	  else{
-//		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, my_pend_txns->size() > max_pend,
-//				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
 //	  }
 	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
 	  else{
-		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, my_pend_txns->size() > max_pend,
-		  				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, false,
+		  				  false, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
 		  if(out_counter1 & 67108864){
 			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
 					  ", num suspend is "<<scheduler->num_suspend[thread]);
