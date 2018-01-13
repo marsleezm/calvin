@@ -534,43 +534,20 @@ void* Sequencer::FetchMessage() {
   //TxnProto* done_txn;
   if (txns_queue_->Size() < 2000){
 	  ASSERT(queue_mode == NORMAL_QUEUE);
-	  if (queue_mode == NORMAL_QUEUE){
-		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
-		  	  // Have we run out of txns in our batch? Let's get some new ones.
-		  	  if (batch_message != NULL) {
-		  		  for (int i = 0; i < batch_message->data_size(); i++)
-		  		  {
-		  			  TxnProto* txn = new TxnProto();
-		  			  txn->ParseFromString(batch_message->data(i));
-		  			  txn->set_local_txn_id(fetched_txn_num_++);
-		  			  txns_queue_->Push(txn);
-		  			  ++num_fetched_this_round;
-		  		  }
-		  		  delete batch_message;
-		  		  ++fetched_batch_num_;
-		  	  }
+	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
+	  // Have we run out of txns in our batch? Let's get some new ones.
+	  if (batch_message != NULL) {
+		  for (int i = 0; i < batch_message->data_size(); i++)
+		  {
+			  TxnProto* txn = new TxnProto();
+			  txn->ParseFromString(batch_message->data(i));
+			  txn->set_local_txn_id(fetched_txn_num_++);
+			  txns_queue_->Push(txn);
+			  ++num_fetched_this_round;
+		  }
+		  delete batch_message;
+		  ++fetched_batch_num_;
 	  }
-//	  else if (queue_mode == FROM_SEQ_SINGLE){
-//		  for (int i = 0; i < 1000; i++)
-//			  {
-//				  TxnProto* txn;
-//				  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-//				  txn->set_local_txn_id(fetched_txn_num_++);
-//				  txns_queue_->Push(txn);
-//			  }
-//	  }
-//	  else if (queue_mode == FROM_SEQ_DIST){
-//		  int i = 0;
-//		  while (i < 1000)
-//		  {
-//			  TxnProto* txn;
-//			  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-//			  txn->set_local_txn_id(fetched_txn_num_);
-//			  txns_queue_[(fetched_txn_num_/BUFFER_TXNS_NUM)%num_threads].Push(txn);
-//			  ++fetched_txn_num_;
-//			  ++i;
-//		  }
-//	  }
   }
   return NULL;
 

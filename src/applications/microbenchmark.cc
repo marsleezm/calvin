@@ -283,7 +283,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 //			string rw = "";
 //			for(int i=0; i<txn->read_write_set_size(); ++i)
 //				rw += txn->read_write_set(i) +" ";
-//			std::cout<<txn->txn_id()<<", the seed is "<<txn->seed()<<", rw is "<<rw<<std::endl;
+//          LOG(txn->txn_id(), ", the seed is "<<txn->seed()<<", rw is "<<rw);
 		}
 
 		for (int i = 0; i < indexAccessNum; i++) {
@@ -295,10 +295,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 				index_val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL){
 					indexed_key = *index_val;
-					//LOG(txn->txn_id(), " indexed_key for "<<txn->read_write_set(i)<<", addr is "<<reinterpret_cast<int64>(index_val)<<", v is "<<indexed_key);
 					tpcc_args->add_indexed_keys(indexed_key);
-					//if(StringToInt(indexed_key) < 0 )
-					//	std::cout<<" indexed is wrong! "<<indexed_key<<std::endl;
 					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 				}
 				else
@@ -306,7 +303,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			}
 			else{
 				indexed_key = tpcc_args->indexed_keys(i);
-				//LOG(txn->txn_id(), " getting key "<<txn->read_write_set(i)<<" which is "<<indexed_key);
+				//LOG(txn->txn_id(), " skipped, indexed_key is "<<indexed_key);
 			}
 
 			if(storage->ShouldRead()){
@@ -322,7 +319,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			if(storage->ShouldRead()){
 				Value* index_val = storage->ReadLock(txn->read_write_set(i+indexAccessNum), read_state, false);
 				if(read_state == NORMAL)
-					*index_val = IntToString(StringToInt(*index_val) +  txn->seed()% 100 -50);
+					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 				else
 					return reinterpret_cast<int64>(index_val);
 			}

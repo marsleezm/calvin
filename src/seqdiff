@@ -1,0 +1,100 @@
+diff --git a/./sequencer/sequencer.cc b/../../calvin/src/sequencer/sequencer.cc
+index 2ab4ba9..13a3d10 100755
+--- a/./sequencer/sequencer.cc
++++ b/../../calvin/src/sequencer/sequencer.cc
+@@ -43,11 +43,13 @@ double worker_end[SAMPLES];
+ double scheduler_unlock[SAMPLES];
+ #endif
+ 
+-atomic<int64_t> Sequencer::num_committed(0);
++int64_t Sequencer::num_lc_txns_=0;
++int64_t Sequencer::num_committed=0;
+ //int64_t Sequencer::max_commit_ts=-1;
+ //int64_t Sequencer::num_c_txns_=0;
+ atomic<int64_t> Sequencer::num_aborted_(0);
+ atomic<int64_t> Sequencer::num_pend_txns_(0);
++atomic<int64_t> Sequencer::num_sc_txns_(0);
+ 
+ void* Sequencer::RunSequencerWriter(void *arg) {
+   reinterpret_cast<Sequencer*>(arg)->RunWriter();
+@@ -211,6 +213,9 @@ void Sequencer::RunWriter() {
+     }
+   }
+ 
++  started = true;
++  std::cout << "Starting sequencer.\n" << std::flush;
++
+   // Set up batch messages for each system node.
+   MessageProto batch;
+   batch.set_destination_channel("sequencer");
+@@ -372,18 +377,19 @@ void Sequencer::RunReader() {
+ #else
+     bool got_batch = false;
+     do {
+-    	FetchMessage();
+-    	pthread_mutex_lock(&mutex_);
+-    	if (batch_queue_.size()) {
+-    		batch_string = batch_queue_.front();
+-    		batch_queue_.pop();
+-    		got_batch = true;
+-    	}
+-    	pthread_mutex_unlock(&mutex_);
+-    	if (!got_batch)
+-    		Spin(0.001);
++      	FetchMessage();
++      	pthread_mutex_lock(&mutex_);
++      	if (batch_queue_.size()) {
++        	batch_string = batch_queue_.front();
++        	batch_queue_.pop();
++        	got_batch = true;
++      	}
++      	pthread_mutex_unlock(&mutex_);
++      	if (!got_batch)
++        	Spin(0.001);
+     } while (!deconstructor_invoked_ && !got_batch);
+ #endif
++
+     MessageProto* batch_message = new MessageProto();
+     batch_message->ParseFromString(batch_string);
+     for (int i = 0; i < batch_message->data_size(); i++) {
+@@ -427,7 +433,6 @@ void Sequencer::RunReader() {
+ 
+     FetchMessage();
+ 
+-
+ #ifdef LATENCY_TEST
+     if (watched_txn != -1) {
+       sequencer_send[watched_txn] = GetTime();
+@@ -448,6 +453,7 @@ void Sequencer::RunReader() {
+       			<< " txns/sec, "
+       			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
+       			<< " txns/sec aborted, "
++      			<< num_sc_txns_ << " spec-committed, "
+       			//<< test<< " for drop speed , "
+       			//<< executing_txns << " executing, "
+       			<< num_pend_txns_ << " pending, time is "<<second<<"\n" << std::flush;
+@@ -500,6 +506,7 @@ void Sequencer::RunLoader(){
+ 			<< " txns/sec, "
+ 			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
+ 			<< " txns/sec aborted, "
++			<< num_sc_txns_ << " spec-committed, "
+ 			//<< test<< " for drop speed , "
+ 			//<< executing_txns << " executing, "
+ 			<< num_pend_txns_ << " pending\n" << std::flush;
+@@ -547,6 +554,7 @@ void* Sequencer::FetchMessage() {
+ 		  }
+ 		  delete batch_message;
+ 		  ++fetched_batch_num_;
++		  }
+ 	  }
+   }
+   return NULL;
+@@ -591,7 +599,7 @@ MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
+ 
+ void Sequencer::output(){
+     ofstream myfile;
+-    myfile.open (IntToString(configuration_->this_node_id)+"output.txt");
++    myfile.open(IntToString(configuration_->this_node_id)+"output.txt");
+     int count =0;
+     pair<int64, int64> latency;
+     myfile << "THROUGHPUT" << '\n';

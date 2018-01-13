@@ -122,12 +122,6 @@ class TPCC : public Application {
   // payment transaction, returning a 1 for success or 0 for failure.
   int PaymentTransaction(StorageManager* storage) const;
 
-  int NewOrderParallelTransaction(StorageManager* storage) const;
-
-  // A Payment call takes a set of args as the parameter and performs the
-  // payment transaction, returning a 1 for success or 0 for failure.
-  int PaymentParallelTransaction(StorageManager* storage) const;
-
   int OrderStatusTransaction(StorageManager* storage) const;
   int OrderStatusTransactionFast(StorageManager* storage) const;
 
