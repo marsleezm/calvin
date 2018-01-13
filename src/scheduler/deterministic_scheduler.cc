@@ -449,7 +449,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread,
 			//++Sequencer::num_pend_txns_;
 			return true;
 		}
-		else if(result == ABORTED) {
+		else if(result == ABORT) {
 			LOCKLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 			manager->Abort();
 			++Sequencer::num_aborted_;

@@ -51,10 +51,11 @@ using tr1::unordered_map;
 #define SPECIAL 2
 
 // Tranasction execution return
+#define SUCCESS 1
 #define FINISHED 3
 #define WAIT_AND_SENT 4
 #define WAIT_NOT_SENT 5
-#define ABORTED 6
+#define ABORT 6
 #define SUSPENDED 7
 
 #define IS_COPY 2

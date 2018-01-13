@@ -554,7 +554,6 @@ void* Sequencer::FetchMessage() {
 		  }
 		  delete batch_message;
 		  ++fetched_batch_num_;
-		  }
 	  }
   }
   return NULL;
