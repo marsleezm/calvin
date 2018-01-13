@@ -176,8 +176,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   queue<MyTuple<int64, int, StorageManager*>> retry_txns;
   int this_node = scheduler->configuration_->this_node_id;
 
-  //uint max_pend = atoi(ConfigReader::Value("max_pend").c_str());
-  int max_suspend = atoi(ConfigReader::Value("max_suspend").c_str());
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
   int sc_array_size = max_sc + 2*NUM_THREADS;
 
@@ -381,7 +379,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	  // Try to start a new transaction
-	  else if (latest_started_tx - num_lc_txns_ < max_sc){ // && scheduler->num_suspend[thread]<=max_suspend) {
+	  else if (latest_started_tx - num_lc_txns_ < max_sc){ 
 		  //LOG(-1, " lastest is "<<latest_started_tx<<", num_lc_txns_ is "<<num_lc_txns_<<", diff is "<<latest_started_tx-num_lc_txns_);
 		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  bool got_it;
@@ -418,7 +416,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  else{
 		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, false,
-				  scheduler->num_suspend[thread]>max_suspend, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+				  false, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
 
 		  if(out_counter1 & 67108864){
 			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<
