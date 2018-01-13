@@ -71,8 +71,6 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
     // New Order
     case NEW_ORDER:
     	{
-    	std::set<int> readers;
-    	readers.insert(config->this_node_id);
 		txn->add_readers(config->this_node_id);
 		txn->add_writers(config->this_node_id);
       // First, we pick a local warehouse
@@ -301,18 +299,12 @@ int TPCC::Execute(StorageManager* storage) const {
 
     // New Order
     case NEW_ORDER:
-    	if(!parallel_multi_part || txn->readers(0) == this_node_id)
-    		return NewOrderTransaction(storage);
-    	else
-    		return NewOrderParallelTransaction(storage);
+		return NewOrderTransaction(storage);
     	break;
 
     // Payment
     case PAYMENT:
-    	if(!parallel_multi_part || txn->readers(0) == this_node_id)
-    		return PaymentTransaction(storage);
-    	else
-    	    return PaymentParallelTransaction(storage);
+		return PaymentTransaction(storage);
     	break;
 
     case ORDER_STATUS:
@@ -537,183 +529,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	return SUCCESS;
 }
 
-
-// The new order function is executed when the application receives a new order
-// transaction.  This follows the TPC-C standard.
-// Insert orderline, new order and order new keys
-int TPCC::NewOrderParallelTransaction(StorageManager* storage) const {
-	// First, we retrieve the warehouse from storage
-	TxnProto* txn = storage->get_txn();
-	TPCCArgs* tpcc_args = storage->get_args();
-	storage->Init();
-	LOG(txn->txn_id(), "Executing NEWORDER, is multipart? "<<(txn->multipartition()));
-	int read_state;
-	Value* val, *val_copy;
-	Key warehouse_key = txn->read_set(0);
-	Key district_key = txn->read_write_set(0);
-
-	// We initialize the order line amount total to 0
-	int order_line_amount_total = 0;
-	double system_time = tpcc_args->system_time();
-
-	int order_line_count = tpcc_args->order_line_count(0);
-	for (int i = 0; i < order_line_count; i++) {
-		// For each order line we parse out the three args
-		string stock_key = txn->read_write_set(i + 1);
-		int quantity = tpcc_args->quantities(i);
-
-		// Next, we get the correct stock from the data store
-		read_state = NORMAL;
-		if(storage->ShouldRead()){
-			val = storage->ReadLock(stock_key, read_state, false);
-			if (read_state == SPECIAL)
-				return reinterpret_cast<int64>(val);
-			else{
-				Stock stock;
-				assert(stock.ParseFromString(*val));
-				stock.set_year_to_date(stock.year_to_date() + quantity);
-				stock.set_order_count(stock.order_count() - 1);
-				if (txn->multipartition())
-					stock.set_remote_count(stock.remote_count() + 1);
-
-				// And we decrease the stock's supply appropriately and rewrite to storage
-				if (stock.quantity() >= quantity + 10)
-					stock.set_quantity(stock.quantity() - quantity);
-				else
-					stock.set_quantity(stock.quantity() - quantity + 91);
-				assert(stock.SerializeToString(val));
-
-			}
-		}
-	}
-
-	PART_READ(storage, Warehouse, warehouse_key, read_state, val)
-
-
-	int order_number;
-	read_state = NORMAL;
-	if(storage->ShouldRead()){
-		val = storage->ReadLock(district_key, read_state, false);
-		if (read_state == SPECIAL)
-			return reinterpret_cast<int64>(val);
-		else {
-			District district;
-			assert(district.ParseFromString(*val));
-			order_number = district.next_order_id();
-			district.set_next_order_id(order_number + 1);
-			tpcc_args->set_lastest_order_number(order_number);
-
-			if(district.smallest_order_id() == -1)
-				district.set_smallest_order_id(order_number);
-			assert(district.SerializeToString(val));
-		}
-	}
-	else
-		order_number = tpcc_args->lastest_order_number();
-
-
-	for (int i = 0; i < order_line_count; i++) {
-		string stock_key = txn->read_write_set(i + 1);
-		string supply_warehouse_key = stock_key.substr(0, stock_key.find("s"));
-		int quantity = tpcc_args->quantities(i);
-
-		// Find the item key within the stock key
-		size_t item_idx = stock_key.find("i");
-		string item_key = stock_key.substr(item_idx, string::npos);
-
-		// First, we check if the item number is valid
-		Item item;
-		assert(item.ParseFromString(*ItemList[item_key]));
-
-		OrderLine order_line;
-		char order_line_key[128];
-		snprintf(order_line_key, sizeof(order_line_key), "%so%dol%d", district_key.c_str(), order_number, i);
-		order_line.set_order_id(order_line_key);
-
-		// Set the attributes for this order line
-		order_line.set_district_id(district_key);
-		order_line.set_warehouse_id(warehouse_key);
-		order_line.set_number(i);
-		order_line.set_item_id(item_key);
-		order_line.set_supply_warehouse_id(supply_warehouse_key);
-		order_line.set_quantity(quantity);
-		order_line.set_delivery_date(system_time);
-
-		// Next, we update the order line's amount and add it to the running sum
-		order_line.set_amount(quantity * item.price());
-		order_line_amount_total += (quantity * item.price());
-
-		// Finally, we write the order line to storage
-		int result = storage->LockObject(order_line_key, val_copy);
-		if(result  == LOCK_FAILED)
-			return ABORT;
-		else if(result == LOCKED){
-			assert(order_line.SerializeToString(val_copy));
-		}
-	}
-
-
-	// Next, we get the order line count, system time, and other args from the
-	// transaction proto
-
-    // Create an order key to add to write set
-	// Next we create an Order object
-    char order_key[128];
-    snprintf(order_key, sizeof(order_key), "%so%d",
-             district_key.c_str(), order_number);
-
-	// Retrieve the customer we are looking for
-    Key customer_key = txn->read_set(1);
-    if(storage->ShouldRead()){
-		val = storage->ReadLock(customer_key, read_state, false);
-		if (read_state == SPECIAL)
-			return reinterpret_cast<int64>(val);
-		else if(read_state == NORMAL){
-	    	Customer customer;
-			assert(customer.ParseFromString(*val));
-			customer.set_last_order(order_key);
-			assert(customer.SerializeToString(val));
-		}
-    }
-
-	// We write the order to storage
-    int result = storage->LockObject(order_key, val_copy);
-	if(result == LOCK_FAILED)
-		return ABORT;
-	else if (result == LOCKED){
-		Order order;
-		order.set_id(order_key);
-		order.set_warehouse_id(warehouse_key);
-		order.set_district_id(district_key);
-		order.set_customer_id(customer_key);
-
-		// Set some of the auxiliary data
-		order.set_entry_date(system_time);
-		order.set_carrier_id(-1);
-		order.set_order_line_count(order_line_count);
-		order.set_all_items_local(!txn->multipartition());
-		assert(order.SerializeToString(val_copy));
-	}
-
-    char new_order_key[128];
-    snprintf(new_order_key, sizeof(new_order_key),
-             "%sno%d", district_key.c_str(), order_number);
-
-	// Finally, we write the order line to storage
-    result = storage->LockObject(new_order_key, val_copy);
-	if(result == LOCK_FAILED)
-		return ABORT;
-	else if (result == LOCKED){
-		NewOrder new_order;
-		new_order.set_id(new_order_key);
-		new_order.set_warehouse_id(warehouse_key);
-		new_order.set_district_id(district_key);
-		assert(new_order.SerializeToString(val_copy));
-	}
-
-	return SUCCESS;
-}
-
 // The payment function is executed when the application receives a
 // payment transaction.  This follows the TPC-C standard.
 // Insert history new key.
@@ -790,110 +605,6 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 				customer.set_data(new_information);
 			}
 			assert(customer.SerializeToString(val));
-		}
-	}
-
-	// Finally, we create a history object and update the data
-	Key history_key = txn->write_set(0);
-	History history;
-
-	history.set_customer_id(customer_key);
-	history.set_customer_warehouse_id(warehouse_key);
-	history.set_customer_district_id(district_key);
-	history.set_warehouse_id(warehouse_key);
-	history.set_district_id(district_key);
-
-	// Create the data for the history object
-	char history_data[100];
-	snprintf(history_data, sizeof(history_data), "%s    %s",
-             warehouse_key.c_str(), district_key.c_str());
-	history.set_data(history_data);
-
-	// Write the history object to disk
-	int result = storage->LockObject(history_key, val);
-	if(result == LOCK_FAILED)
-		return ABORT;
-	else if (result == LOCKED)
-		assert(history.SerializeToString(val));
-
-	return SUCCESS;
-}
-
-int TPCC::PaymentParallelTransaction(StorageManager* storage) const {
-	// First, we parse out the transaction args from the TPCC proto
-	TxnProto* txn = storage->get_txn();
-	TPCCArgs tpcc_args;
-	tpcc_args.ParseFromString(txn->arg());
-	LOG(txn->txn_id(), "Executing PAYMENT, is multipart? "<<(txn->multipartition()));
-	storage->Init();
-	int amount = tpcc_args.amount();
-
-	// We create a string to hold up the customer object we look up
-	Value* val;
-	int read_state = NORMAL;
-
-	// Read & update the customer
-	Key customer_key;
-	// If there's a last name we do secondary keying
-	ASSERT(tpcc_args.has_last_name() == false);
-
-	read_state = NORMAL;
-	customer_key = txn->read_write_set(2);
-	// Read & update the warehouse object
-	Key warehouse_key = txn->read_write_set(0);
-	// Read & update the district object
-	Key district_key = txn->read_write_set(1);
-
-	if(storage->ShouldRead()){
-		val = storage->ReadLock(customer_key, read_state, false);
-		if (read_state == SPECIAL)
-				return reinterpret_cast<int64>(val);
-		else{
-			Customer customer;
-			assert(customer.ParseFromString(*val));
-			// Next, we update the customer's balance, payment and payment count
-			customer.set_balance(customer.balance() - amount);
-			customer.set_year_to_date_payment(customer.year_to_date_payment() + amount);
-			customer.set_payment_count(customer.payment_count() + 1);
-			// If the customer has bad credit, we update the data information attached
-			// to her
-			if (customer.credit() == "BC") {
-				char new_information[500];
-				// Print the new_information into the buffer
-				snprintf(new_information, sizeof(new_information), "%s%s%s%s%s%d%s",
-						 customer.id().c_str(), customer.warehouse_id().c_str(),
-						 customer.district_id().c_str(), district_key.c_str(),
-						 warehouse_key.c_str(), amount, customer.data().c_str());
-				customer.set_data(new_information);
-			}
-			assert(customer.SerializeToString(val));
-		}
-	}
-
-
-	if(storage->ShouldRead()){
-		val = storage->ReadLock(warehouse_key, read_state, false);
-		if (read_state == SPECIAL)
-			return reinterpret_cast<int64>(val);
-		else{
-			Warehouse warehouse;
-			assert(warehouse.ParseFromString(*val));
-			warehouse.set_year_to_date(warehouse.year_to_date() + amount);
-			assert(warehouse.SerializeToString(val));
-			//LOCKLOG(txn->txn_id(), " updating warehouse "<<warehouse_key);
-		}
-	}
-
-	read_state = NORMAL;
-	if(storage->ShouldRead()){
-		val = storage->ReadLock(district_key, read_state, false);
-		if (read_state == SPECIAL)
-			return reinterpret_cast<int64>(val);
-		else{
-			District district;
-			assert(district.ParseFromString(*val));
-			district.set_year_to_date(district.year_to_date() + amount);
-			assert(district.SerializeToString(val));
 		}
 	}
 

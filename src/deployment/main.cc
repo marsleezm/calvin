@@ -242,11 +242,6 @@ int main(int argc, char** argv) {
 	std::cout<<"	Dependent txn percent: "<<ConfigReader::Value("dependent_percent")<<std::endl;
 	std::cout<<"	Max batch size: "<<ConfigReader::Value("max_batch_size")<<std::endl;
 	std::cout<<"	Num of threads: "<<NUM_THREADS<<std::endl;
-	bool parallel_multi_part = atoi(ConfigReader::Value("parallel_multi_part").c_str());
-	if(parallel_multi_part)
-		std::cout<<" Doing parallel part txn."<<std::endl;
-	else
-		std::cout<<" NOT doing parallel part txn."<<std::endl;
 
 	if (argv[2][0] == 'm') {
 		std::cout<<"Micro benchmark. Parameters: "<<std::endl;

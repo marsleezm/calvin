@@ -51,7 +51,6 @@ class Microbenchmark : public Application {
   int kRWSetSize = atoi(ConfigReader::Value("rw_set_size").c_str());
   int indexAccessNum = atoi(ConfigReader::Value("index_num").c_str());
   int kDBSize = atoi(ConfigReader::Value("total_key").c_str());
-  bool parallel_multi_part = atoi(ConfigReader::Value("parallel_multi_part").c_str());
 
   virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
 

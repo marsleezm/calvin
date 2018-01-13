@@ -140,7 +140,6 @@ class TPCC : public Application {
   Value* GetItem(Key key) const;
   void SetItem(Key key, Value* value) const;
 
-  bool parallel_multi_part = atoi(ConfigReader::Value("parallel_multi_part").c_str());
   int this_node_id;
 };
 
