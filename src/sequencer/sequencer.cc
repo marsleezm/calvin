@@ -54,6 +54,11 @@ void* Sequencer::RunSequencerWriter(void *arg) {
   return NULL;
 }
 
+void* Sequencer::RunSequencerPaxos(void *arg) {
+  reinterpret_cast<Sequencer*>(arg)->RunPaxos();
+  return NULL;
+}
+
 void* Sequencer::RunSequencerReader(void *arg) {
   reinterpret_cast<Sequencer*>(arg)->RunReader();
   return NULL;
@@ -75,6 +80,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	pthread_mutex_init(&mutex_, NULL);
 	// Start Sequencer main loops running in background thread.
 	txns_queue_ = new AtomicQueue<TxnProto*>();
+	paxos_queues = new AtomicQueue<string>();
 
 	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
 		throughput[i] = -1;
@@ -98,6 +104,9 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 
 		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 			  reinterpret_cast<void*>(this));
+
+		pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
+              reinterpret_cast<void*>(this));
 
 		CPU_ZERO(&cpuset);
 		CPU_SET(2, &cpuset);
@@ -127,11 +136,13 @@ Sequencer::~Sequencer() {
 	//if(queue_mode == NORMAL_QUEUE){
 	pthread_join(writer_thread_, NULL);
 	pthread_join(reader_thread_, NULL);
+	pthread_join(paxos_thread_, NULL);
 	//}
 	//else{
 	//	  pthread_join(reader_thread_, NULL);
 	//  }
 	//delete txns_queue_;
+	delete paxos_queues;
 	std::cout<<" Sequencer done"<<std::endl;
 }
 
@@ -252,12 +263,43 @@ void Sequencer::RunWriter() {
 	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
-    batch_queue_.push(batch_string);
+    //batch_queue_.push(batch_string);
+	paxos_queues->Push(batch_string);
   }
 
   Spin(1);
 }
 
+void Sequencer::RunPaxos() {
+  pthread_setname_np(pthread_self(), "paxos");
+
+  queue<pair<int64, string>> paxos_msg;
+  int64 paxos_duration = atoi(ConfigReader::Value("paxos_delay").c_str())*1000;
+
+  while (!deconstructor_invoked_) {
+      string result;
+      int64 now_time = GetUTime();
+      if(paxos_queues->Pop(&result)){
+          //std::cout<<"Got mesasge from the queue, now time is "<<now_time<<", adding to queue with time "
+        //        <<now_time+paxos_duration<<std::endl;
+          paxos_msg.push(make_pair(now_time+paxos_duration, result));
+      }
+      while(paxos_msg.size()){
+          if(paxos_msg.front().first <= now_time){
+              //std::cout<<"Popping from queue, because now is "<<now_time<<", msg time is  "
+            //        <<paxos_msg.front().first<<std::endl;
+              pthread_mutex_lock(&mutex_);
+              batch_queue_.push(paxos_msg.front().second);
+              pthread_mutex_unlock(&mutex_);
+              paxos_msg.pop();
+          }
+          else
+              break;
+      }
+      Spin(0.001);
+  }
+  Spin(1);
+}
 
 // Send txns to all involved partitions
 void Sequencer::RunReader() {
@@ -461,44 +503,21 @@ void* Sequencer::FetchMessage() {
   //TxnProto* done_txn;
   if (txns_queue_->Size() < 2000){
 	  ASSERT(queue_mode == NORMAL_QUEUE);
-	  if (queue_mode == NORMAL_QUEUE){
-		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
-		  	  // Have we run out of txns in our batch? Let's get some new ones.
-		  	  if (batch_message != NULL) {
-		  		  for (int i = 0; i < batch_message->data_size(); i++)
-		  		  {
-		  			  TxnProto* txn = new TxnProto();
-		  			  txn->ParseFromString(batch_message->data(i));
-		  			  txn->set_local_txn_id(fetched_txn_num_++);
-		  			  txns_queue_->Push(txn);
-                      //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
-		  			  ++num_fetched_this_round;
-		  		  }
-		  		  delete batch_message;
-		  		  ++fetched_batch_num_;
-		  	  }
+	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
+	  // Have we run out of txns in our batch? Let's get some new ones.
+	  if (batch_message != NULL) {
+		  for (int i = 0; i < batch_message->data_size(); i++)
+		  {
+			  TxnProto* txn = new TxnProto();
+			  txn->ParseFromString(batch_message->data(i));
+			  txn->set_local_txn_id(fetched_txn_num_++);
+			  txns_queue_->Push(txn);
+			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
+			  ++num_fetched_this_round;
+		  }
+		  delete batch_message;
+		  ++fetched_batch_num_;
 	  }
-//	  else if (queue_mode == FROM_SEQ_SINGLE){
-//		  for (int i = 0; i < 1000; i++)
-//			  {
-//				  TxnProto* txn;
-//				  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-//				  txn->set_local_txn_id(fetched_txn_num_++);
-//				  txns_queue_->Push(txn);
-//			  }
-//	  }
-//	  else if (queue_mode == FROM_SEQ_DIST){
-//		  int i = 0;
-//		  while (i < 1000)
-//		  {
-//			  TxnProto* txn;
-//			  client_->GetDetTxn(&txn, fetched_txn_num_, fetched_txn_num_);
-//			  txn->set_local_txn_id(fetched_txn_num_);
-//			  txns_queue_[(fetched_txn_num_/BUFFER_TXNS_NUM)%num_threads].Push(txn);
-//			  ++fetched_txn_num_;
-//			  ++i;
-//		  }
-//	  }
   }
   return NULL;
 
