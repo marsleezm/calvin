@@ -48,21 +48,6 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
   }
 }
 
-TxnProto* Microbenchmark::InitializeTxn() {
-  // Create the new transaction object
-  TxnProto* txn = new TxnProto();
-
-  // Set the transaction's standard attributes
-  txn->set_txn_id(0);
-  txn->set_txn_type(INITIALIZE);
-
-  // Nothing read, everything written.
-  for (int i = 0; i < kDBSize; i++)
-    txn->add_write_set(IntToString(i));
-
-  return txn;
-}
-
 // Create a non-dependent single-partition transaction
 TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
   // Create the new transaction object
@@ -138,7 +123,6 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 	switch (txn->txn_type()) {
 		case MICROTXN_SP:
 		{
-			LOCKLOG(txn->txn_id(), " MICROTXN_SP");
 			int part = txn->writers(0);
 
 			// Add one hot key to read/write set.
@@ -148,10 +132,8 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						nparts * index_records,
 						part, rand);
 
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
-			}
 
 			GetRandomKeys(&keys,
 						kRWSetSize-indexAccessNum,
@@ -159,16 +141,12 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						nparts * kDBSize,
 						part, rand);
 
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
-			}
-
 		}
 		break;
 		case MICROTXN_DEP_SP:
 		{
-			LOCKLOG(txn->txn_id(), " MICROTXN_DEP_SP");
 			int part = txn->readers(0);
 			set<int> keys;
 			GetRandomKeys(&keys,
@@ -177,10 +155,8 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 							nparts * index_records,
 							part, rand);
 
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
-			}
 
 			GetRandomKeys(&keys,
 						  kRWSetSize-2*indexAccessNum,
@@ -189,10 +165,8 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						  part, rand);
 
 
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
-			}
 		}
 		break;
 		case MICROTXN_MP:

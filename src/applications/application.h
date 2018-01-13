@@ -19,12 +19,6 @@ class LockedVersionedStorage;
 class StorageManager;
 class TxnProto;
 
-enum TxnStatus {
-  SUCCESS = 0,
-  FAILURE = 1,
-  REDO = 2,
-};
-
 class Application {
  public:
   virtual ~Application() {}

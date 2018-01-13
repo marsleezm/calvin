@@ -329,11 +329,11 @@ int TPCC::Execute(StorageManager* storage) const {
 
     // Invalid transaction
     default:
-      return FAILURE;
+      return ABORT;
       break;
   }
 
-  return FAILURE;
+  return ABORT;
 }
 
 
@@ -354,11 +354,11 @@ int TPCC::ExecuteReadOnly(StorageManager* storage) const {
 
     // Invalid transaction
     default:
-      return FAILURE;
+      return ABORT;
       break;
   }
 
-  return FAILURE;
+  return ABORT;
 }
 
 // The new order function is executed when the application receives a new order
