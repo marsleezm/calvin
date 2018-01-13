@@ -28,18 +28,6 @@
 #include "proto/message.pb.h"
 #include "proto/txn.pb.h"
 
-#define BLOCK_STAT
-
-#ifdef BLOCK_STAT
-#define START_BLOCK(if_blocked, last_time, b1, b2, b3, s1, s2, s3) \
-	if (!if_blocked) {if_blocked = true; last_time= GetUTime(); s1+=b1; s2+=b2; s3+=b3;}
-#define END_BLOCK(if_blocked, stat, last_time)  \
-	if (if_blocked)  {if_blocked= false; stat += GetUTime() - last_time;}
-#else
-#define START_BLOCK(if_blocked, last_time)
-#define END_BLOCK(if_blocked, stat, last_time)
-#endif
-
 using std::pair;
 using std::string;
 using std::tr1::unordered_map;
@@ -179,8 +167,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
   int sc_array_size = max_sc + 2*NUM_THREADS;
 
-  double last_blocked = 0;
-  bool if_blocked = false;
   int out_counter1 = 0;
   int sample_count = 0, latency_count = 0;
   pair<int64, int64>* latency_array = scheduler->latency[thread];
@@ -234,7 +220,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	 // }
 
 	  while (!my_to_sc_txns->empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
 		  if ( to_sc_txn.second < num_lc_txns_ ){
 			  if(active_l_tids.count(to_sc_txn.second)){
@@ -263,7 +248,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 
 	  if(!waiting_queue.Empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyTuple<int64_t, int, ValuePair> to_wait_txn;
 		  waiting_queue.Pop(&to_wait_txn);
 		  AGGRLOG(-1, " In to-suspend, the first one is "<< to_wait_txn.first);
@@ -290,7 +274,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	  else if (!abort_queue.Empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
 		  AGGRLOG(-1, "In to-abort, the first one is "<< to_abort_txn.first);
@@ -311,7 +294,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // Received remote read
 	  else if (scheduler->message_queues[thread]->Pop(&message)) {
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  AGGRLOG(StringToInt(message.destination_channel()), " I got message from "<<message.source_node()<<", message type is "<<message.type());
 	      if(message.type() == MessageProto::READ_RESULT)
 	      {
@@ -363,7 +345,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 
 	  if(retry_txns.size()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  LOG(retry_txns.front().first, " before retrying txn ");
 		  if(retry_txns.front().first < num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->abort_bit_){
 			  LOG(retry_txns.front().first, " not retrying it, because num lc is "<<num_lc_txns_<<", restart is "<<retry_txns.front().second<<", aborted is"<<retry_txns.front().third->abort_bit_);
@@ -381,7 +362,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // Try to start a new transaction
 	  else if (latest_started_tx - num_lc_txns_ < max_sc){ 
 		  //LOG(-1, " lastest is "<<latest_started_tx<<", num_lc_txns_ is "<<num_lc_txns_<<", diff is "<<latest_started_tx-num_lc_txns_);
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
@@ -415,9 +395,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	  else{
-		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, false,
-				  false, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
-
 		  if(out_counter1 & 67108864){
 			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<
 					  ", num suspend is "<<scheduler->num_suspend[thread]);
