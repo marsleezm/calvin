@@ -31,15 +31,13 @@
 // XXX(scw): why the F do we include from a separate component
 //           to get COLD_CUTOFF
 
-#define BLOCK_STAT
-
 #ifdef BLOCK_STAT
 #define START_BLOCK(if_blocked, last_time, b1, b2, b3, s1, s2, s3) \
 	if (!if_blocked) {if_blocked = true; last_time= GetUTime(); s1+=b1; s2+=b2; s3+=b3;}
 #define END_BLOCK(if_blocked, stat, last_time)  \
 	if (if_blocked)  {if_blocked= false; stat += GetUTime() - last_time;}
 #else
-#define START_BLOCK(if_blocked, last_time)
+#define START_BLOCK(if_blocked, last_time, b1, b2, b3, s1, s2, s3)
 #define END_BLOCK(if_blocked, stat, last_time)
 #endif
 
@@ -174,8 +172,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   uint max_sc = atoi(ConfigReader::Value("max_sc").c_str());
   int this_node = scheduler->configuration_->this_node_id;
 
-  double last_blocked = 0;
-  bool if_blocked = false;
   int last_printed = 0, out_counter1 = 0, last_sc = -1;
   int sample_count = 0, latency_count = 0;
   pair<int64, int64>* latency_array = scheduler->latency[thread];
@@ -183,7 +179,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   // TODO! May need to add some logic to pending transactions to see if can commit
   while (!terminated_) {
 	  if (!my_to_sc_txns->empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  to_sc_txn = my_to_sc_txns->top();
 		  if (to_sc_txn.second == Sequencer::num_lc_txns_){
 			  mgr = active_l_tids[to_sc_txn.second];
@@ -227,7 +223,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 
 	  if(!waiting_queue.Empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyTuple<int64_t, int, ValuePair> to_wait_txn;
 		  waiting_queue.Pop(&to_wait_txn);
 		  LOG(-1, " In to-wait, the first one is "<< to_wait_txn.first);
@@ -255,7 +251,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // Try to re-execute pending transactions
 	  else if (!my_pend_txns->empty() && my_pend_txns->top().second == Sequencer::num_lc_txns_){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  MyTuple<int64_t, int64_t, int> pend_txn;
 		  int max_restarted = 0;
 
@@ -284,7 +280,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	 }
 
 	  if (!abort_queue.Empty()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  pair<int64_t, int> to_abort_txn;
 		  abort_queue.Pop(&to_abort_txn);
 		  LOG(to_abort_txn.first, " is tested to be restarted, num lc is "<<Sequencer::num_lc_txns_);
@@ -303,7 +299,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // Received remote read
 	 else if (scheduler->message_queues[thread]->Pop(&message)) {
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  ASSERT(message.type() == MessageProto::READ_RESULT);
 		  int txn_id = atoi(message.destination_channel().c_str());
 		  StorageManager* manager = active_g_tids[txn_id];
@@ -326,7 +322,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	 else if(retry_txns.size()){
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  LOCKLOG(retry_txns.front().first, " before retrying txn ");
 		  if(retry_txns.front().first < Sequencer::num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->num_restarted_)
 			  retry_txns.pop();
@@ -340,8 +336,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	  // Try to start a new transaction
-	  else if (my_to_sc_txns->size() <= max_sc) {
-		  END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+	  else if (my_to_sc_txns->size() <= max_sc and my_pend_txns->size() <= max_sc and scheduler->num_suspend[thread] <= (int)max_sc) {
+		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
@@ -381,10 +377,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 //	  }
 	  //std::cout<<std::this_thread::get_id()<<": My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<" NOT starting new txn!!"<<std::endl;
 	  else{
-		  START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, false,
-		  				  false, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
+		  //START_BLOCK(if_blocked, last_blocked, my_to_sc_txns->size() > max_sc, false, false, scheduler->sc_block[thread], scheduler->pend_block[thread], scheduler->suspend_block[thread]);
 		  if(out_counter1 & 67108864){
-			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<", num pend is "<< my_pend_txns->size()<<
+			  LOG(-1, " doing nothing, num_sc is "<<my_to_sc_txns->size()<<
 					  ", num suspend is "<<scheduler->num_suspend[thread]);
 			  if(my_to_sc_txns->size())
 				  LOG(-1, my_to_sc_txns->top().first<<", lc is  "<<my_to_sc_txns->top().second);
