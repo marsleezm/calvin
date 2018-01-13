@@ -32,7 +32,7 @@ using tr1::unordered_map;
 #define DEPENDENT_MASK 8
 
 #define NO_LOCK INT_MAX
-#define GC_THRESHOLD 100
+#define GC_THRESHOLD 15000
 
 #define NUM_THREADS 5
 
@@ -54,7 +54,7 @@ using tr1::unordered_map;
 #define FINISHED 3
 #define WAIT_AND_SENT 4
 #define WAIT_NOT_SENT 5
-#define TX_ABORTED 6
+#define ABORTED 6
 #define SUSPENDED 7
 
 #define IS_COPY 2

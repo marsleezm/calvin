@@ -250,7 +250,7 @@ StorageManager::~StorageManager() {
 //					max_counter_ = 0;
 //					num_restarted_ = abort_bit_;
 //					read_state = SPECIAL;
-//					return reinterpret_cast<Value*>(TX_ABORTED);
+//					return reinterpret_cast<Value*>(ABORTED);
 //				}
 //				else {
 //					if(result.first == SUSPENDED){
@@ -325,7 +325,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 		max_counter_ = 0;
 		num_restarted_ = abort_bit_;
 		read_state = SPECIAL;
-		return reinterpret_cast<Value*>(TX_ABORTED);
+		return reinterpret_cast<Value*>(ABORTED);
 	}
 	else{
 		if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
@@ -339,7 +339,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 					max_counter_ = 0;
 					num_restarted_ = abort_bit_;
 					read_state = SPECIAL;
-					return reinterpret_cast<Value*>(TX_ABORTED);
+					return reinterpret_cast<Value*>(ABORTED);
 				}
 				else {
 					if(result.first == SUSPENDED){
@@ -430,7 +430,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 		max_counter_ = 0;
 		num_restarted_ = abort_bit_;
 		read_state = SPECIAL;
-		return reinterpret_cast<Value*>(TX_ABORTED);
+		return reinterpret_cast<Value*>(ABORTED);
 	}
 	else{
 		//LOG(txn_->txn_id(), " trying to read lock "<<key);

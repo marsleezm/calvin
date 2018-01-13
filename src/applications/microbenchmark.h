@@ -62,7 +62,7 @@ class Microbenchmark : public Application {
 		return key_start + part + nparts * (abs(rand()) % ((key_limit - key_start)/nparts));
   }
   inline int RandomLocalKey(const int key_start, const int key_limit, const int part, Rand* rand) const {
-		return key_start + part + nparts * (rand->next() % ((key_limit - key_start)/nparts));
+		return key_start + part + nparts * (abs(rand->next()) % ((key_limit - key_start)/nparts));
   }
   inline int NotSoRandomLocalKey(const int64 rand_num, const int key_start, const int key_limit, const int part) const {
 		return key_start + part + nparts * (abs(rand_num) % ((key_limit - key_start)/nparts));

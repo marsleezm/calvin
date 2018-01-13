@@ -189,7 +189,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 			remote_district_id = rand() % DISTRICTS_PER_WAREHOUSE;
 			remote_customer_id = rand() % CUSTOMERS_PER_DISTRICT;
 			snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d",
-			   remote_warehouse_id, remote_district_id, remote_customer_id);
+			   		remote_warehouse_id, remote_district_id, remote_customer_id);
 
 		     txn->add_readers(remote_node);
 		     txn->add_writers(remote_node);
@@ -486,7 +486,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 				// Finally, we write the order line to storage
 				int result = storage->LockObject(order_line_key, val_copy);
 				if(result  == LOCK_FAILED)
-					return TX_ABORTED;
+					return ABORT;
 				else if(result == LOCKED){
 					assert(order_line.SerializeToString(val_copy));
 				}
@@ -503,7 +503,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	// We write the order to storage
     int result = storage->LockObject(order_key, val_copy);
 	if(result == LOCK_FAILED)
-		return TX_ABORTED;
+		return ABORT;
 	else if (result == LOCKED){
 		Order order;
 		order.set_id(order_key);
@@ -526,7 +526,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	// Finally, we write the order line to storage
     result = storage->LockObject(new_order_key, val_copy);
 	if(result == LOCK_FAILED)
-		return TX_ABORTED;
+		return ABORT;
 	else if (result == LOCKED){
 		NewOrder new_order;
 		new_order.set_id(new_order_key);
@@ -636,7 +636,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	// Write the history object to disk
 	int result = storage->LockObject(history_key, val);
 	if(result == LOCK_FAILED)
-		return TX_ABORTED;
+		return ABORT;
 	else if (result == LOCKED)
 		assert(history.SerializeToString(val));
 

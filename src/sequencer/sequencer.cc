@@ -346,7 +346,7 @@ void Sequencer::RunReader() {
 #endif
   pthread_setname_np(pthread_self(), "reader");
 
-  //FetchMessage();
+  FetchMessage();
   double time = GetTime(), now_time;
   int64_t last_committed;
   // Set up batch messages for each system node.
@@ -377,17 +377,16 @@ void Sequencer::RunReader() {
 #else
     bool got_batch = false;
     do {
-      FetchMessage();
-    	//FetchMessage();
-      pthread_mutex_lock(&mutex_);
-      if (batch_queue_.size()) {
-        batch_string = batch_queue_.front();
-        batch_queue_.pop();
-        got_batch = true;
-      }
-      pthread_mutex_unlock(&mutex_);
-      if (!got_batch)
-        Spin(0.001);
+      	FetchMessage();
+      	pthread_mutex_lock(&mutex_);
+      	if (batch_queue_.size()) {
+        	batch_string = batch_queue_.front();
+        	batch_queue_.pop();
+        	got_batch = true;
+      	}
+      	pthread_mutex_unlock(&mutex_);
+      	if (!got_batch)
+        	Spin(0.001);
     } while (!deconstructor_invoked_ && !got_batch);
 #endif
 
@@ -542,21 +541,20 @@ void* Sequencer::FetchMessage() {
   //TxnProto* done_txn;
   if (txns_queue_->Size() < 2000){
 	  ASSERT(queue_mode == NORMAL_QUEUE);
-	  if (queue_mode == NORMAL_QUEUE){
-		  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
-		  	  // Have we run out of txns in our batch? Let's get some new ones.
-		  	  if (batch_message != NULL) {
-		  		  for (int i = 0; i < batch_message->data_size(); i++)
-		  		  {
-		  			  TxnProto* txn = new TxnProto();
-		  			  txn->ParseFromString(batch_message->data(i));
-		  			  txn->set_local_txn_id(fetched_txn_num_++);
-		  			  txns_queue_->Push(txn);
-		  			  ++num_fetched_this_round;
-		  		  }
-		  		  delete batch_message;
-		  		  ++fetched_batch_num_;
-		  	  }
+	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
+	  // Have we run out of txns in our batch? Let's get some new ones.
+	  if (batch_message != NULL) {
+		  for (int i = 0; i < batch_message->data_size(); i++)
+		  {
+			  TxnProto* txn = new TxnProto();
+			  txn->ParseFromString(batch_message->data(i));
+			  txn->set_local_txn_id(fetched_txn_num_++);
+			  txns_queue_->Push(txn);
+			  ++num_fetched_this_round;
+		  }
+		  delete batch_message;
+		  ++fetched_batch_num_;
+		  }
 	  }
   }
   return NULL;
