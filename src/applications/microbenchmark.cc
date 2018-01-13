@@ -210,7 +210,6 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						nparts * index_records,
 						txn->readers(0), rand);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
 				txn->add_read_write_set(IntToString(*it));
 			}
 
@@ -220,7 +219,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						nparts * kDBSize,
 						txn->readers(0), rand);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
+				//LOG(txn->txn_id(), " Adding key "<<*it);
 				txn->add_read_write_set(IntToString(*it));
 			}
 
@@ -251,7 +250,6 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		// TODO: Now we assume that the number of index keys are always the same as non-index keys in the rw set
 		case MICROTXN_DEP_MP:
 		{
-			LOCKLOG(txn->txn_id(), " MICROTXN_DEP_MP");
 			set<int> keys;
 			int avg_index_per_part = indexAccessNum/txn->readers_size();
 			int index_first_part = indexAccessNum- avg_index_per_part*(txn->readers_size()-1);
@@ -261,10 +259,8 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		                nparts * 0,
 		                nparts * index_records,
 						txn->readers(0), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
-			}
 
 			for(int i = 1; i<txn->readers_size(); ++i){
 				GetRandomKeys(&keys,

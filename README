@@ -1,3 +1,8 @@
+#####
+Note by Li: 
+	This is the default branch of SpecCalvin that does not have any optimization on multi-partition transaction.
+#####
+
 This material is based upon work supported by the National Science Foundation under Grant Number IIS-1249722. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation.
 
 Copyright (c) 2014 Yale University. All rights reserved.

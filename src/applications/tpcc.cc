@@ -296,19 +296,19 @@ int TPCC::Execute(StorageManager* storage) const {
   switch (storage->get_txn()->txn_type()) {
     // Initialize
     case INITIALIZE:
-      InitializeStorage(storage->GetStorage(), NULL);
-      return SUCCESS;
-      break;
+      	InitializeStorage(storage->GetStorage(), NULL);
+     	return SUCCESS;
+      	break;
 
     // New Order
     case NEW_ORDER:
-      return NewOrderTransaction(storage);
-      break;
+      	return NewOrderTransaction(storage);
+      	break;
 
     // Payment
     case PAYMENT:
-      return PaymentTransaction(storage);
-      break;
+      	return PaymentTransaction(storage);
+      	break;
 
     case ORDER_STATUS:
     	LOG(storage->get_txn()->txn_id(), " executing a read-only txn in normal way!!!!!!!");
