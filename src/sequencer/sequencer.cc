@@ -79,11 +79,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	  num_fetched_this_round(0) {
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
-  if (queue_mode == FROM_SEQ_DIST)
-	  txns_queue_ = new AtomicQueue<TxnProto*>[num_threads];
-  else{
-	  txns_queue_ = new AtomicQueue<TxnProto*>();
-  }
+  txns_queue_ = new AtomicQueue<TxnProto*>();
   paxos_queues = new AtomicQueue<string>();
 
   for(int i = 0; i < THROUGHPUT_SIZE; ++i){
@@ -159,22 +155,6 @@ Sequencer::~Sequencer() {
 //    nodes->insert(configuration_->LookupPartition(txn.read_write_set(i)));
 //}
 
-#ifdef PREFETCHING
-double PrefetchAll(Storage* storage, TxnProto* txn) {
-  double max_wait_time = 0;
-  double wait_time = 0;
-  for (int i = 0; i < txn->read_set_size(); i++) {
-    storage->Prefetch(txn->read_set(i), &wait_time);
-    max_wait_time = MAX(max_wait_time, wait_time);
-  }
-  for (int i = 0; i < txn->read_write_set_size(); i++) {
-    storage->Prefetch(txn->read_write_set(i), &wait_time);
-    max_wait_time = MAX(max_wait_time, wait_time);
-  }
-  for (int i = 0; i < txn->write_set_size(); i++) {
-    storage->Prefetch(txn->write_set(i), &wait_time);
-    max_wait_time = MAX(max_wait_time, wait_time);
-  }
 #ifdef LATENCY_TEST
   if (txn->txn_id() % SAMPLE_RATE == 0)
     prefetch_cold[txn->txn_id() / SAMPLE_RATE] = max_wait_time;
@@ -294,13 +274,7 @@ void Sequencer::RunWriter() {
 	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
-#ifdef PAXOS
-    paxos.SubmitBatch(batch_string);
-#else
     paxos_queues->Push(batch_string);
-//    pthread_mutex_lock(&mutex_);
-//    batch_queue_.push(batch_string);
-//    pthread_mutex_unlock(&mutex_);
 #endif
   }
 
