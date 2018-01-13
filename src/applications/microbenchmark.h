@@ -57,8 +57,6 @@ class Microbenchmark : public Application {
  private:
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part, Rand* rand) const;
-  void AccumulateRandomKeys(set<int>* keys, int num_keys, int key_start,
-                     int key_limit, int part, Rand* rand) const;
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part) const;
   inline int RandomLocalKey(const int key_start, const int key_limit, const int part) const {

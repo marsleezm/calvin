@@ -34,19 +34,6 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
   }
 }
 
-void Microbenchmark::AccumulateRandomKeys(set<int>* keys, int num_keys, int key_start,
-                                   int key_limit, int part, Rand* rand) const {
-  ASSERT(key_start % nparts == 0);
-  for (int i = 0; i < num_keys; i++) {
-    // Find a key not already in '*keys'.
-    int key;
-    do {
-    	key = RandomLocalKey(key_start, key_limit, part, rand);
-    } while (keys->count(key));
-    keys->insert(key);
-  }
-}
-
 void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                                    int key_limit, int part, Rand* rand) const {
   ASSERT(key_start % nparts == 0);
@@ -132,7 +119,6 @@ TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_
 
 void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 	set<int> keys;
-	set<int> myown_keys;
 
 	switch (txn->txn_type()) {
 		case MICROTXN_SP:
