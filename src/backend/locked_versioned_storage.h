@@ -64,18 +64,30 @@ class LockedVersionedStorage {
   inline Value* StableRead(const Key& key) {return objects_[key]->head->value;}
 
   // TODO: It's just a dirty/unsafe hack to do GC to avoid having too many versions
-  void inline DirtyGC(DataNode* list, int from_version){
-	  DataNode* current = list->next, *next, *prev=list;
-	  while(current){
-		  next = current->next;
-		  if(current->txn_id <= from_version){
-			  //LOG(-1, "Trying to delete "<<current->txn_id<<"'s value "<<reinterpret_cast<int64>(current->value));
-			  prev->next = NULL;
-			  delete current;
+  void inline DirtyGC(DataNode* list, int from_version, KeyEntry* entry, Key key, int64 tx_id){
+	  if(entry->oldest <= from_version){
+		  DataNode* current = list->next, *next, *prev=list;
+		  int i = 0;
+		  while(current){
+			  if(current->txn_id <= from_version){
+				  if(i>=2){
+					  prev->next = NULL;
+					  entry->oldest = prev->txn_id;
+					  //std::cout<<tx_id<<" GCing "<<key<<", prev "<<list->txn_id<<" since "<<from_version<<", del "<<current->txn_id<<", new oldest "<<prev->txn_id<<endl;
+					  while(current){
+						  next = current->next;
+						  delete current;
+						  current = next;
+					  }
+				  }
+				  break;
+			  }
+			  else{
+				  prev = current;
+				  current = current->next;
+				  ++i;
+			  }
 		  }
-		  else
-			  prev = current;
-		  current = next;
 	  }
   }
 

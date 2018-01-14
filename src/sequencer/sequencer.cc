@@ -248,13 +248,14 @@ void Sequencer::RunWriter() {
        if (involved_nodes == 0)
            txn_map[-1].push_back(txn);
        else
-            txn_map[involved_nodes].push_back(txn);
+		   txn_map[involved_nodes].push_back(txn);
         txn_id_offset++;
       }
     }
 
    if (txn_map.count(prev_node)) {
        for(auto txn: txn_map[prev_node]) {
+		   //LOG(batch_number, " adding "<<txn->txn_id()<<" for "<<prev_node<<", multi "<<txn->multipartition());
            txn->SerializeToString(&txn_string);
            batch.add_data(txn_string);
            delete txn;
@@ -262,16 +263,18 @@ void Sequencer::RunWriter() {
    }
 
    for (auto it = txn_map.begin(); it != txn_map.end(); ++it){
-       //if(it->first != prev_node and it->first != after_node){
+       if(it->first != prev_node and it->first != after_node){
           for(auto txn: it->second) {
+		   	   //LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<it->first<<", multi "<<txn->multipartition());
                txn->SerializeToString(&txn_string);
                batch.add_data(txn_string);
                delete txn;
            }
-       //}
+       }
    }
    if(after_node != prev_node and txn_map.count(after_node)){
        for(auto txn: txn_map[after_node]) {
+		   //LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<after_node<<", multi "<<txn->multipartition());
            txn->SerializeToString(&txn_string);
            batch.add_data(txn_string);
            delete txn;

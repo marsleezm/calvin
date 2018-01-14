@@ -129,33 +129,48 @@ class MClient : public Client {
 // TPCC load generation client.
 class TClient : public Client {
  public:
-  TClient(Configuration* config, double mp) : config_(config), percent_mp_(mp*100) {}
+  int update_rate;
+  int read_rate;
+  TClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
+	  update_rate = ur;
+	  read_rate = 100-update_rate;
+  }
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed, int64& involved_nodes) {
     TPCC tpcc;
     *txn = new TxnProto();
     int remote_node = -1;
-    if (abs(rand())%10000 < percent_mp_){
-        (*txn)->set_multipartition(true);
-        do {
-            remote_node = rand() % config_->all_nodes.size();
-        } while (config_->all_nodes.size() > 1 &&
-                  remote_node == config_->this_node_id);
-        involved_nodes = involved_nodes | (1 << remote_node);
-    }
-	else
-		(*txn)->set_multipartition(false);
 
     // New order txn
     int random_txn_type = rand() % 100;
-    if (random_txn_type < 45)  {
+    if (random_txn_type < update_rate/2)  {
+		if (abs(rand())%10000 < percent_mp_){
+			(*txn)->set_multipartition(true);
+			do {
+				remote_node = rand() % config_->all_nodes.size();
+			} while (config_->all_nodes.size() > 1 &&
+					  remote_node == config_->this_node_id);
+			involved_nodes = involved_nodes | (1 << remote_node);
+		}
+		else
+			(*txn)->set_multipartition(false);
       tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn, remote_node);
-    } else if(random_txn_type < 88) {
+    } else if(random_txn_type < update_rate) {
+		if (abs(rand())%10000 < percent_mp_){
+			(*txn)->set_multipartition(true);
+			do {
+				remote_node = rand() % config_->all_nodes.size();
+			} while (config_->all_nodes.size() > 1 &&
+					  remote_node == config_->this_node_id);
+			involved_nodes = involved_nodes | (1 << remote_node);
+		}
+		else
+			(*txn)->set_multipartition(false);
       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn, remote_node);
-    } else if(random_txn_type < 92) {
+    } else if(random_txn_type < update_rate+read_rate/3) {
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn, remote_node);
-    } else if(random_txn_type < 96){
+    } else if(random_txn_type < update_rate+read_rate*2/3){
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn, remote_node);
     } else {
@@ -239,7 +254,7 @@ int main(int argc, char** argv) {
 	// Artificial loadgen clients.
 	Client* client = (argv[2][0] == 'm') ?
 			reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()))) :
-			reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
+			reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str())));
 
 	// #ifdef PAXOS
 	//  StartZookeeper(ZOOKEEPER_CONF);

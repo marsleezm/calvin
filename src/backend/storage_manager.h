@@ -102,15 +102,19 @@ class StorageManager {
 
     inline int CanAddC(int& return_abort_bit){
         //Stop already if is not MP txn
-		return_abort_bit = abort_bit_;
-		if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting){
-			if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
-				return ADDED;
+		if (ReadOnly())
+			return ADDED;
+		else{
+			return_abort_bit = abort_bit_;
+			if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting){
+				if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
+					return ADDED;
+				else
+					return CAN_ADD;
+			}
 			else
-				return CAN_ADD;
+				return CAN_NOT_ADD;
 		}
-		else
-			return CAN_NOT_ADD;
     }
 
 

@@ -32,7 +32,7 @@ using tr1::unordered_map;
 #define DEPENDENT_MASK 8
 
 #define NO_LOCK INT_MAX
-#define GC_THRESHOLD 1000
+#define GC_THRESHOLD 10000
 
 #define ASSERTS_ON true
 
@@ -901,12 +901,14 @@ class KeyEntry {
 		LockEntry lock;
 		std::vector<ReadFromEntry>* read_from_list;
 		std::vector<PendingReadEntry>* pend_list;
+		int64 oldest;
 		DataNode* head;
 
 		KeyEntry(){
 			read_from_list = new vector<ReadFromEntry>();
 			pend_list = new vector<PendingReadEntry>();
 			head = NULL;
+			oldest = -1;
 			pthread_mutex_init(&mutex_, NULL);
 		}
 

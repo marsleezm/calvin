@@ -516,6 +516,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		  if (got_it == true) {
 			  txn->set_start_time(GetUTime());
+			  LOG(txn->txn_id(), " starting, local "<<txn->local_txn_id());
 			  latest_started_tx = txn->local_txn_id();
               while (my_to_sc_txns[txn->local_txn_id()%sc_array_size].first != NO_TXN){
 			      LOG(txn->txn_id(), " prev txn is not clean, id is "<<my_to_sc_txns[local_gc%sc_array_size].first);
@@ -583,6 +584,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 	// No need to resume if the txn is still suspended
 	//If it's read-only, only execute when all previous txns have committed. Then it can be executed in a cheap way
 	if(manager->ReadOnly()){
+		LOG(txn->txn_id(), " read-only, num lc "<<num_lc_txns_<<", inlist "<<manager->if_inlist());
 		if (num_lc_txns_ == txn->local_txn_id()){
 			if(manager->if_inlist() == false){
 				++num_lc_txns_;
@@ -605,7 +607,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 		}
 	}
 	else{
-		AGGRLOG(txn->txn_id(), " starting executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id<<", in map:"<<active_g_tids.count(txn->txn_id()));
+		AGGRLOG(txn->txn_id(), " start executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id<<", inv:"<<manager->involved_nodes);
 		int result = application_->Execute(manager);
 		//AGGRLOG(txn->txn_id(), " result is "<<result);
 		if (result == SUSPEND){
