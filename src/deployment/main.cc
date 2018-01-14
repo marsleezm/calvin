@@ -92,7 +92,12 @@ class MClient : public Client {
 // TPCC load generation client.
 class TClient : public Client {
  public:
-  TClient(Configuration* config, float mp) : config_(config), percent_mp_(mp*100) {}
+  int update_rate;
+  int read_rate;
+  TClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
+	  update_rate = ur;
+	  read_rate = 100-update_rate;
+  }
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id) {
     TPCC tpcc;
@@ -118,14 +123,14 @@ class TClient : public Client {
 
    int random_txn_type = rand() % 100;
     // New order txn
-    if (random_txn_type < 45)  {
+    if (random_txn_type < update_rate/2)  {
       tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-    } else if(random_txn_type < 88) {
+    } else if(random_txn_type < update_rate) {
       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-    } else if(random_txn_type < 92) {
+    } else if(random_txn_type < update_rate+read_rate/3) {
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
-    } else if(random_txn_type < 96){
+    } else if(random_txn_type < update_rate+read_rate/3*2){
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
 
@@ -170,13 +175,14 @@ int main(int argc, char** argv) {
 
   // Build this node's configuration object.
   Configuration config(StringToInt(argv[1]), "deploy-run.conf");
+  OpenFile(argv[1]);
 
   // Build connection context and start multiplexer thread running.
   ConnectionMultiplexer multiplexer(&config);
 
   // Artificial loadgen clients.
   Client* client = (argv[2][0] == 't') ?
-		  reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()))) :
+		  reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str()))):
 		  reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
 
 

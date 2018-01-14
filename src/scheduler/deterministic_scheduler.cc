@@ -164,12 +164,56 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   reply_recon_msg.set_type(MessageProto::RECON_INDEX_REPLY);
   reply_recon_msg.set_destination_channel("sequencer");
   reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
+  int count = 0;
   while (!scheduler->deconstructor_invoked_) {
-	  if(recon_txns.size()){
+	  if(scheduler->txns_queue->Pop(&txn)){
+		  // No remote read result found, start on next txn if one is waiting.
+		  // Create manager.
+		  StorageManager* manager;
+		  if(active_txns.count(IntToString(txn->txn_id()))){
+			  manager = active_txns[IntToString(txn->txn_id())];
+			  LOG(txn->txn_id(), " starting txn from before");
+			  manager->Setup(txn);
+		  }
+		  else{
+			  LOG(txn->txn_id(), " trying starting txn from scratch");
+			  manager =
+					 new StorageManager(scheduler->configuration_,
+								scheduler->thread_connections_[thread],
+								scheduler->storage_, txn);
+		  }
+
+		  // Writes occur at this node.
+		  if (manager->ReadyToExecute()) {
+			  LOG(txn->txn_id(), " start executing txn of type "<<txn->txn_type());
+			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
+				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+				  delete manager;
+				  // Respond to scheduler;
+				  scheduler->done_queue->Push(txn);
+				  LOG(txn->txn_id(), " finish executing txn!");
+			  }
+			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
+			  else{
+				  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+				  delete manager;
+
+				  txn->set_status(TxnProto::ABORTED);
+				  scheduler->done_queue->Push(txn);
+			  }
+
+		  } else {
+			  LOG(txn->txn_id(), " is not ready yet");
+			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
+			  //LOG(txn->txn_id(), " waiting for remote");
+			  active_txns[IntToString(txn->txn_id())] = manager;
+		  }
+	  }
+	  else if(recon_txns.size()){
 		  TxnProto* txn = recon_txns.front();
 		  if (txn->start_time() == 0)
 			txn->set_start_time(GetUTime());
-		  LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
+		  //LOG(txn->txn_id(), " start processing recon txn of type "<<txn->txn_type());
 		  recon_txns.pop();
 		  ReconStorageManager* manager;
 		  if(recon_pending_txns.count(IntToString(txn->txn_id())) == 0){
@@ -189,8 +233,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  delete manager;
 			  //LOG(txn->txn_id(), " recon txn has finished");
 			  recon_pending_txns.erase(IntToString(txn->txn_id()));
-			  LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<
-				scheduler->configuration_->this_node_id);
+			  //LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<scheduler->configuration_->this_node_id);
 
 			  // Only one of all receivers for a multi-part dependent txn replies RECON msg
 			  if(txn->readers(0) == scheduler->configuration_->this_node_id){
@@ -221,12 +264,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	  }
 	  else if(scheduler->recon_queue_->Pop(&message))
 	  {
-		  LOG(-1, " got new recon batch: "<<message.batch_number());
+		  //LOG(-1, " got new recon batch: "<<message.batch_number());
 		  //assert(recon_txns.size() == 0 && recon_pending_txns.size() == 0);
 		  for (int i = 0; i < message.data_size(); i++) {
 			  TxnProto* txn = new TxnProto();
 			  txn->ParseFromString(message.data(i));
-			  LOG(txn->txn_id(), " is added as recon txn");
+			  //LOG(txn->txn_id(), " is added as recon txn");
 			  recon_txns.push(txn);
 		  }
 		  //is_recon = true;
@@ -329,51 +372,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  }
 		  }
 	  }
-	  else if(scheduler->txns_queue->Pop(&txn)){
-		  // No remote read result found, start on next txn if one is waiting.
-		  // Create manager.
-		  StorageManager* manager;
-		  if(active_txns.count(IntToString(txn->txn_id()))){
-			  manager = active_txns[IntToString(txn->txn_id())];
-			  LOG(txn->txn_id(), " starting txn from before");
-			  manager->Setup(txn);
-		  }
-		  else{
-			  LOG(txn->txn_id(), " trying starting txn from scratch");
-			  manager =
-					 new StorageManager(scheduler->configuration_,
-								scheduler->thread_connections_[thread],
-								scheduler->storage_, txn);
-		  }
-
-		  // Writes occur at this node.
-		  if (manager->ReadyToExecute()) {
-			  LOG(txn->txn_id(), " start executing txn of type "<<txn->txn_type());
-			  if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-				  //LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
-				  delete manager;
-				  // Respond to scheduler;
-				  scheduler->done_queue->Push(txn);
-				  LOG(txn->txn_id(), " finish executing txn!");
-			  }
-			  // If this txn is a dependent txn and it's predicted rw set is different from the real one!
-			  else{
-				  LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
-				  delete manager;
-
-				  txn->set_status(TxnProto::ABORTED);
-				  scheduler->done_queue->Push(txn);
-			  }
-
-		  } else {
-			  LOG(txn->txn_id(), " is not ready yet");
-			  scheduler->thread_connections_[thread]->LinkChannel(IntToString(txn->txn_id()));
-			  //LOG(txn->txn_id(), " waiting for remote");
-			  active_txns[IntToString(txn->txn_id())] = manager;
-		  }
-	  }
 	  else{
-		  LOG(-1, "NOTHING TO DO,looping, recon batch size is "<<scheduler->recon_queue_->Size());
+		  //LOG(-1, "NOTHING TO DO,looping, recon batch size is "<<scheduler->recon_queue_->Size());
+		  //if(count< 1000)
+		  	  LOG(-1, "NOTHING TO DO,looping, queue size is "<<scheduler->txns_queue->Size());
+		  ++count;
 	  }
   }
   return NULL;
@@ -453,7 +456,7 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     bool got_it = scheduler->done_queue->Pop(&done_txn);
     if (got_it == true) {
     	// We have received a finished transaction back, release the lock
-    	//LOG(done_txn->txn_id(), " unlock txn");
+    	LOG(done_txn->txn_id(), " unlock txn");
     	scheduler->lock_manager_->Release(done_txn);
     	executing_txns--;
 
@@ -529,7 +532,7 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 
           TxnProto* txn = new TxnProto();
           txn->ParseFromString(batch_message->data(batch_offset));
-          //LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+          LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
           if (txn->start_time() == 0)
         	  txn->set_start_time(GetUTime());
           batch_offset++;
@@ -545,9 +548,9 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
     // Start executing any and all ready transactions to get them off our plate
     while (!scheduler->ready_txns_->empty()) {
       TxnProto* txn = scheduler->ready_txns_->front();
-      //LOG(batch_number, " adding to ready queue "<<txn->txn_id());
       scheduler->ready_txns_->pop_front();
       pending_txns--;
+      LOG(batch_number, " adding to ready queue "<<txn->txn_id()<<", pending txns "<<pending_txns<<", exec "<<executing_txns);
       executing_txns++;
 
       //unfinished_txns[txn] = local_txn_cnt++;
@@ -563,9 +566,8 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
                 << second << "  second,  "
                 << executing_txns << " executing, "
 				//<< unpacked_txns <<" was unpacked, "
-                << pending_txns << " pending \n "
+                << pending_txns << " pending"<<std::endl;
 				//<< begin_batch<<" to "<<batch_number<<" \n"
-				<< std::flush;
     	// Reset txn count.
     	//unpacked_txns = 0;
     	//begin_batch = batch_number;
