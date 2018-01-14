@@ -216,6 +216,10 @@ void Sequencer::RunWriter() {
   batch.set_destination_node(-1);
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
+  int prev_node = (configuration_->this_node_id-1 + configuration_->all_nodes.size())%configuration_->all_nodes.size(),
+       after_node = (configuration_->this_node_id+1)%configuration_->all_nodes.size();
+  prev_node = 0 | (1 << prev_node);
+  after_node = 0 | (1 << after_node);
 
   for (int batch_number = configuration_->this_node_id;
        !deconstructor_invoked_;
@@ -241,24 +245,38 @@ void Sequencer::RunWriter() {
           continue;
         }
 
-        if(involved_nodes == 0){
-            txn->SerializeToString(&txn_string);
-            batch.add_data(txn_string);
-            delete txn;
-        }
-        else
+       if (involved_nodes == 0)
+           txn_map[-1].push_back(txn);
+       else
             txn_map[involved_nodes].push_back(txn);
         txn_id_offset++;
       }
     }
-    for (auto it = txn_map.begin(); it != txn_map.end(); ++it){
-        for(auto txn: it->second) {
-            txn->SerializeToString(&txn_string);
-            batch.add_data(txn_string);
-            delete txn;
-        }
-    }
 
+   if (txn_map.count(prev_node)) {
+       for(auto txn: txn_map[prev_node]) {
+           txn->SerializeToString(&txn_string);
+           batch.add_data(txn_string);
+           delete txn;
+       }
+   }
+
+   for (auto it = txn_map.begin(); it != txn_map.end(); ++it){
+       //if(it->first != prev_node and it->first != after_node){
+          for(auto txn: it->second) {
+               txn->SerializeToString(&txn_string);
+               batch.add_data(txn_string);
+               delete txn;
+           }
+       //}
+   }
+   if(after_node != prev_node and txn_map.count(after_node)){
+       for(auto txn: txn_map[after_node]) {
+           txn->SerializeToString(&txn_string);
+           batch.add_data(txn_string);
+           delete txn;
+       }
+   }
 	//std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * max_batch_size <<
 	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
     // Send this epoch's requests to Paxos service.
