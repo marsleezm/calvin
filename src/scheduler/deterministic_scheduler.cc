@@ -166,7 +166,105 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   reply_recon_msg.set_destination_node(scheduler->configuration_->this_node_id);
   int count = 0;
   while (!scheduler->deconstructor_invoked_) {
-	  if(scheduler->txns_queue->Pop(&txn)){
+  	  if (scheduler->message_queues[thread]->Pop(&message)){
+		  // Try to handle recon_txns
+		  // If I get read_result when executing a transaction
+		  if (message.type() == MessageProto::READ_RESULT) {
+			  // Remote read result.
+			  LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
+
+			  StorageManager* manager;
+			  if(active_txns.count(message.destination_channel()) == 0){
+				  LOG(StringToInt(message.destination_channel()), " got read result for uninitialized txn");
+				  manager = new StorageManager(scheduler->configuration_,
+				  							scheduler->thread_connections_[thread],
+				  							scheduler->storage_);
+				  active_txns[message.destination_channel()] = manager;
+			  }
+			  else{
+				  LOG(StringToInt(message.destination_channel()), " got read result for old txn");
+				  manager = active_txns[message.destination_channel()];
+			  }
+
+			  manager->HandleReadResult(message);
+			  if (manager->ReadyToExecute()) {
+				  // Execute and clean up.
+				  LOG(StringToInt(message.destination_channel()), " ready to execute!");
+				  TxnProto* txn = manager->txn_;
+				  // If successfully finished
+				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
+					  //LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
+					  txn->set_status(TxnProto::ABORTED);
+				  }
+
+				  //LOG(txn->txn_id(), " finish executing remote");
+				  delete manager;
+				  scheduler->thread_connections_[thread]->UnlinkChannel(IntToString(txn->txn_id()));
+				  active_txns.erase(message.destination_channel());
+				  // Respond to scheduler;
+				  scheduler->done_queue->Push(txn);
+			  }
+		  }
+		  else{
+			  //LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
+			  LOG(StringToInt(message.destination_channel()), " got recon read result");
+			  assert(message.type() == MessageProto::RECON_READ_RESULT);
+			  ReconStorageManager* manager;
+
+			  if(recon_pending_txns.count(message.destination_channel()) == 0)
+			  {
+				  manager = new ReconStorageManager(scheduler->configuration_,
+								   scheduler->thread_connections_[thread],
+								   scheduler->storage_);
+				  manager->HandleReadResult(message);
+				  recon_pending_txns[message.destination_channel()] = manager;
+				  manager->HandleReadResult(message);
+			  }
+			  else{
+				  manager = recon_pending_txns[message.destination_channel()];
+				  if(manager->get_txn()){
+					  //LOG(StringToInt(message.destination_channel()), " handling recon read results");
+					  manager->HandleReadResult(message);
+					  TxnProto* txn = manager->GetTxn();
+					  int result = scheduler->application_->ReconExecute(txn, manager);
+					  if(result == RECON_SUCCESS){
+						  // Clean up transaction
+						  //LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<scheduler->configuration_->this_node_id);
+						  delete manager;
+						  recon_pending_txns.erase(message.destination_channel());
+
+						  // Only one of all receivers for a multi-part dependent txn replies RECON msg
+						  if(txn->readers(0) == scheduler->configuration_->this_node_id){
+							  string txn_data;
+							  txn->SerializeToString(&txn_data);
+							  reply_recon_msg.add_data(txn_data);
+							  // Resume the execution.
+
+                              //if(reply_recon_msg.data_size() > scheduler->recon_batch_size){
+		                        //LOG(txn->txn_id(), " recon sending back msg");
+							    pthread_mutex_lock(&scheduler->recon_mutex_);
+							    scheduler->recon_connection->SmartSend(reply_recon_msg);
+							    reply_recon_msg.clear_data();
+							    pthread_mutex_unlock(&scheduler->recon_mutex_);
+                              //}
+                              //else
+                              //  LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
+						  }
+					  }
+					  else if(result == SUSPENDED){
+						  //LOG(txn->txn_id(), " suspended!");
+						  continue;
+					  }
+					  else{
+						  delete manager;
+						  recon_pending_txns.erase(message.destination_channel());
+						  //std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
+					  }
+				  }
+			  }
+		  }
+	  }
+	  else if(scheduler->txns_queue->Pop(&txn)){
 		  // No remote read result found, start on next txn if one is waiting.
 		  // Create manager.
 		  StorageManager* manager;
@@ -273,104 +371,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  recon_txns.push(txn);
 		  }
 		  //is_recon = true;
-	  }
-  	  else if (scheduler->message_queues[thread]->Pop(&message)){
-		  // Try to handle recon_txns
-		  // If I get read_result when executing a transaction
-		  if (message.type() == MessageProto::READ_RESULT) {
-			  // Remote read result.
-			  LOG(-1, " handling READ_RESULT message for "<<message.destination_channel());
-
-			  StorageManager* manager;
-			  if(active_txns.count(message.destination_channel()) == 0){
-				  LOG(StringToInt(message.destination_channel()), " got read result for uninitialized txn");
-				  manager = new StorageManager(scheduler->configuration_,
-				  							scheduler->thread_connections_[thread],
-				  							scheduler->storage_);
-				  active_txns[message.destination_channel()] = manager;
-			  }
-			  else{
-				  LOG(StringToInt(message.destination_channel()), " got read result for old txn");
-				  manager = active_txns[message.destination_channel()];
-			  }
-
-			  manager->HandleReadResult(message);
-			  if (manager->ReadyToExecute()) {
-				  // Execute and clean up.
-				  LOG(StringToInt(message.destination_channel()), " ready to execute!");
-				  TxnProto* txn = manager->txn_;
-				  // If successfully finished
-				  if( scheduler->application_->Execute(txn, manager) != SUCCESS){
-					  //LOG(txn->txn_id(), " is aborted, its pred rw size is "<<txn->pred_read_write_set_size());
-					  txn->set_status(TxnProto::ABORTED);
-				  }
-
-				  //LOG(txn->txn_id(), " finish executing remote");
-				  delete manager;
-				  scheduler->thread_connections_[thread]->UnlinkChannel(IntToString(txn->txn_id()));
-				  active_txns.erase(message.destination_channel());
-				  // Respond to scheduler;
-				  scheduler->done_queue->Push(txn);
-			  }
-		  }
-		  else{
-			  //LOG(-1, " handling RECON_READ message for "<<message.destination_channel());
-			  LOG(StringToInt(message.destination_channel()), " got recon read result");
-			  assert(message.type() == MessageProto::RECON_READ_RESULT);
-			  ReconStorageManager* manager;
-
-			  if(recon_pending_txns.count(message.destination_channel()) == 0)
-			  {
-				  manager = new ReconStorageManager(scheduler->configuration_,
-								   scheduler->thread_connections_[thread],
-								   scheduler->storage_);
-				  manager->HandleReadResult(message);
-				  recon_pending_txns[message.destination_channel()] = manager;
-				  manager->HandleReadResult(message);
-			  }
-			  else{
-				  manager = recon_pending_txns[message.destination_channel()];
-				  if(manager->get_txn()){
-					  //LOG(StringToInt(message.destination_channel()), " handling recon read results");
-					  manager->HandleReadResult(message);
-					  TxnProto* txn = manager->GetTxn();
-					  int result = scheduler->application_->ReconExecute(txn, manager);
-					  if(result == RECON_SUCCESS){
-						  // Clean up transaction
-						  //LOG(txn->txn_id(), " finished recon phase, first reader is "<<txn->readers(0)<<", this node id is "<<scheduler->configuration_->this_node_id);
-						  delete manager;
-						  recon_pending_txns.erase(message.destination_channel());
-
-						  // Only one of all receivers for a multi-part dependent txn replies RECON msg
-						  if(txn->readers(0) == scheduler->configuration_->this_node_id){
-							  string txn_data;
-							  txn->SerializeToString(&txn_data);
-							  reply_recon_msg.add_data(txn_data);
-							  // Resume the execution.
-
-                              //if(reply_recon_msg.data_size() > scheduler->recon_batch_size){
-		                        //LOG(txn->txn_id(), " recon sending back msg");
-							    pthread_mutex_lock(&scheduler->recon_mutex_);
-							    scheduler->recon_connection->SmartSend(reply_recon_msg);
-							    reply_recon_msg.clear_data();
-							    pthread_mutex_unlock(&scheduler->recon_mutex_);
-                              //}
-                              //else
-                              //  LOG(txn->txn_id(), " data size is "<<reply_recon_msg.data_size());
-						  }
-					  }
-					  else if(result == SUSPENDED){
-						  //LOG(txn->txn_id(), " suspended!");
-						  continue;
-					  }
-					  else{
-						  delete manager;
-						  recon_pending_txns.erase(message.destination_channel());
-						  //std::cout <<" NOT POSSIBLE TO HAVE ANOTHER STATE: " <<result << std::endl;
-					  }
-				  }
-			  }
-		  }
 	  }
 	  else{
 		  //LOG(-1, "NOTHING TO DO,looping, recon batch size is "<<scheduler->recon_queue_->Size());

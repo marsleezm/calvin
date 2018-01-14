@@ -175,7 +175,7 @@ int main(int argc, char** argv) {
 
   // Build this node's configuration object.
   Configuration config(StringToInt(argv[1]), "deploy-run.conf");
-  OpenFile(argv[1]);
+  //OpenFile(argv[1]);
 
   // Build connection context and start multiplexer thread running.
   ConnectionMultiplexer multiplexer(&config);
