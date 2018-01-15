@@ -46,11 +46,11 @@
       if (my_to_sc_txns[local_gc%sc_array_size].first == local_gc){ \
           StorageManager* mgr = my_to_sc_txns[local_gc%sc_array_size].second; \
           if(mgr->ReadOnly())   scheduler->application_->ExecuteReadOnly(mgr); \
-          else \
+          else {\
               if (mgr->message_ and mgr->message_->keys_size()){ \
                  if(mgr->prev_unconfirmed == 0) mgr->SendLocalReads(true, sc_txn_list, sc_array_size); \
                  else mgr->SendLocalReads(false, sc_txn_list, sc_array_size); \
-              } \
+              }} \
           active_g_tids.erase(mgr->txn_->txn_id()); \
           AddLatency(latency_count, latency_array, mgr->get_txn()); \
           my_to_sc_txns[local_gc%sc_array_size].first = NO_TXN; \
@@ -296,7 +296,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		    // Try to commit txns one by one
             int tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
 		    MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
-            int involved_nodes = first_tx.fourth->involved_nodes;
+            int involved_nodes = first_tx.fourth->involved_nodes, batch_number = first_tx.fourth->batch_number;
             MessageProto* msg_to_send = NULL;
             StorageManager* mgr, *first_mgr=NULL;
 
@@ -312,13 +312,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						did_something = true;
 						if(result == CAN_ADD){
 							LOG(first_tx.first, " OK, gid:"<<first_tx.third);
-							if (involved_nodes == 0 || involved_nodes == first_tx.fourth->involved_nodes){
+							if (involved_nodes == 0 or (involved_nodes == first_tx.fourth->involved_nodes and first_tx.fourth->batch_number-batch_number<=1)){
 								INIT_MSG(msg_to_send, this_node);
 								if (mgr->TryAddSC(msg_to_send, record_abort_bit, num_lc_txns_)){ 
                                     LOG(first_tx.first, " added confirm");
                                     if(first_mgr == NULL)
                                         first_mgr = mgr;
 								    involved_nodes = first_tx.fourth->involved_nodes;
+									batch_number = first_tx.fourth->txn_->batch_number(); 
                                     if (mgr->aborted_txs and mgr->aborted_txs->size()){
                                         for(uint i = 0; i < mgr->aborted_txs->size(); ++i){
                                             MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= scheduler->sc_txn_list[mgr->aborted_txs->at(i)%sc_array_size];

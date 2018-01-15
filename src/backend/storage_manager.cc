@@ -34,6 +34,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
 	tpcc_args = new TPCCArgs();
 	tpcc_args ->ParseFromString(txn->arg());
+	batch_number = txn->batch_number();
 	if (txn->multipartition()){
 		message_ = new MessageProto();
 		message_->set_source_channel(txn->txn_id());
@@ -133,6 +134,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn->multipartition());
 
 	txn_ = txn;
+	batch_number = txn->batch_number();
 	message_ = new MessageProto();
 	message_->set_source_channel(txn->txn_id());
 	message_->set_source_node(configuration_->this_node_id);

@@ -131,9 +131,11 @@ class TClient : public Client {
  public:
   int update_rate;
   int read_rate;
+  int delivery_rate=0;	    
+
   TClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
 	  update_rate = ur;
-	  read_rate = 100-update_rate;
+	  read_rate = 100-update_rate-delivery_rate;
   }
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed, int64& involved_nodes) {
@@ -167,15 +169,15 @@ class TClient : public Client {
 		else
 			(*txn)->set_multipartition(false);
       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn, remote_node);
-    } else if(random_txn_type < update_rate+read_rate/3) {
-    	(*txn)->set_multipartition(false);
-    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn, remote_node);
-    } else if(random_txn_type < update_rate+read_rate*2/3){
+    } else if(random_txn_type < update_rate+delivery_rate){
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn, remote_node);
-    } else {
+    } else if(random_txn_type < update_rate+delivery_rate+read_rate) {
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn, remote_node);
+    } else {
+    	(*txn)->set_multipartition(false);
+    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn, remote_node);
     }
     (*txn)->set_seed(seed);
   }
@@ -245,7 +247,7 @@ int main(int argc, char** argv) {
 	//freopen("output.txt","w",stdout);
 
 	// Build this node's configuration object.
-    OpenFile(argv[1]);
+    //OpenFile(argv[1]);
 	Configuration config(StringToInt(argv[1]), "deploy-run.conf");
 
 	// Build connection context and start multiplexer thread running.

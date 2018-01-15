@@ -240,6 +240,7 @@ void Sequencer::RunWriter() {
         TxnProto* txn;
         int64 involved_nodes = 0;
         client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime(), involved_nodes);
+		txn->set_batch_number(batch_number);
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
@@ -533,7 +534,7 @@ void* Sequencer::FetchMessage() {
 			  txn->ParseFromString(batch_message->data(i));
 			  txn->set_local_txn_id(fetched_txn_num_++);
 			  txns_queue_->Push(txn);
-			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
+			  LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
 			  ++num_fetched_this_round;
 		  }
 		  delete batch_message;

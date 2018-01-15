@@ -64,7 +64,7 @@ class LockedVersionedStorage {
   inline Value* StableRead(const Key& key) {return objects_[key]->head->value;}
 
   // TODO: It's just a dirty/unsafe hack to do GC to avoid having too many versions
-  void inline DirtyGC(DataNode* list, int from_version, KeyEntry* entry, Key key, int64 tx_id){
+  void inline DirtyGC(DataNode* list, int from_version, KeyEntry* entry){
 	  if(entry->oldest <= from_version){
 		  DataNode* current = list->next, *next, *prev=list;
 		  int i = 0;

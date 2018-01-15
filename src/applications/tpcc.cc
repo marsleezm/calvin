@@ -30,8 +30,8 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
   txn->set_txn_type(txn_type);
-  txn->set_isolation_level(TxnProto::SERIALIZABLE);
-  txn->set_status(TxnProto::NEW);
+  //txn->set_isolation_level(TxnProto::SERIALIZABLE);
+  //txn->set_status(TxnProto::NEW);
 
   bool mp = txn->multipartition();
   int remote_warehouse_id = -1;
@@ -307,13 +307,12 @@ int TPCC::Execute(StorageManager* storage) const {
     	LOG(storage->get_txn()->txn_id(), " executing a read-only txn in normal way!!!!!!!");
     	// Force quit, this is a bug!
     	assert(1==2);
-    	return OrderStatusTransaction(storage);
     	break;
 
     case STOCK_LEVEL:
     	LOG(storage->get_txn()->txn_id(), " executing a read-only txn in normal way!!!!!!!");
     	// Force quit, this is a bug!
-    	return StockLevelTransaction(storage);
+    	assert(1==2);
     	break;
 
     case DELIVERY:
@@ -637,6 +636,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 }
 
 // Read order and orderline new key.
+/*
 int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
@@ -701,6 +701,7 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 
 	return SUCCESS;
 }
+*/
 
 // Read order and orderline new key.
 int TPCC::OrderStatusTransactionFast(StorageManager* storage) const {
@@ -754,6 +755,7 @@ int TPCC::OrderStatusTransactionFast(StorageManager* storage) const {
 }
 
 // Read order and orderline new key.
+/*
 int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	//int low_stock = 0;
 	TxnProto* txn = storage->get_txn();
@@ -824,6 +826,7 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 
 	return SUCCESS;
 }
+*/
 
 // Read order and orderline new key.
 int TPCC::StockLevelTransactionFast(StorageManager* storage) const {
@@ -847,7 +850,8 @@ int TPCC::StockLevelTransactionFast(StorageManager* storage) const {
 	assert(district.ParseFromString(*val));
 	latest_order_number = district.next_order_id()-1;
 
-	for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 20); i--) {
+	//for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 20); i--) {
+	for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 1); i--) {
 		char order_key[128];
 		snprintf(order_key, sizeof(order_key),
 				  "%so%d", district_key.c_str(), i);

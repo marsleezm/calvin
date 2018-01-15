@@ -118,10 +118,10 @@ class TPCC : public Application {
   // payment transaction, returning a 1 for success or 0 for failure.
   int PaymentTransaction(StorageManager* storage) const;
 
-  int OrderStatusTransaction(StorageManager* storage) const;
+  //int OrderStatusTransaction(StorageManager* storage) const;
   int OrderStatusTransactionFast(StorageManager* storage) const;
 
-  int StockLevelTransaction(StorageManager* storage) const;
+  //int StockLevelTransaction(StorageManager* storage) const;
   int StockLevelTransactionFast(StorageManager* storage) const;
 
   int DeliveryTransaction(StorageManager* storage) const;
