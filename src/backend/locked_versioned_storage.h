@@ -43,7 +43,31 @@ class LockedVersionedStorage {
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
   virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
-  virtual ValuePair SafeRead(const Key& key, int64 txn_id, bool new_object);
+
+  inline Value* SafeRead(const Key& key, bool new_object, bool first_reader){
+        KeyEntry* entry;
+        if(new_object){
+            int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+            entry = new_objects_[new_tab_num][key];
+        }
+        else
+            entry = objects_[key];
+
+        if (first_reader){
+            entry->oldest = entry->head->txn_id;
+            DataNode* current = entry->head->next, *next;
+            entry->head->next = NULL;
+            while(current){
+                next = current->next;
+                delete current;
+                current = next;
+            }
+            return entry->head->value;
+        }
+        else
+            return entry->head->value;
+  }
+
   virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
     			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object, vector<int64>* aborted_txs);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
@@ -90,8 +114,6 @@ class LockedVersionedStorage {
 		  }
 	  }
   }
-
-
 
   bool FetchEntry(const Key& key, KeyEntry*& entry) {
 	  if (objects_.count(key) == 0)

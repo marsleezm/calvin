@@ -61,14 +61,14 @@ class DeterministicScheduler : public Scheduler {
 	friend Sequencer;
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-		  LockedVersionedStorage* storage, AtomicQueue<TxnProto*>* txns_queue,
+		  LockedVersionedStorage* storage, TxnQueue* txns_queue,
 						 Client* client, const Application* application, int queue_mode);
   virtual ~DeterministicScheduler();
   bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local, int64 base);
   void static terminate() { terminated_ = true; }
 
  public:
-  static int64_t num_lc_txns_;
+  static atomic<int64_t> num_lc_txns_;
   static int64_t can_gc_txns_;
   static atomic<int64_t> latest_started_tx;
 
@@ -109,15 +109,14 @@ class DeterministicScheduler : public Scheduler {
   // Storage layer used in application execution.
   LockedVersionedStorage* storage_;
   
-  AtomicQueue<TxnProto*>* txns_queue_;
+  TxnQueue* txns_queue_;
 
   Client* client_;
 
   // Application currently being run.
   const Application* application_;
 
-  // Queue mode
-  int queue_mode;
+  int exec_state = INIT;
 
   // The per-node lock manager tracks what transactions have temporary ownership
   // of what database objects, allowing the scheduler to track LOCAL conflicts

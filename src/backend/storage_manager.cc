@@ -169,7 +169,6 @@ void StorageManager::SetupTxn(TxnProto* txn){
 }
 
 void StorageManager::Abort(){
-	output_count = 0;
 	//LOG(txn_->txn_id(), " txn is aborted! AB is "<<abort_bit_);
 	if (!spec_committed_){
 		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
@@ -560,6 +559,7 @@ StorageManager::~StorageManager() {
 	delete[] recv_lan;
 	delete aborted_txs;
 	delete tpcc_args;
+    //LOG(txn_->txn_id(), " trying to delete");
 	delete txn_;
 	delete message_;
 }

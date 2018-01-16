@@ -79,7 +79,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	pthread_mutex_init(&mutex_, NULL);
 	// Start Sequencer main loops running in background thread.
-	txns_queue_ = new AtomicQueue<TxnProto*>();
+	txns_queue_ = new TxnQueue();
 	paxos_queues = new AtomicQueue<string>();
 
 	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
@@ -246,8 +246,13 @@ void Sequencer::RunWriter() {
           continue;
         }
 
-       if (involved_nodes == 0)
-           txn_map[-1].push_back(txn);
+       if (involved_nodes == 0){
+           //Put read-only transaction together!
+           if(txn->txn_type() == TPCC::ORDER_STATUS || txn->txn_type() == TPCC::STOCK_LEVEL)
+                txn_map[-2].push_back(txn);
+           else
+                txn_map[-1].push_back(txn);
+       }
        else
 		   txn_map[involved_nodes].push_back(txn);
         txn_id_offset++;
@@ -534,7 +539,8 @@ void* Sequencer::FetchMessage() {
 			  txn->ParseFromString(batch_message->data(i));
 			  txn->set_local_txn_id(fetched_txn_num_++);
 			  txns_queue_->Push(txn);
-			  LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
+              //if (txn->writers_size()> 0)
+			      LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", readonly:"<<txn->writers_size());
 			  ++num_fetched_this_round;
 		  }
 		  delete batch_message;

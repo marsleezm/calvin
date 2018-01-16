@@ -93,7 +93,7 @@ class TPCC : public Application {
   // Simple execution of a transaction using a given storage
   virtual int Execute(StorageManager* storage) const;
   // Simple execution of a transaction using a given storage
-  virtual int ExecuteReadOnly(StorageManager* storage) const;
+  virtual int ExecuteReadOnly(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const;
 
 /* TODO(Thad): Uncomment once testing friend class exists
  private: */
@@ -119,10 +119,10 @@ class TPCC : public Application {
   int PaymentTransaction(StorageManager* storage) const;
 
   //int OrderStatusTransaction(StorageManager* storage) const;
-  int OrderStatusTransactionFast(StorageManager* storage) const;
+  int OrderStatusTransactionFast(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const;
 
   //int StockLevelTransaction(StorageManager* storage) const;
-  int StockLevelTransactionFast(StorageManager* storage) const;
+  int StockLevelTransactionFast(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const;
 
   int DeliveryTransaction(StorageManager* storage) const;
 

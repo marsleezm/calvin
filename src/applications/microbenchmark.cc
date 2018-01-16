@@ -255,7 +255,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* txn, int remote_node) const {
 }
 
-int Microbenchmark::ExecuteReadOnly(StorageManager* storage) const{
+int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const{
 	LOG(-1, " micro has no read-only transaction!");
 	ASSERT(1 == 2);
 	return 1;

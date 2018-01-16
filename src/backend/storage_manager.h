@@ -127,7 +127,7 @@ class StorageManager {
   Value* ReadValue(const Key& key, int& read_state, bool new_object);
   Value* ReadLock(const Key& key, int& read_state, bool new_object);
   inline Value* SafeRead(const Key& key, bool new_object){
-	  return actual_storage_->SafeRead(key, txn_->local_txn_id(), new_object).second;
+	  return actual_storage_->SafeRead(key, new_object, first_read_txn);
   }
 
   bool ReadOnly(){ return txn_->txn_type() == TPCC::ORDER_STATUS || txn_->txn_type() == TPCC::STOCK_LEVEL; };
@@ -180,10 +180,6 @@ class StorageManager {
 
   // Can commit, if the transaction is read-only or has spec-committed.
   inline int CanSCToCommit() {
-		if(output_count < 20){
-			++output_count;
-		  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
-		}
 	  if (ReadOnly())
 		  return SUCCESS;
 	  else{
@@ -208,10 +204,7 @@ class StorageManager {
       for (int i = 0; i < txn_->writers_size(); ++i){
           if((ca_list[i] and ca_list[i] != recv_lan[i]) or sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
           //if(sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
-			  if (output_count <20){
-				  LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_an[i].second<<", ca list value is "<<ca_list[i]<<", recv_lan:"<<recv_lan[i]);
-				  ++output_count;
-			  }
+              LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_an[i].second<<", ca list value is "<<ca_list[i]<<", recv_lan:"<<recv_lan[i]);
               return false;
           }
       }
@@ -397,7 +390,7 @@ class StorageManager {
   pthread_mutex_t lock;
 
   Key suspended_key;
-  int output_count = 0;
+  bool first_read_txn = false;
 
   /****** For statistics ********/
   std::atomic<bool> has_confirmed = ATOMIC_FLAG_INIT;

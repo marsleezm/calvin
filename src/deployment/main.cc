@@ -131,11 +131,11 @@ class TClient : public Client {
  public:
   int update_rate;
   int read_rate;
-  int delivery_rate=0;	    
+  int delivery_rate=4;	    
 
   TClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
-	  update_rate = ur;
-	  read_rate = 100-update_rate-delivery_rate;
+	  update_rate = ur-delivery_rate;
+	  read_rate = 100-ur;
   }
   virtual ~TClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed, int64& involved_nodes) {
@@ -172,7 +172,7 @@ class TClient : public Client {
     } else if(random_txn_type < update_rate+delivery_rate){
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn, remote_node);
-    } else if(random_txn_type < update_rate+delivery_rate+read_rate) {
+    } else if(random_txn_type < update_rate+delivery_rate+read_rate/2) {
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn, remote_node);
     } else {

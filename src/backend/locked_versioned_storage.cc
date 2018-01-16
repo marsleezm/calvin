@@ -125,48 +125,6 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 }
 
 
-ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool new_object) {
-	//ASSERT(objects_.count(key) != 0);
-
-	// Access new object table, I should take the corresponding mutex. This serves two purposes
-	// 1. To avoid another concurrent transaction to insert elements into the table, which may cause map rehash and invalidate my
-	// value entry
-	// 2. To avoid another concurrent transaction to insert an element that I am just going to read as well as inserting an empty entry,
-	// which causes data races.
-	KeyEntry* entry;
-	if(new_object){
-		int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
-		pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
-		// If its empty entry, create a new entry
-		//LOG(txn_id, " trying to safe read new obj ["<<key<<"]");
-		assert(new_objects_[new_tab_num].count(key) != 0);
-		entry = new_objects_[new_tab_num][key];
-		pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
-	}
-	else{
-		ASSERT(objects_.count(key) != 0);
-		entry = objects_[key];
-	}
-
-	// If the transaction that requested the lock is ordered before me, I have to wait for him
-	pthread_mutex_lock(&(entry->mutex_));
-	ValuePair value_pair;
-	//LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
-	for (DataNode* list = entry->head; list; list = list->next) {
-		if (list->txn_id <= txn_id) {
-			ASSERT(list->txn_id < DeterministicScheduler::num_lc_txns_);
-			DirtyGC(list, DeterministicScheduler::num_lc_txns_-GC_THRESHOLD, entry);
-			value_pair.first = NOT_COPY;
-			value_pair.second = list->value;
-			//LOG(txn_id, " safe reading ["<<key<<"] from"<<list->txn_id<<", addr is "<<reinterpret_cast<int64>(value_pair.second));
-			break;
-		}
-	}
-	pthread_mutex_unlock(&(entry->mutex_));
-	ASSERT(value_pair.second!=NULL);
-	return value_pair;
-}
-
 // If read & write, then this can not be a blind write.
 ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object, vector<int64_t>* aborted_txs){
@@ -210,7 +168,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 	// Someone before me has locked this version, I should wait
 	if(entry->lock.tx_id_ < txn_id) {
 		entry->pend_list->push_back(PendingReadEntry(txn_id, abort_bit, local_aborted, num_aborted, pend_queue, abort_queue, true));
-		//LOG(txn_id, " readlock suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"]");
+		LOG(txn_id, " readlock suspended!! Lock holder is "<< entry->lock.tx_id_<<", key is ["<<key<<"]");
 		pthread_mutex_unlock(&(entry->mutex_));
 		// Should return BLOCKED! How to denote that?
 		return ValuePair(SUSPEND, NULL);
@@ -464,7 +422,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 			if (!current){
 				DataNode* node = new DataNode();
 				node->value = value;
-				LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
+				//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 				node->txn_id = txn_id;
 				node->next = current;
 				entry->head = node;
@@ -530,7 +488,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 				ValuePair vp;
 				vp.first = WRITE;
 				vp.second = new Value(*value);
-				//LOG(txn_id, " unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
+				LOG(txn_id, " unblocked read&locker "<<oldest_tx->my_tx_id_<<", giving WRITE version "<<reinterpret_cast<int64>(vp.second));
 				entry->lock = LockEntry(oldest_tx->my_tx_id_, oldest_tx->abort_bit_, oldest_tx->local_aborted_, *oldest_tx->abort_bit_, oldest_tx->abort_queue_);
 				//LOG(txn_id, " adding ["<<oldest_tx->my_tx_id_<<","<< oldest_tx->num_aborted_<<"] to waiting queue by "<<txn_id);
 				oldest_tx->pend_queue_->Push(MyTuple<int64_t, int, ValuePair>(oldest_tx->my_tx_id_, oldest_tx->num_aborted_, vp));
