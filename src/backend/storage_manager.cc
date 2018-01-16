@@ -45,14 +45,15 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
         num_unconfirmed_read = txn_->readers_size() - 1;
 
+		string invnodes = "";
         for (int i = 0; i<txn_->readers_size(); ++i){
             recv_an.push_back(make_pair(txn_->readers(i), -1));
             involved_nodes = involved_nodes | (1 << txn_->readers(i));
-            //invnodes += IntToString(txn_->readers(i));
-            //LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
+            invnodes += IntToString(txn_->readers(i));
             if (txn_->readers(i) == configuration_->this_node_id)
                 writer_id = i; 
         }
+		LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
         pthread_mutex_init(&lock, NULL);
         sc_list = new int[txn_->readers_size()];
         ca_list = new int[txn_->readers_size()];

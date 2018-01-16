@@ -312,7 +312,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						did_something = true;
 						if(result == CAN_ADD){
 							LOG(first_tx.first, " OK, gid:"<<first_tx.third);
-							if (involved_nodes == 0 or (involved_nodes == first_tx.fourth->involved_nodes and first_tx.fourth->batch_number-batch_number<=1)){
+							if (involved_nodes == 0 or (involved_nodes == first_tx.fourth->involved_nodes and first_tx.fourth->batch_number-batch_number==0)){
 								INIT_MSG(msg_to_send, this_node);
 								if (mgr->TryAddSC(msg_to_send, record_abort_bit, num_lc_txns_)){ 
                                     LOG(first_tx.first, " added confirm");
