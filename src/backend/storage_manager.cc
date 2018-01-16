@@ -60,7 +60,7 @@ void StorageManager::Setup(TxnProto* txn){
 	  if (configuration_->LookupPartition(key) ==
 		  configuration_->this_node_id) {
 		Value* val = actual_storage_->ReadObject(key);
-		LOG(txn_->txn_id(), " adding pred read "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
+		//LOG(txn_->txn_id(), " adding pred read "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
 		objects_[key] = val;
 		message.add_keys(key);
 		message.add_values(val == NULL ? "" : *val);
@@ -72,7 +72,7 @@ void StorageManager::Setup(TxnProto* txn){
 	  if (configuration_->LookupPartition(key) ==
 		  configuration_->this_node_id) {
 		Value* val = actual_storage_->ReadObject(key);
-		LOG(txn_->txn_id(), " adding rw "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
+		//LOG(txn_->txn_id(), " adding rw "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
 		objects_[key] = val;
 		message.add_keys(key);
 		message.add_values(val == NULL ? "" : *val);
@@ -86,7 +86,7 @@ void StorageManager::Setup(TxnProto* txn){
 	  if (configuration_->LookupPartition(key) ==
 		  configuration_->this_node_id) {
 		Value* val = actual_storage_->ReadObject(key);
-		LOG(txn_->txn_id(), " adding pred rw "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
+		//LOG(txn_->txn_id(), " adding pred rw "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
 		//LOG(txn_->txn_id(), " got "<<key<<", val addr is "<<reinterpret_cast<int64>(val));
 		objects_[key] = val;
 		message.add_keys(key);

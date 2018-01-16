@@ -93,7 +93,7 @@ ReconStorageManager::~ReconStorageManager() {
 Value* ReconStorageManager::ReadObject(const Key& key, int& read_state) {
 	read_state = NORMAL;
 	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-		LOG(txn_->txn_id(), "Trying to read local key "<<key);
+		//LOG(txn_->txn_id(), "Trying to read local key "<<key);
 		if (read_set_.count(key) == 0){
 			Value* result = actual_storage_->ReadObject(key, txn_->txn_id());
 			while (result == NULL){

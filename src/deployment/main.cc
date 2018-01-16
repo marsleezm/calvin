@@ -131,10 +131,10 @@ class TClient : public Client {
       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
     } else if(random_txn_type < update_rate+delivery_rate) {
     	(*txn)->set_multipartition(false);
-    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+    	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
     } else if(random_txn_type < update_rate+delivery_rate+read_rate/2){
     	(*txn)->set_multipartition(false);
-    	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
+    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
     } else {
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
@@ -176,6 +176,7 @@ int main(int argc, char** argv) {
 
   // Build this node's configuration object.
   Configuration config(StringToInt(argv[1]), "deploy-run.conf");
+  //OpenFile(argv[1]);
 
   // Build connection context and start multiplexer thread running.
   ConnectionMultiplexer multiplexer(&config);

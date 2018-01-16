@@ -6,6 +6,7 @@
  */
 
 #include <iostream>
+#include <fstream>
 #include <thread>
 
 #ifndef COMMON_LOGGING_H_
@@ -13,7 +14,8 @@
 
 struct None { };
 
-static pthread_mutex_t stdout_mutex;
+//static pthread_mutex_t stdout_mutex;
+static std::ofstream ofs;
 
 template <typename First,typename Second>
 struct Pair {
@@ -25,6 +27,12 @@ template <typename List>
 struct LogData {
   List list;
 };
+
+static inline void OpenFile(std::string num){
+    std::string filename = num+"test.txt";
+    ofs.open(filename.c_str());
+    std::cout.rdbuf(ofs.rdbuf());
+}
 
 template <typename Begin,typename Value>
 LogData<Pair<Begin,const Value &>>
@@ -66,7 +74,7 @@ inline void log(const char *file,int line, int tx_id, const LogData<List> &data)
 //	}
 //	else
 		//if( tx_id == 113364 || tx_id == 113362 || tx_id == 113360){
-		pthread_mutex_lock(&stdout_mutex);
+		//pthread_mutex_lock(&stdout_mutex);
 		if(tx_id!= -1)
 			std::cout << std::this_thread::get_id() << "--" << line << "): "<<tx_id;
 		else
@@ -74,7 +82,7 @@ inline void log(const char *file,int line, int tx_id, const LogData<List> &data)
 		printList(std::cout,data.list);
 		//std::cout << "\n";
 		std::cout<< std::endl;
-		pthread_mutex_unlock(&stdout_mutex);
+		//pthread_mutex_unlock(&stdout_mutex);
 	//}
 	//pthread_mutex_unlock(&stdout_mutex);
 }
