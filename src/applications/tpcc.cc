@@ -694,10 +694,8 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 			Stock stock;
 			Value* stock_val = storage->ReadObject(stock_key, read_state);
 			assert(stock.ParseFromString(*stock_val));
-
 		 }
 	}
-
 	return SUCCESS;
 }
 

@@ -402,6 +402,6 @@ void Sequencer::output(DeterministicScheduler* scheduler){
 	std::cout<<"My latency cnt is "<<scheduler->latency_cnt<<", total lat is "<<scheduler->total_lat<<", avg lat is "<<
 		scheduler->total_lat/scheduler->latency_cnt<<std::endl;
     myfile << "LATENCY" << '\n';
-	myfile << scheduler->process_lat/scheduler->latency_cnt<<", "<<scheduler->total_lat/scheduler->latency_cnt << '\n';
+	myfile << 1000*scheduler->process_lat/scheduler->latency_cnt<<", "<<1000*scheduler->total_lat/scheduler->latency_cnt << '\n';
     myfile.close();
 }

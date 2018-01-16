@@ -188,8 +188,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node){
 	  					if (sample_count == 2){
 	  						int64 now_time = GetUTime();
-	  						scheduler->process_lat += now_time - txn->start_time();
-	  						scheduler->total_lat += now_time - txn->seed();
+	  						scheduler->process_lat += (now_time - txn->start_time())/1000;
+	  						scheduler->total_lat += (now_time - txn->seed())/1000;
 	  						scheduler->latency_cnt += 1;
 	  						sample_count = 0;
 	  					}
@@ -211,8 +211,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   				if(txn->writers_size() == 0 || txn->writers(0) == this_node){
   					if (sample_count == 2){
   						int64 now_time = GetUTime();
-  						scheduler->process_lat += now_time - txn->start_time();
-  						scheduler->total_lat += now_time - txn->seed();
+  						scheduler->process_lat += (now_time - txn->start_time())/1000;
+  						scheduler->total_lat += (now_time - txn->seed())/1000;
   						scheduler->latency_cnt += 1;
   						sample_count = 0;
   					}
