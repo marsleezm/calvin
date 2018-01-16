@@ -86,6 +86,7 @@ StorageManager::~StorageManager() {
 
 	delete message_;
 	delete tpcc_args;
+	delete txn_;
 }
 
 
