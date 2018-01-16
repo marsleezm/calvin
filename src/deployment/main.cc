@@ -91,12 +91,18 @@ class MClient : public Client {
   int percent_mp_;
 };
 
-// TPCC load generation client.
 class TClient : public Client {
  public:
-  TClient(Configuration* config, float mp) : config_(config), percent_mp_(mp*100) {}
+  int update_rate;
+  int read_rate;
+  int delivery_rate=4;	    
+
+  TClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
+	  update_rate = ur-delivery_rate;
+	  read_rate = 100-ur;
+  }
   virtual ~TClient() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id) {
+    virtual void GetTxn(TxnProto** txn, int txn_id) {
     TPCC tpcc;
     *txn = new TxnProto();
 
@@ -105,38 +111,25 @@ class TClient : public Client {
     else
     	(*txn)->set_multipartition(false);
 
-    // New order txn
-
-//    int random_txn_type = rand() % 100;
-//     // New order txn
-//	if (random_txn_type < 45)  {
-//	  tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-//	} else if(random_txn_type < 88) {
-//	 	 tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-//	}  else {
-//	  *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
-//	  args.set_multipartition(false);
-//	}
-
    int random_txn_type = rand() % 100;
     // New order txn
-    if (random_txn_type < 45)  {
+    if (random_txn_type < update_rate/2)  {
       tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-    } else if(random_txn_type < 88) {
+    } else if(random_txn_type < update_rate) {
       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-    } else if(random_txn_type < 92) {
-    	(*txn)->set_multipartition(false);
-    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
-    } else if(random_txn_type < 96){
+    } else if(random_txn_type < update_rate+delivery_rate) {
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
-
-    } else {
+    } else if(random_txn_type < update_rate+delivery_rate+read_rate/2){
     	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+    } else {
+    	(*txn)->set_multipartition(false);
+    	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
     }
   }
 
+// TPCC load generation client.
  private:
   Configuration* config_;
   int percent_mp_;
@@ -177,9 +170,11 @@ int main(int argc, char** argv) {
   ConnectionMultiplexer multiplexer(&config);
 
   // Artificial loadgen clients.
+	float distpert = stof(ConfigReader::Value("distribute_percent").c_str()), 
+		  updateperct = stof(ConfigReader::Value("update_percent").c_str());
   Client* client = (argv[2][0] == 't') ?
-		  reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()))) :
-		  reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
+		  reinterpret_cast<Client*>(new TClient(&config, distpert, updateperct)) :
+		  reinterpret_cast<Client*>(new MClient(&config, updateperct));
 
 
   Storage* storage;
