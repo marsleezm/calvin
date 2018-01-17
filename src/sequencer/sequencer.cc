@@ -159,14 +159,6 @@ void Sequencer::RunWriter() {
   Spin(1);
   pthread_setname_np(pthread_self(), "writer");
 
-#ifdef PAXOS
-  Paxos paxos(ZOOKEEPER_CONF, false);
-#endif
-
-#ifdef PREFETCHING
-  multimap<double, TxnProto*> fetching_txns;
-#endif
-
   // Synchronization loadgen start with other sequencers.
   MessageProto synchronization_message;
   synchronization_message.set_type(MessageProto::EMPTY);
@@ -203,23 +195,6 @@ void Sequencer::RunWriter() {
     batch.set_batch_number(batch_number);
     batch.clear_data();
 
-#ifdef PREFETCHING
-    // Include txn requests from earlier that have now had time to prefetch.
-    while (!deconstructor_invoked_ &&
-           GetTime() < epoch_start + epoch_duration_) {
-      multimap<double, TxnProto*>::iterator it = fetching_txns.begin();
-      if (it == fetching_txns.end() || it->first > GetTime() ||
-          batch.data_size() >= max_batch_size) {
-        break;
-      }
-      TxnProto* txn = it->second;
-      fetching_txns.erase(it);
-      string txn_string;
-      txn->SerializeToString(&txn_string);
-      batch.add_data(txn_string);
-      delete txn;
-    }
-#endif
 
     // Collect txn requests for this epoch.
     int txn_id_offset = 0;
@@ -230,24 +205,6 @@ void Sequencer::RunWriter() {
         TxnProto* txn;
         string txn_string;
         client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime());
-#ifdef LATENCY_TEST
-        if (txn->txn_id() % SAMPLE_RATE == 0) {
-          sequencer_recv[txn->txn_id() / SAMPLE_RATE] =
-              epoch_start
-            + epoch_duration_ * (static_cast<double>(rand()) / RAND_MAX);
-        }
-#endif
-#ifdef PREFETCHING
-        double wait_time = PrefetchAll(storage_, txn);
-        if (wait_time > 0) {
-          fetching_txns.insert(std::make_pair(epoch_start + wait_time, txn));
-        } else {
-          txn->SerializeToString(&txn_string);
-          batch.add_data(txn_string);
-          txn_id_offset++;
-          delete txn;
-        }
-#else
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
@@ -305,9 +262,6 @@ void Sequencer::RunPaxos() {
 // Send txns to all involved partitions
 void Sequencer::RunReader() {
   Spin(1);
-#ifdef PAXOS
-  Paxos paxos(ZOOKEEPER_CONF, true);
-#endif
   pthread_setname_np(pthread_self(), "reader");
 
   FetchMessage();
@@ -328,17 +282,10 @@ void Sequencer::RunReader() {
   int batch_number = configuration_->this_node_id;
   int second = 0;
 
-#ifdef LATENCY_TEST
-  int watched_txn = -1;
-#endif
-
   while (!deconstructor_invoked_) {
     // Get batch from Paxos service.
     string batch_string;
 
-#ifdef PAXOS
-    paxos.GetNextBatchBlocking(&batch_string);
-#else
     bool got_batch = false;
     do {
       	FetchMessage();
@@ -352,7 +299,6 @@ void Sequencer::RunReader() {
       	if (!got_batch)
         	Spin(0.001);
     } while (!deconstructor_invoked_ && !got_batch);
-#endif
 
     MessageProto* batch_message = new MessageProto();
     batch_message->ParseFromString(batch_string);

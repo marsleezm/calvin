@@ -171,12 +171,12 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		break;
 		case MICROTXN_MP:
 		{
-			LOCKLOG(txn->txn_id(), " MICROTXN_MP");
 			int avg_index_per_part = indexAccessNum/txn->readers_size();
 			int index_first_part = indexAccessNum- avg_index_per_part*(txn->readers_size()-1);
 
 			int avg_key_per_part = (kRWSetSize - indexAccessNum)/txn->readers_size(),
 					key_first_part = (kRWSetSize - indexAccessNum)- avg_key_per_part*(txn->readers_size()-1);
+			LOCKLOG(txn->txn_id(), " avg index "<<avg_index_per_part<<", index first "<<index_first_part<<", avg key part "<<avg_key_per_part<<", key first "<<key_first_part<<", nparts are "<<nparts);
 
 			GetRandomKeys(&keys,
 						index_first_part,
