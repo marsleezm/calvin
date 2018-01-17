@@ -222,7 +222,6 @@ void Sequencer::RunWriter() {
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
     paxos_queues->Push(batch_string);
-#endif
   }
 
   Spin(1);
