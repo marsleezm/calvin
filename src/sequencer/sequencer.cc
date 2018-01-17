@@ -155,14 +155,6 @@ Sequencer::~Sequencer() {
 //    nodes->insert(configuration_->LookupPartition(txn.read_write_set(i)));
 //}
 
-#ifdef LATENCY_TEST
-  if (txn->txn_id() % SAMPLE_RATE == 0)
-    prefetch_cold[txn->txn_id() / SAMPLE_RATE] = max_wait_time;
-#endif
-  return max_wait_time;
-}
-#endif
-
 void Sequencer::RunWriter() {
   Spin(1);
   pthread_setname_np(pthread_self(), "writer");
@@ -261,12 +253,10 @@ void Sequencer::RunWriter() {
           continue;
         }
 
-
         txn->SerializeToString(&txn_string);
         batch.add_data(txn_string);
         txn_id_offset++;
         delete txn;
-#endif
       }
     }
 
