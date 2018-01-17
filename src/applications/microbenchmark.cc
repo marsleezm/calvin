@@ -253,7 +253,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 	storage->Init();
 	int read_state;
 	if(txn->txn_type() & DEPENDENT_MASK){
-		//std::cout<<"Running dependent"<<std::endl;
+		//std::cout<<"Running dependent, "<<txn->multipartition()<<std::endl;
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
 			if(storage->ShouldExec()){
@@ -273,7 +273,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 		}
 	}
 	else{
-		//std::cout<<"Running non-dependent"<<std::endl;
+		//std::cout<<"Running non-dependent, "<<txn->multipartition()<<std::endl;
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			//LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
 			if(storage->ShouldExec()){

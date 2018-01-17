@@ -47,7 +47,8 @@ class MClient : public Client {
   }
   virtual ~MClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id) {
-    if (config_->all_nodes.size() > 1 && rand() % 10000 < percent_mp_) {
+	int v= rand() % 10000;
+    if (config_->all_nodes.size() > 1 && v < percent_mp_) {
     	// Multi-partition txn.
     	int parts[multi_txn_num_parts];
     	parts[0] = config_->this_node_id;
@@ -174,7 +175,7 @@ int main(int argc, char** argv) {
 		  updateperct = stof(ConfigReader::Value("update_percent").c_str());
   Client* client = (argv[2][0] == 't') ?
 		  reinterpret_cast<Client*>(new TClient(&config, distpert, updateperct)) :
-		  reinterpret_cast<Client*>(new MClient(&config, updateperct));
+		  reinterpret_cast<Client*>(new MClient(&config, distpert));
 
 
   Storage* storage;
