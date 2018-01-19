@@ -252,7 +252,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 				bool result = std::atomic_compare_exchange_strong(it->abort_bit_,
 											&it->num_aborted_, it->num_aborted_+1);
 				if (result){
-					LOG(txn_id, " adding "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
+					LOG(txn_id, " add "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
 					it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 					++(*it->local_aborted_);
                     if (aborted_txs)
@@ -383,7 +383,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 					//If the transaction has actually been aborted by me.
 
 					if (result){
-						LOG(txn_id, " adding "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
+						LOG(txn_id, " add "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
 						it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 						++it->local_aborted_;
                         if (aborted_txs)
@@ -699,7 +699,7 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 	    								&it->num_aborted_, it->num_aborted_+1);
 			//If the transaction has actually been aborted by me.
 			if (result){
-				LOG(txn_id, " adding "<<it->my_tx_id_<<" to abort queue by, new abort bit is "<<it->num_aborted_+1);
+				LOG(txn_id, " add "<<it->my_tx_id_<<" to abort queue by, new abort bit is "<<it->num_aborted_+1);
 				it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 				++(*it->local_aborted_);
                 if (aborted_txs)

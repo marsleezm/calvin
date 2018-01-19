@@ -6,6 +6,7 @@
 #include <ucontext.h>
 
 #include "backend/storage.h"
+#include "applications/microbenchmark.h"
 #include "sequencer/sequencer.h"
 #include "common/utils.h"
 #include "applications/application.h"
@@ -43,7 +44,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
 
-        num_unconfirmed_read = txn_->readers_size() - 1;
+		num_unconfirmed_read = txn_->readers_size() - 1;
 
 		string invnodes = "";
         for (int i = 0; i<txn_->readers_size(); ++i){
@@ -62,7 +63,10 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
             sc_list[i] = -1;
             ca_list[i] = 0;
         }
-        prev_unconfirmed = writer_id;
+		if (txn->txn_type() == Microbenchmark::MICROTXN_MP)
+        	prev_unconfirmed = 0;
+		else
+        	prev_unconfirmed = writer_id;
         if(writer_id == 0)
             added_pc_size = 1;
         recv_an[writer_id].second = abort_bit_;
@@ -157,7 +161,10 @@ void StorageManager::SetupTxn(TxnProto* txn){
     if(writer_id == 0)
         added_pc_size = 1;
     aborted_txs = new vector<int64_t>();
-    prev_unconfirmed = writer_id;
+	if (txn->txn_type() == Microbenchmark::MICROTXN_MP)
+		prev_unconfirmed = 0;
+	else
+		prev_unconfirmed = writer_id;
     sc_list = new int[txn_->readers_size()];
     ca_list = new int[txn_->readers_size()];
     recv_lan = new int[txn_->readers_size()];
@@ -443,8 +450,10 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
   if (message.confirmed()){
       LOG(StringToInt(message.destination_channel()), " adding confirmed read, nunc:"<<num_unconfirmed_read<<", an:"<<message.num_aborted()<<", lan:"<<message.local_aborted());
 	  // TODO: if the transaction has old data, should abort the transaction
-	  for (int i = 0; i < message.keys_size(); i++)
+	  for (int i = 0; i < message.keys_size(); i++){
 		  remote_objects_[message.keys(i)] = message.values(i);
+		  LOG(StringToInt(message.destination_channel()), " adding "<<message.keys(i)); 
+	  }
 	  for(uint i = 0; i<recv_an.size(); ++i){
 		  if(recv_an[i].first == source_node){
 			  // Mean this is the first time to receive read from this node
@@ -457,7 +466,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   recv_lan[i] = message.local_aborted();
 				  // TODO: The only place that may have concurrency issue 
                   sc_list[i] = message.num_aborted();
-              	  if(i<(uint)writer_id)
+              	  if(i<(uint)writer_id and txn_->txn_type() != Microbenchmark::MICROTXN_MP)
                   	  --prev_unconfirmed;
 				  if(is_suspended_ == false)
 					  return SUCCESS;
@@ -469,7 +478,8 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   if ( i < (uint)writer_id){
 					  abort_bit_ += 1;
                       aborting = true;
-                  	  --prev_unconfirmed;
+					  if(txn_->txn_type() != Microbenchmark::MICROTXN_MP)
+                  	  	  --prev_unconfirmed;
                   }
                   recv_an[i].second = message.num_aborted();
                   recv_lan[i] = message.local_aborted();
@@ -501,14 +511,14 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 				  //Deal with pending confirm
                   LOG(StringToInt(message.destination_channel()), i<<" set "<<recv_an[i].second<<" num aborted to "<<message.num_aborted()<<", is suspended is "<<is_suspended_<<", lan:"<<message.local_aborted());
                   int prev_recv = recv_an[i].second;
-				  if(prev_recv != -1 and i < writer_id) {
+				  if(txn_->txn_type() != Microbenchmark::MICROTXN_MP and prev_recv != -1 and i < writer_id) {
 					  abort_bit_ += 1;
 					  LOG(txn_->txn_id(), " aborting"); 
 					  aborting = true;
 				  }
                   recv_an[i].second = message.num_aborted();
                   recv_lan[i] = message.local_aborted();
-				  if(prev_recv == -1){
+				  if(txn_->txn_type() == Microbenchmark::MICROTXN_MP or prev_recv == -1){
 					  if(is_suspended_ == false)  return SUCCESS;
 					  else return DO_NOTHING;
 				  }

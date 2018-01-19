@@ -180,10 +180,7 @@ class StorageManager {
 
   // Can commit, if the transaction is read-only or has spec-committed.
   inline int CanSCToCommit() {
-		if(output_count < 20){
-			++output_count;
 		  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
-		}
 	  if (ReadOnly())
 		  return SUCCESS;
 	  else{
@@ -292,10 +289,11 @@ class StorageManager {
   void AddSC(MessageProto& msg, int& i);
   void inline AddCA(int partition, int anum, int64 remote_id) {
 	  if(remote_id == txn_->txn_id()){
-		  LOG(txn_->txn_id(), " adding pca:"<<partition<<", an:"<<anum);
 		  for(int i = 0; i < txn_->writers_size(); ++i){
 			  if (partition == recv_an[i].first){
-				  ca_list[i] = max(ca_list[i], anum);
+		  		  LOG(txn_->txn_id(), " adding pca:"<<partition<<", an:"<<anum<<", recv_lan is "<<recv_lan[i]);
+			      if (anum > ca_list[i])
+				  	  ca_list[i] = anum;
 				  break;
 			  }
 		  }
@@ -313,7 +311,8 @@ class StorageManager {
                   sc_list[i] = num_aborted;
 				  --num_unconfirmed_read;
                   if (i < (uint)writer_id){
-                      --prev_unconfirmed;
+					  if(prev_unconfirmed)
+                      	  --prev_unconfirmed;
                       LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed);
                   }
 				  LOG(txn_->txn_id(), "done confirming read for "<<i<<" from node "<<node_id<<", remaining is "<<num_unconfirmed_read<<", prev unconfirmed is "<<prev_unconfirmed);

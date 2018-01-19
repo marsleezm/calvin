@@ -16,6 +16,18 @@
 // #define PREFETCHING
 #define COLD_CUTOFF 990000
 
+void Microbenchmark::AccumulateRandomKeys(set<int>* keys, int num_keys, int key_start,
+                                   int key_limit, int part, Rand* rand) const {
+  ASSERT(key_start % nparts == 0);
+  for (int i = 0; i < num_keys; i++) {
+    // Find a key not already in '*keys'.
+    int key;
+    do {
+    	key = RandomLocalKey(key_start, key_limit, part, rand);
+    } while (keys->count(key));
+    keys->insert(key);
+  }
+}
 
 // Fills '*keys' with num_keys unique ints k where
 // 'key_start' <= k < 'key_limit', and k == part (mod nparts).
@@ -171,28 +183,32 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		break;
 		case MICROTXN_MP:
 		{
-			int avg_key_per_part = (kRWSetSize)/txn->readers_size(),
-					key_first_part = (kRWSetSize)- avg_key_per_part*(txn->readers_size()-1);
+			set<int> myownkeys;
+			int avg_key_per_part = kRWSetSize/txn->readers_size(),
+				key_first_part = kRWSetSize- avg_key_per_part*(txn->readers_size()-1);
 
-			GetRandomKeys(&keys,
-						  key_first_part,
+			for(int i = 0; i<txn->readers_size(); ++i){
+				if(txn->readers(i) != this_node_id){
+					AccumulateRandomKeys(&keys,
+						  avg_key_per_part,
 						  nparts * index_records,
 						  nparts * kDBSize,
-						  txn->readers(0), rand);
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<IntToString(*it));
+						  txn->readers(i), rand);
+				}
+				else
+					AccumulateRandomKeys(&myownkeys,
+						key_first_part,
+						nparts * index_records,
+						nparts * kDBSize,
+						this_node_id, rand);
+			}
+			for (set<int>::iterator it = myownkeys.begin(); it != myownkeys.end(); ++it){
+				//LOG(txn->txn_id(), " adding "<<*it<<", node id is "<<this_node_id);
 				txn->add_read_write_set(IntToString(*it));
 			}
-			for(int i = 1; i<txn->readers_size(); ++i){
-				GetRandomKeys(&keys,
-							  avg_key_per_part,
-							  nparts * index_records,
-							  nparts * kDBSize,
-							  txn->readers(i), rand);
-				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-					//LOG(txn->txn_id(), " adding "<<IntToString(*it));
-					txn->add_read_write_set(IntToString(*it));
-				}
+			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+				//LOG(txn->txn_id(), " adding "<<*it<<", node id is "<<this_node_id<<", read "<<txn->readers(i));
+				txn->add_read_write_set(IntToString(*it));
 			}
 		}
 		break;
@@ -319,6 +335,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			if(storage->ShouldRead()){
+				//LOG(txn->txn_id(), " trying to read "<<txn->read_write_set(i));
 				Value* val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL)
 					*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
