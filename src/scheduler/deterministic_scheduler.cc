@@ -92,6 +92,7 @@ int64_t DeterministicScheduler::num_lc_txns_(0);
 int64_t DeterministicScheduler::can_gc_txns_(0);
 atomic<int64_t> DeterministicScheduler::latest_started_tx(-1);
 bool DeterministicScheduler::terminated_(false);
+priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> DeterministicScheduler::pending_ca;
 
 static void DeleteTxnPtr(void* data, void* hint) { free(data); }
 
@@ -114,7 +115,7 @@ TxnProto* DeterministicScheduler::GetTxnPtr(socket_t* socket,
 DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                Connection* batch_connection,
                                                LockedVersionedStorage* storage,
-											   AtomicQueue<TxnProto*>* txns_queue,
+											   TxnQueue* txns_queue,
 											   Client* client,
                                                const Application* application,
 											   int mode
@@ -271,7 +272,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                         local_txn_id = base_local+remote_local-base_remote_local; 
                         if (scheduler->sc_txn_list[local_txn_id%sc_array_size].third != remote_global_id){
 					        AGGRLOG(local_txn_id, " buffering ca for txn not started: "<<remote_global_id<<", third is "<<scheduler->sc_txn_list[local_txn_id%sc_array_size].third<<", local txn id is "<<local_txn_id<<", rl: "<<remote_local<<", base_local "<<base_local<<", base rl "<<base_remote_local); 
-							scheduler->pending_ca.push(MyTuple<int64_t, int, int>(remote_global_id, message.source_node(), message.ca_num(i)));
+							pending_ca.push(MyTuple<int64_t, int, int>(remote_global_id, message.source_node(), message.ca_num(i)));
                         }
                         else{
 					        AGGRLOG(local_txn_id, " ca for:"<<remote_global_id<<", source:"<<message.source_node()<<", canum:"<<message.ca_num(i)); 
@@ -295,7 +296,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		    // Try to commit txns one by one
             int tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
 		    MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
-            int involved_nodes = first_tx.fourth->involved_nodes, batch_number = first_tx.fourth->batch_number;
+            //int involved_nodes = first_tx.fourth->involved_nodes, batch_number = first_tx.fourth->batch_number;
             MessageProto* msg_to_send = NULL;
             StorageManager* mgr, *first_mgr=NULL;
 
@@ -305,34 +306,34 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
                 // If can send confirm/pending confirm
                 if(first_tx.first >= num_lc_txns_){
-					ADD_PENDING_CAS(scheduler->pending_ca, first_tx.third, mgr);
+					ADD_PENDING_CAS(pending_ca, first_tx.third, mgr);
 					int result = mgr->CanAddC(record_abort_bit);
 					if(result == CAN_ADD or result == ADDED){
 						did_something = true;
 						if(result == CAN_ADD){
 							LOG(first_tx.first, " OK, gid:"<<first_tx.third);
-							if (involved_nodes == 0 or (involved_nodes == first_tx.fourth->involved_nodes and first_tx.fourth->batch_number-batch_number==0)){
-								INIT_MSG(msg_to_send, this_node);
-								if (mgr->TryAddSC(msg_to_send, record_abort_bit, num_lc_txns_)){ 
-                                    LOG(first_tx.first, " added confirm, aborted_tx size is "<<mgr->aborted_txs->size());
-                                    if(first_mgr == NULL)
-                                        first_mgr = mgr;
-								    involved_nodes = first_tx.fourth->involved_nodes;
-									batch_number = first_tx.fourth->txn_->batch_number(); 
-                                    if (mgr->aborted_txs and mgr->aborted_txs->size()){
-                                        for(uint i = 0; i < mgr->aborted_txs->size(); ++i){
-                                            MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= scheduler->sc_txn_list[mgr->aborted_txs->at(i)%sc_array_size];
-                                            //if (tx.fourth->involved_nodes == involved_nodes){ 
-                                                msg_to_send->add_ca_tx(tx.first);
-                                                msg_to_send->add_ca_tx(tx.third);
-                                                msg_to_send->add_ca_num(tx.fourth->local_aborted_);
-                                    			LOG(first_tx.first, first_tx.third<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
-                                            //}
-                                        }
-                                    }
+							//if (involved_nodes == 0 or (involved_nodes == first_tx.fourth->involved_nodes and first_tx.fourth->batch_number-batch_number==0)){
+							INIT_MSG(msg_to_send, this_node);
+							if (mgr->TryAddSC(msg_to_send, record_abort_bit, num_lc_txns_)){ 
+								LOG(first_tx.first, " added confirm, aborted_tx size is "<<mgr->aborted_txs->size());
+								if(first_mgr == NULL)
+									first_mgr = mgr;
+								//involved_nodes = first_tx.fourth->involved_nodes;
+								//batch_number = first_tx.fourth->txn_->batch_number(); 
+								if (mgr->aborted_txs and mgr->aborted_txs->size()){
+									for(uint i = 0; i < mgr->aborted_txs->size(); ++i){
+										MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= scheduler->sc_txn_list[mgr->aborted_txs->at(i)%sc_array_size];
+										//if (tx.fourth->involved_nodes == involved_nodes){ 
+											msg_to_send->add_ca_tx(tx.first);
+											msg_to_send->add_ca_tx(tx.third);
+											msg_to_send->add_ca_num(tx.fourth->local_aborted_);
+											LOG(first_tx.first, first_tx.third<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
+										//}
+									}
 								}
+						//	}
 							}
-							else{
+							/*else{
 								LOG(-1, " stop as involved node changed from "<< involved_nodes<<" to "<<first_tx.fourth->involved_nodes);
 								if (first_mgr){
                                     first_mgr->SendSC(msg_to_send);
@@ -341,12 +342,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                                 can_gc_txns_ = num_lc_txns_;
                                 break;
 							}
+						*/
 						}
 						// If can commit
 						if(first_tx.first == num_lc_txns_ and mgr->CanSCToCommit() == SUCCESS){
 							if(mgr->txn_->multipartition() and mgr->last_add_pc == -1 and mgr->has_confirmed == false){
 								INIT_MSG(msg_to_send, this_node); 
-								involved_nodes = mgr->involved_nodes;
+								//involved_nodes = mgr->involved_nodes;
 								if (first_mgr == NULL)
 									first_mgr = mgr;
 								ASSERT(mgr->TryAddSC(msg_to_send, NO_CHECK, num_lc_txns_) == true);
@@ -510,7 +512,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
-		  got_it = scheduler->txns_queue_->Pop(&txn);
+		  got_it = scheduler->txns_queue_->Pop(&txn, num_lc_txns_);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
 		  //LOCKLOG(txn->txn_id(), " before starting txn ");
 
@@ -608,7 +610,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 		}
 	}
 	else{
-		AGGRLOG(txn->txn_id(), " start executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id<<", inv:"<<manager->involved_nodes);
+		AGGRLOG(txn->txn_id(), " start executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id<<", inv:"<<manager->txn_->involved_nodes());
 		int result = application_->Execute(manager);
 		//AGGRLOG(txn->txn_id(), " result is "<<result);
 		if (result == SUSPEND){

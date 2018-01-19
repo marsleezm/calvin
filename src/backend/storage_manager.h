@@ -388,8 +388,8 @@ class StorageManager {
   bool spec_committed_;
   int last_add_pc = -1;
   int writer_id;
-  int involved_nodes = 0;
-  int batch_number = 2147483647;
+  //int involved_nodes = 0;
+  //int batch_number = 2147483647;
   atomic<int32> abort_bit_;
   int num_aborted_;
   atomic<int32> local_aborted_;

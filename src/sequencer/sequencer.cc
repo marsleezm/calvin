@@ -79,7 +79,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	pthread_mutex_init(&mutex_, NULL);
 	// Start Sequencer main loops running in background thread.
-	txns_queue_ = new AtomicQueue<TxnProto*>();
+	txns_queue_ = new TxnQueue();
 	paxos_queues = new AtomicQueue<string>();
 
 	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
@@ -88,47 +88,35 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	}
 
 	cpu_set_t cpuset;
-	if (mode == NORMAL_QUEUE){
+	assert(mode == NORMAL_QUEUE);
 
-		pthread_attr_t attr_writer;
-		pthread_attr_init(&attr_writer);
-		//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	pthread_attr_t attr_writer;
+	pthread_attr_init(&attr_writer);
+	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-		CPU_ZERO(&cpuset);
-		//CPU_SET(4, &cpuset);
-		//CPU_SET(5, &cpuset);
-		CPU_SET(1, &cpuset);
-		//CPU_SET(7, &cpuset);
-		pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
-		std::cout << "Sequencer writer starts at core 1"<<std::endl;
+	CPU_ZERO(&cpuset);
+	//CPU_SET(4, &cpuset);
+	//CPU_SET(5, &cpuset);
+	CPU_SET(1, &cpuset);
+	//CPU_SET(7, &cpuset);
+	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
+	std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
-		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
-			  reinterpret_cast<void*>(this));
+	pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
+		  reinterpret_cast<void*>(this));
 
-		pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
-              reinterpret_cast<void*>(this));
+	pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
+		  reinterpret_cast<void*>(this));
 
-		CPU_ZERO(&cpuset);
-		CPU_SET(2, &cpuset);
-		std::cout << "Sequencer reader starts at core 2"<<std::endl;
-		pthread_attr_t attr_reader;
-		pthread_attr_init(&attr_reader);
-		pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
+	CPU_ZERO(&cpuset);
+	CPU_SET(2, &cpuset);
+	std::cout << "Sequencer reader starts at core 2"<<std::endl;
+	pthread_attr_t attr_reader;
+	pthread_attr_init(&attr_reader);
+	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
 
-		  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
-		      reinterpret_cast<void*>(this));
-  }
-  else{
-		CPU_ZERO(&cpuset);
-		CPU_SET(1, &cpuset);
-		std::cout << "Sequencer reader starts at core 1"<<std::endl;
-		pthread_attr_t simple_loader;
-		pthread_attr_init(&simple_loader);
-		pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
-
-		pthread_create(&reader_thread_, &simple_loader, RunSequencerLoader,
-		      reinterpret_cast<void*>(this));
-  }
+	  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
+		  reinterpret_cast<void*>(this));
 }
 
 Sequencer::~Sequencer() {
@@ -240,7 +228,7 @@ void Sequencer::RunWriter() {
         TxnProto* txn;
         int64 involved_nodes = 0;
         client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime(), involved_nodes);
-		txn->set_batch_number(batch_number);
+		txn->set_involved_nodes(involved_nodes);
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
@@ -346,7 +334,8 @@ void Sequencer::RunReader() {
 #endif
   pthread_setname_np(pthread_self(), "reader");
 
-  FetchMessage();
+  int64 last_involved_nodes = 0;
+  FetchMessage(last_involved_nodes);
   double time = GetTime(), now_time;
   int64_t last_committed;
   // Set up batch messages for each system node.
@@ -377,7 +366,7 @@ void Sequencer::RunReader() {
 #else
     bool got_batch = false;
     do {
-    	FetchMessage();
+    	FetchMessage(last_involved_nodes);
     	pthread_mutex_lock(&mutex_);
     	if (batch_queue_.size()) {
     		batch_string = batch_queue_.front();
@@ -430,7 +419,7 @@ void Sequencer::RunReader() {
     batch_number += configuration_->all_nodes.size();
     batch_count++;
 
-    FetchMessage();
+    FetchMessage(last_involved_nodes);
 
 
 #ifdef LATENCY_TEST
@@ -497,7 +486,7 @@ void Sequencer::RunLoader(){
 
   while (!deconstructor_invoked_) {
 
-	FetchMessage();
+	//FetchMessage(last_involved_nodes);
 
 	// Report output.
 	now_time = GetTime();
@@ -531,7 +520,7 @@ void Sequencer::RunLoader(){
   Spin(1);
 }
 
-void* Sequencer::FetchMessage() {
+void* Sequencer::FetchMessage(int64 last_involved_nodes) {
   MessageProto* batch_message = NULL;
   //double time = GetTime();
   //int executing_txns = 0;
@@ -548,6 +537,10 @@ void* Sequencer::FetchMessage() {
 			  TxnProto* txn = new TxnProto();
 			  txn->ParseFromString(batch_message->data(i));
 			  txn->set_local_txn_id(fetched_txn_num_++);
+		      if(txn->involved_nodes() and txn->involved_nodes() != last_involved_nodes){
+				  last_involved_nodes = txn->involved_nodes();
+			  	  txn->set_involved_nodes(-1);
+			  }
 			  txns_queue_->Push(txn);
 			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
 			  ++num_fetched_this_round;

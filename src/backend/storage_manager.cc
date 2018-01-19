@@ -35,7 +35,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
 	tpcc_args = new TPCCArgs();
 	tpcc_args ->ParseFromString(txn->arg());
-	batch_number = txn->batch_number();
+	//batch_number = txn->batch_number();
 	if (txn->multipartition()){
 		message_ = new MessageProto();
 		message_->set_source_channel(txn->txn_id());
@@ -46,15 +46,15 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
 		num_unconfirmed_read = txn_->readers_size() - 1;
 
-		string invnodes = "";
+		//string invnodes = "";
         for (int i = 0; i<txn_->readers_size(); ++i){
             recv_an.push_back(make_pair(txn_->readers(i), -1));
-            involved_nodes = involved_nodes | (1 << txn_->readers(i));
-            invnodes += IntToString(txn_->readers(i));
+            //involved_nodes = involved_nodes | (1 << txn_->readers(i));
+            //invnodes += IntToString(txn_->readers(i));
             if (txn_->readers(i) == configuration_->this_node_id)
                 writer_id = i; 
         }
-		LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
+		//LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
         pthread_mutex_init(&lock, NULL);
         sc_list = new int[txn_->readers_size()];
         ca_list = new int[txn_->readers_size()];
@@ -119,12 +119,12 @@ void StorageManager::SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* 
     msg.set_destination_channel("locker");
     for(uint i = 0; i < aborted_txs->size(); ++i){
         MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= sc_txn_list[aborted_txs->at(i)%sc_array_size];
-        if (tx.fourth->involved_nodes == involved_nodes){
+        //if (tx.fourth->involved_nodes == involved_nodes){
             msg.add_ca_tx(tx.first);
             msg.add_ca_tx(tx.third);
             msg.add_ca_num(tx.fourth->local_aborted_);
             LOG(txn_->txn_id(), txn_->local_txn_id()<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
-        }
+        //}
     }
     for (int i = 0; i < txn_->writers_size(); ++i) {
         if (txn_->writers(i) != configuration_->this_node_id) {
@@ -139,7 +139,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn->multipartition());
 
 	txn_ = txn;
-	batch_number = txn->batch_number();
+	//batch_number = txn->batch_number();
 	message_ = new MessageProto();
 	message_->set_source_channel(txn->txn_id());
 	message_->set_source_node(configuration_->this_node_id);
@@ -152,7 +152,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	num_unconfirmed_read = txn_->readers_size() - 1;
 	for (int i = 0; i<txn_->readers_size(); ++i){
 		recv_an.push_back(make_pair(txn_->readers(i), -1));
-        involved_nodes = involved_nodes | (1 << txn_->readers(i));
+        //involved_nodes = involved_nodes | (1 << txn_->readers(i));
         //invnodes += IntToString(txn_->readers(i));
         //LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
         if (txn_->readers(i) == configuration_->this_node_id)
