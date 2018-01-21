@@ -74,6 +74,7 @@ atomic<char>** DeterministicScheduler::remote_la_list;
 MyFour<int64, int64, int64, StorageManager*>* DeterministicScheduler::sc_txn_list;
 int64* DeterministicScheduler::involved_nodes;
 int64 DeterministicScheduler::active_batch_num(0);
+AtomicQueue<MyFour<int64, int, int, int>> DeterministicScheduler::pending_las;
 
 static void DeleteTxnPtr(void* data, void* hint) { free(data); }
 
@@ -216,11 +217,47 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     int64 local_gc= 0; //prevtx=0; 
     int out_counter1 = 0, latency_count = 0;
     pair<int64, int64>* latency_array = scheduler->latency[thread];
-	priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour> pending_las;
 	queue<TxnProto*> buffered_txns;
 
     while (!terminated_) {
 	    if (scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
+			int i = 0, la_idx, la;
+			MyFour<int64, int, int, int> tuple;
+			set<int> remove_tuples;
+		  	while(i < (int)pending_las.Size()){
+				tuple = pending_las.Get(i); 
+				LOG(-1, " check, top is "<<tuple.first<<", "<<tuple.second<<", "<<tuple.fourth<<", local "<<scheduler->sc_txn_list[tuple.second%sc_array_size].third);
+				if (tuple.second < num_lc_txns_){
+					LOG(-1, " popping out "<<tuple.first);
+					remove_tuples.insert(i);
+				}
+				else if (scheduler->sc_txn_list[tuple.second%sc_array_size].third == tuple.first){
+					la_idx = tuple.third; 
+					la = remote_la_list[tuple.second%sc_array_size][la_idx];
+					LOG(-1, " trying to add, la is "<<la<<", la idx "<<la_idx);
+					while (la < tuple.fourth){
+						LOG(tuple.first, " trying to add ca "<<tuple.fourth<<" to "<<la_idx);
+						std::atomic_compare_exchange_strong(&remote_la_list[tuple.second%sc_array_size][la_idx], (char*)&la, (char)tuple.fourth);
+						la = remote_la_list[tuple.second%sc_array_size][la_idx];
+					}
+					remove_tuples.insert(i);
+				}								
+		  	}
+			if(remove_tuples.size()){
+				int j = 0;
+				vector<MyFour<int64, int, int, int>> tuples;
+				while (pending_las.Size()){
+					if (remove_tuples.count(j) == 0){
+						pending_las.Pop(&tuple);
+						tuples.push_back(tuple);
+					}
+					else
+						pending_las.Pop(&tuple);
+					++j;
+				}
+				for(auto t : tuples)
+					pending_las.Push(t);
+			}
 		    // Try to commit txns one by one
             int tx_index=num_lc_txns_%sc_array_size;
 		    MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
@@ -234,6 +271,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
 					if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
 						++Sequencer::num_committed;
+				  	if(scheduler->multi_parts != 1)
+					  	for(int i = 0; i < scheduler->multi_parts-1; ++i)
+						  	remote_la_list[tx_index][i] = 0;
 					scheduler->sc_txn_list[tx_index].third = NO_TXN;
 					++num_lc_txns_;
 					tx_index = (tx_index+1)%sc_array_size; 
@@ -392,7 +432,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  TxnProto* txn = NULL;
 		  if (buffered_txns.size()){
 			  txn = buffered_txns.front();
-			  LOG(txn->txn_id(), " checking if can exec txn");
+			  LOG(txn->txn_id(), " checking if can exec txn, local "<<txn->local_txn_id());
 			  int first_idx = num_lc_txns_%sc_array_size; 
 			  int64 myinvolved_nodes = txn->involved_nodes();
 			  if(txn->local_txn_id() == num_lc_txns_ or (sc_txn_list[first_idx].second == num_lc_txns_ and involved_nodes[first_idx] == myinvolved_nodes and active_batch_num >= txn->batch_number()-1)){
@@ -441,53 +481,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager->SetupTxn(txn);
 				  manager->AddCA(sc_array_size, scheduler->sc_txn_list, remote_la_list, pending_las);
 			  }
-			  if(scheduler->multi_parts != 1)
-				  for(int i = 0; i < scheduler->multi_parts-1; ++i)
-					  remote_la_list[txn->local_txn_id()%sc_array_size][i] = 0;
 			  involved_nodes[txn->local_txn_id()%sc_array_size] = txn->involved_nodes();
               scheduler->sc_txn_list[txn->local_txn_id()%sc_array_size].fourth = manager;
               scheduler->sc_txn_list[txn->local_txn_id()%sc_array_size].third = txn->txn_id();
               scheduler->sc_txn_list[txn->local_txn_id()%sc_array_size].second = txn->local_txn_id();
               scheduler->sc_txn_list[txn->local_txn_id()%sc_array_size].first = NO_TXN;
-			  int la_idx, la;
-			  while(pending_las.size()){
-					MyFour<int64, int, int, int> tuple = pending_las.top(); 
-						// I can add it
-					LOG(txn->txn_id(), " check, top is "<<tuple.first<<", "<<tuple.second<<", "<<tuple.fourth<<", local "<<scheduler->sc_txn_list[tuple.second%sc_array_size].third);
-					/*
-					if(tuple.second == -1){
-						tx_idx = (tuple.first-txn->txn_id()+txn->local_txn_id())%sc_array_size;
-						LOG(txn->txn_id(), " check, top is "<<tuple.first<<", "<<tuple.second<<", "<<tuple.fourth<<", local "<<scheduler->sc_txn_list[tx_idx].third);
-						if(tuple.first == scheduler->sc_txn_list[tx_idx].third){
-							tuple.second = tx_idx;
-							if(tuple.third > manager->writer_id)
-								--tuple.third;
-						}
-						else if (tuple.first < scheduler->sc_txn_list[tx_idx].third)
-							pending_las.pop();	
-						else
-							break;
-					}
-					*/
-					if (tuple.second < num_lc_txns_){
-						LOG(txn->txn_id(), " popping out "<<tuple.first);
-						pending_las.pop();
-					}
-					else if (scheduler->sc_txn_list[tuple.second%sc_array_size].third == tuple.first){
-						la_idx = tuple.third; 
-						la = remote_la_list[tuple.second%sc_array_size][la_idx];
-						LOG(txn->txn_id(), " trying to add, la is "<<la<<", la idx "<<la_idx);
-						while (la < tuple.fourth){
-							LOG(tuple.first, " trying to add ca "<<tuple.fourth<<" to "<<la_idx);
-							std::atomic_compare_exchange_strong(&remote_la_list[tuple.second%sc_array_size][la_idx], (char*)&la, (char)tuple.fourth);
-							la = remote_la_list[tuple.second%sc_array_size][la_idx];
-						}
-						pending_las.pop();
-					}								
-					else{
-						break;
-					}
-			  }
 			  if(scheduler->ExecuteTxn(manager, thread, active_g_tids, latency_count) == false){
 				  AGGRLOG(txn->txn_id(), " got aborted, pushing "<<manager->abort_bit_);
 				  retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->abort_bit_, manager));
@@ -611,6 +609,9 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 					//AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<num_lc_txns_+1<<", will delete "<<reinterpret_cast<int64>(manager));
 					AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<num_lc_txns_+1);
 					assert(manager->ApplyChange(true) == true);
+				  	if(multi_parts != 1)
+					  	for(int i = 0; i < multi_parts-1; ++i)
+						  	remote_la_list[num_lc_txns_%sc_array_size][i] = 0;
 					++num_lc_txns_;
 					if(sc_txn_list[num_lc_txns_%sc_array_size].second == num_lc_txns_)
 						active_batch_num = sc_txn_list[num_lc_txns_%sc_array_size].fourth->txn_->batch_number();

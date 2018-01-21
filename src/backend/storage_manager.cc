@@ -224,7 +224,7 @@ bool StorageManager::ApplyChange(bool is_committing){
 	}
 }
 
-void StorageManager::AddCA(int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_las){
+void StorageManager::AddCA(int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, AtomicQueue<MyFour<int64, int, int, int>>& pending_las){
 	LOG(txn_->txn_id(), " adding buffered CA:");
 	int i = 0, local_tx, la_idx, la;
 	int64 tx_id;
@@ -236,21 +236,21 @@ void StorageManager::AddCA(int sc_array_size, MyFour<int64, int64, int64, Storag
 		if(la_idx > writer_id)
 			--la_idx;
 		LOG(txn_->txn_id(), " adding ca:"<<tx_id<<", local is"<<sc_txn_list[local_tx%sc_array_size].third<<", num "<<tuple.third);
-		if(tx_id != sc_txn_list[local_tx%sc_array_size].third)
-			pending_las.push(MyFour<int64, int, int, int>(tx_id, local_tx, la_idx, tuple.third));
-		else{
+		if(tx_id == -1 or tx_id == sc_txn_list[local_tx%sc_array_size].third){
 			la = remote_la_list[local_tx%sc_array_size][la_idx];
 			while (la < tuple.third){
 				std::atomic_compare_exchange_strong(&remote_la_list[local_tx%sc_array_size][la_idx], (char*)&la, (char)tuple.third);
 				la = remote_la_list[local_tx%sc_array_size][la_idx];
 			}
 		}
+		else
+			pending_las.Push(MyFour<int64, int, int, int>(tx_id, local_tx, la_idx, tuple.third));
 		++i;
 	}	
 	buffered_cas.clear();
 }
 
-void StorageManager::AddCA(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_las){
+void StorageManager::AddCA(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, AtomicQueue<MyFour<int64, int, int, int>>& pending_las){
 	LOG(txn_->txn_id(), " adding CA:"<<message.ca_tx_size());
 	int i = 0, local_tx, la_idx = message.sender_id(), la;
  	if(message.sender_id() > writer_id)
@@ -259,17 +259,17 @@ void StorageManager::AddCA(const MessageProto& message, int sc_array_size, MyFou
 	while (i < message.ca_num_size()){
 		tx_id = message.ca_tx(i);
 		local_tx = (tx_id - txn_->txn_id() + txn_->local_txn_id());
-		LOG(txn_->txn_id(), " adding ca:"<<tx_id<<", local is"<<sc_txn_list[local_tx%sc_array_size].third<<", num "<<message.ca_num(i));
-		if(tx_id != sc_txn_list[local_tx%sc_array_size].third)
-			pending_las.push(MyFour<int64, int, int, int>(tx_id, local_tx, la_idx, message.ca_num(i)));
-		else{
+		if(tx_id == -1 or tx_id != sc_txn_list[local_tx%sc_array_size].third){
+			LOG(txn_->txn_id(), " adding ca:"<<tx_id<<", local is"<<sc_txn_list[local_tx%sc_array_size].third<<", num "<<message.ca_num(i));
 			la = remote_la_list[local_tx%sc_array_size][la_idx];
-			//LOG(txn_->txn_id(), " local la is "<<la); 
 			while (la < message.ca_num(i)){
 				std::atomic_compare_exchange_strong(&remote_la_list[local_tx%sc_array_size][la_idx], (char*)&la, (char)message.ca_num(i));
 				la = remote_la_list[local_tx%sc_array_size][la_idx];
 			}
-			//LOG(txn_->txn_id(), " after adding ca, local is "<<(int)remote_la_list[tx_idx][la_idx]);
+		}
+		else{
+			pending_las.Push(MyFour<int64, int, int, int>(tx_id, local_tx, la_idx, message.ca_num(i)));
+			LOG(txn_->txn_id(), " pushing ca "<<tx_id);
 		}
 		++i;
 	}	
@@ -277,7 +277,7 @@ void StorageManager::AddCA(const MessageProto& message, int sc_array_size, MyFou
 
 // TODO: add abort logic
 // TODO: add logic to delete keys that do not exist
-int StorageManager::HandleReadResult(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_las) {
+int StorageManager::HandleReadResult(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, AtomicQueue<MyFour<int64, int, int, int>>& pending_las) {
 	LOG(StringToInt(message.destination_channel()), " global abort "<<message.global_aborted()<<", mine gabort "<<global_aborted_); 
 	// Is not (or may not be) dependent txn, so can always add data!
 	if(txn_ == NULL or txn_->txn_type() == Microbenchmark::MICROTXN_MP){

@@ -147,6 +147,7 @@ class DeterministicScheduler : public Scheduler {
 
   pair<int64, int64>** latency;
   static MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;
+  static AtomicQueue<MyFour<int64, int, int, int>> pending_las;
   static int64* involved_nodes;
   static atomic<char>** remote_la_list;
   static int64 active_batch_num;

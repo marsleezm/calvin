@@ -81,10 +81,13 @@ class StorageManager {
 		  for(uint i = 0; i < aborted_txs->size(); ++i){
 				MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= sc_txn_list[aborted_txs->at(i)%sc_array_size];
 				//LOG(txn_->txn_id(), "  before adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
-				message_->add_ca_tx(tx.third);
-				//message_->add_ca_tx(tx.third);
-				message_->add_ca_num(tx.fourth->local_aborted_);
-				LOG(txn_->txn_id(), txn_->local_txn_id()<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
+				if(tx.fourth->txn_->multipartition() == true){
+					ASSERT(txn_->involved_nodes() == tx.fourth->txn_->involved_nodes());
+					message_->add_ca_tx(tx.third);
+					//message_->add_ca_tx(tx.third);
+					message_->add_ca_num(tx.fourth->local_aborted_);
+					LOG(txn_->txn_id(), txn_->local_txn_id()<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
+				}
 		  }
           for (int i = 0; i < txn_->writers().size(); i++) {
               if (txn_->writers(i) != configuration_->this_node_id) {
@@ -99,8 +102,8 @@ class StorageManager {
       }
   }
 
- 	void AddCA(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_la);
- 	void AddCA(int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_la);
+ 	void AddCA(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, AtomicQueue<MyFour<int64, int, int, int>>& pending_la);
+ 	void AddCA(int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, AtomicQueue<MyFour<int64, int, int, int>>& pending_la);
     void SetupTxn(TxnProto* txn);
 
   //Value* ReadObject(const Key& key);
@@ -142,7 +145,7 @@ class StorageManager {
   	  return NO_NEED;  // The key will be locked by another partition.
   }
 
-  int HandleReadResult(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_la);
+  int HandleReadResult(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, AtomicQueue<MyFour<int64, int, int, int>>& pending_la);
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
