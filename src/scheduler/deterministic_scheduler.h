@@ -143,7 +143,7 @@ class DeterministicScheduler : public Scheduler {
   int multi_parts;
   int max_sc;
   int sc_array_size;
-  //static priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
+  static priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour> pending_la_pq;
 
   pair<int64, int64>** latency;
   static MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;

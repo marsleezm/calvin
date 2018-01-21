@@ -75,6 +75,7 @@ MyFour<int64, int64, int64, StorageManager*>* DeterministicScheduler::sc_txn_lis
 int64* DeterministicScheduler::involved_nodes;
 int64 DeterministicScheduler::active_batch_num(0);
 AtomicQueue<MyFour<int64, int, int, int>> DeterministicScheduler::pending_las;
+priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour> DeterministicScheduler::pending_la_pq;
 
 static void DeleteTxnPtr(void* data, void* hint) { free(data); }
 
@@ -146,6 +147,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	for( int i = 0; i<sc_array_size; ++i){
 		sc_txn_list[i] = MyFour<int64_t, int64_t, int64_t, StorageManager*>(NO_TXN, NO_TXN, NO_TXN, NULL);
 		remote_la_list[i] = new atomic<char>[multi_parts-1]; 
+		for(int j = 0; j < multi_parts-1; ++j)
+			remote_la_list[i][j] = 0;
 	}
 
 	  // Start all worker threads.
@@ -220,16 +223,20 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	queue<TxnProto*> buffered_txns;
 
     while (!terminated_) {
-	    if (scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-			int i = 0, la_idx, la;
+	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or pending_las.Size() or pending_la_pq.size()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
+			int la_idx, la;
 			MyFour<int64, int, int, int> tuple;
-			set<int> remove_tuples;
-		  	while(i < (int)pending_las.Size()){
-				tuple = pending_las.Get(i); 
+		  	while(pending_las.Size()){
+				pending_las.Pop(&tuple);
+				pending_la_pq.push(tuple);
+			}
+			
+			while(pending_la_pq.size()){	
+				tuple = pending_la_pq.top(); 
 				LOG(-1, " check, top is "<<tuple.first<<", "<<tuple.second<<", "<<tuple.fourth<<", local "<<scheduler->sc_txn_list[tuple.second%sc_array_size].third);
 				if (tuple.second < num_lc_txns_){
+					pending_la_pq.pop();
 					LOG(-1, " popping out "<<tuple.first);
-					remove_tuples.insert(i);
 				}
 				else if (scheduler->sc_txn_list[tuple.second%sc_array_size].third == tuple.first){
 					la_idx = tuple.third; 
@@ -240,24 +247,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						std::atomic_compare_exchange_strong(&remote_la_list[tuple.second%sc_array_size][la_idx], (char*)&la, (char)tuple.fourth);
 						la = remote_la_list[tuple.second%sc_array_size][la_idx];
 					}
-					remove_tuples.insert(i);
+					pending_la_pq.pop();
 				}								
-		  	}
-			if(remove_tuples.size()){
-				int j = 0;
-				vector<MyFour<int64, int, int, int>> tuples;
-				while (pending_las.Size()){
-					if (remove_tuples.count(j) == 0){
-						pending_las.Pop(&tuple);
-						tuples.push_back(tuple);
-					}
-					else
-						pending_las.Pop(&tuple);
-					++j;
+				else{
+					break;
 				}
-				for(auto t : tuples)
-					pending_las.Push(t);
-			}
+		  	}
 		    // Try to commit txns one by one
             int tx_index=num_lc_txns_%sc_array_size;
 		    MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
@@ -432,7 +427,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  TxnProto* txn = NULL;
 		  if (buffered_txns.size()){
 			  txn = buffered_txns.front();
-			  LOG(txn->txn_id(), " checking if can exec txn, local "<<txn->local_txn_id());
+			  //LOG(txn->txn_id(), " checking if can exec txn, local "<<txn->local_txn_id());
 			  int first_idx = num_lc_txns_%sc_array_size; 
 			  int64 myinvolved_nodes = txn->involved_nodes();
 			  if(txn->local_txn_id() == num_lc_txns_ or (sc_txn_list[first_idx].second == num_lc_txns_ and involved_nodes[first_idx] == myinvolved_nodes and active_batch_num >= txn->batch_number()-1)){
@@ -591,7 +586,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 			return true;
 		}
 		else if(result == ABORT) {
-			//AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
+			AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 			manager->Abort();
 			++Sequencer::num_aborted_;
 			return false;
@@ -599,6 +594,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 		else{
 			if (num_lc_txns_ == txn->local_txn_id()){
 				int can_commit = manager->CanCommit(remote_la_list[txn->local_txn_id()%sc_array_size]);
+				AGGRLOG(txn->txn_id(), " result of can commit is "<<can_commit<<", in list "<<manager->if_inlist());
 				if(can_commit == ABORT){
 					AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
 					manager->Abort();

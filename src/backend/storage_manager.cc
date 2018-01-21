@@ -236,15 +236,17 @@ void StorageManager::AddCA(int sc_array_size, MyFour<int64, int64, int64, Storag
 		if(la_idx > writer_id)
 			--la_idx;
 		LOG(txn_->txn_id(), " adding ca:"<<tx_id<<", local is"<<sc_txn_list[local_tx%sc_array_size].third<<", num "<<tuple.third);
-		if(tx_id == -1 or tx_id == sc_txn_list[local_tx%sc_array_size].third){
+		if(tx_id == sc_txn_list[local_tx%sc_array_size].third){
 			la = remote_la_list[local_tx%sc_array_size][la_idx];
 			while (la < tuple.third){
 				std::atomic_compare_exchange_strong(&remote_la_list[local_tx%sc_array_size][la_idx], (char*)&la, (char)tuple.third);
 				la = remote_la_list[local_tx%sc_array_size][la_idx];
 			}
 		}
-		else
+		else{
+			LOG(txn_->txn_id(), " pushing ca "<<tx_id<<", local is "<<sc_txn_list[local_tx%sc_array_size].third);
 			pending_las.Push(MyFour<int64, int, int, int>(tx_id, local_tx, la_idx, tuple.third));
+		}
 		++i;
 	}	
 	buffered_cas.clear();
@@ -259,8 +261,8 @@ void StorageManager::AddCA(const MessageProto& message, int sc_array_size, MyFou
 	while (i < message.ca_num_size()){
 		tx_id = message.ca_tx(i);
 		local_tx = (tx_id - txn_->txn_id() + txn_->local_txn_id());
-		if(tx_id == -1 or tx_id != sc_txn_list[local_tx%sc_array_size].third){
-			LOG(txn_->txn_id(), " adding ca:"<<tx_id<<", local is"<<sc_txn_list[local_tx%sc_array_size].third<<", num "<<message.ca_num(i));
+		LOG(txn_->txn_id(), " adding ca:"<<tx_id<<", local is"<<sc_txn_list[local_tx%sc_array_size].third<<", num "<<message.ca_num(i));
+		if(tx_id == sc_txn_list[local_tx%sc_array_size].third){
 			la = remote_la_list[local_tx%sc_array_size][la_idx];
 			while (la < message.ca_num(i)){
 				std::atomic_compare_exchange_strong(&remote_la_list[local_tx%sc_array_size][la_idx], (char*)&la, (char)message.ca_num(i));
@@ -269,7 +271,7 @@ void StorageManager::AddCA(const MessageProto& message, int sc_array_size, MyFou
 		}
 		else{
 			pending_las.Push(MyFour<int64, int, int, int>(tx_id, local_tx, la_idx, message.ca_num(i)));
-			LOG(txn_->txn_id(), " pushing ca "<<tx_id);
+			LOG(txn_->txn_id(), " pushing ca "<<tx_id<<", local is "<<sc_txn_list[local_tx%sc_array_size].third);
 		}
 		++i;
 	}	

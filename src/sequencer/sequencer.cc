@@ -542,7 +542,7 @@ void* Sequencer::FetchMessage(int64 last_involved_nodes) {
 			  txn->ParseFromString(batch_message->data(i));
 			  txn->set_local_txn_id(fetched_txn_num_++);
 			  txns_queue_->Push(txn);
-			  LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", iv:"<<txn->involved_nodes());
+			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", iv:"<<txn->involved_nodes());
 			  ++num_fetched_this_round;
 		  }
 		  delete batch_message;
