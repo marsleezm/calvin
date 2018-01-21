@@ -59,35 +59,36 @@ class StorageManager {
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
 		  	  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue);
 
+	/*
     inline void InitUnconfirmMsg(MessageProto* msg){
-        msg->clear_received_num_aborted();
+        //msg->clear_received_num_aborted();
         msg->clear_ca_tx();
         msg->clear_ca_num();
         // The first txn is not confirmed yet
-        msg->set_num_aborted(-1);
+        //msg->set_num_aborted(-1);
     }
+	*/
 
   ~StorageManager();
 
-  bool TryAddSC(MessageProto* msg, int record_num_aborted, int64 num_committed_txs);
-  void SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size);
-
-  inline void SendLocalReads(bool if_to_confirm, MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size){
+  inline void SendLocalReads(MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size){
       if (!aborting and num_aborted_ == abort_bit_) {
-          if (if_to_confirm and has_confirmed.exchange(true) == false){ 
-              LOG(txn_->txn_id(), " sending confirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
-              if (aborted_txs->size())
-                  SendCA(sc_txn_list, sc_array_size);
-              else
-                  message_->set_confirmed(true);
-          }
-          else
-              LOG(txn_->txn_id(), " sending unconfirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
-          message_->set_num_aborted(num_aborted_);
+		  //LOG(txn_->txn_id(), " sending read of gan "<<global_aborted_<<", lan:"<<local_aborted_);
+		  send_before_abort = true;
+		  message_->set_sender_id(writer_id);
+          message_->set_global_aborted(global_aborted_);
           message_->set_local_aborted(local_aborted_);
+		  for(uint i = 0; i < aborted_txs->size(); ++i){
+				MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= sc_txn_list[aborted_txs->at(i)%sc_array_size];
+				//LOG(txn_->txn_id(), "  before adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
+				message_->add_ca_tx(tx.third);
+				//message_->add_ca_tx(tx.third);
+				message_->add_ca_num(tx.fourth->local_aborted_);
+				LOG(txn_->txn_id(), txn_->local_txn_id()<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
+		  }
           for (int i = 0; i < txn_->writers().size(); i++) {
               if (txn_->writers(i) != configuration_->this_node_id) {
-                  //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
+                  LOG(txn_->txn_id(), " sending local message of ga:"<<global_aborted_<<", la:"<<local_aborted_<<" to "<<txn_->writers(i));
                   message_->set_destination_node(txn_->writers(i));
                   connection_->Send1(*message_);
               }
@@ -96,29 +97,10 @@ class StorageManager {
           message_->clear_keys();
           message_->clear_values();
       }
-      else
-          ASSERT(if_to_confirm == false);
   }
 
-    inline int CanAddC(int& return_abort_bit){
-        //Stop already if is not MP txn
-		if (ReadOnly())
-			return ADDED;
-		else{
-			return_abort_bit = abort_bit_;
-			if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting){
-				if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
-					return ADDED;
-				else
-					return CAN_ADD;
-			}
-			else
-				return CAN_NOT_ADD;
-		}
-    }
-
-
-    bool SendSC(MessageProto* msg);
+ 	void AddCA(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_la);
+ 	void AddCA(int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_la);
     void SetupTxn(TxnProto* txn);
 
   //Value* ReadObject(const Key& key);
@@ -160,7 +142,7 @@ class StorageManager {
   	  return NO_NEED;  // The key will be locked by another partition.
   }
 
-  int HandleReadResult(const MessageProto& message);
+  int HandleReadResult(const MessageProto& message, int sc_array_size, MyFour<int64, int64, int64, StorageManager*>* sc_txn_list, atomic<char>** remote_la_list, priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour>& pending_la);
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
@@ -179,7 +161,7 @@ class StorageManager {
   }
 
   // Can commit, if the transaction is read-only or has spec-committed.
-  inline int CanSCToCommit() {
+  inline int CanSCToCommit(atomic<char>* remote_las) {
 		  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
 	  if (ReadOnly())
 		  return SUCCESS;
@@ -187,7 +169,7 @@ class StorageManager {
 		  if(num_aborted_ != abort_bit_ or !spec_committed_)
 			  return ABORT;
           // Don't remove the compare in the last part: this is added for concurrency issue
-		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting and num_aborted_ == abort_bit_){
+		  else if((txn_->multipartition() == false or GotMatchingPCs(remote_las)) and !aborting and num_aborted_ == abort_bit_){
 		      //LOG(txn_->txn_id(), " can commit"); 
 			  return SUCCESS;
           }
@@ -196,38 +178,41 @@ class StorageManager {
 	  }
   }
 
-  void AddPendingSC();
+  //void AddPendingSC();
 
-  inline bool GotMatchingPCs(){
-	  //LOG(txn_->txn_id(), " checking matching pcs");
-	  if (pending_sc.size())
-		  AddPendingSC();
+  inline bool GotMatchingPCs(atomic<char>* remote_las){
+	  int la_idx = 0;
       for (int i = 0; i < txn_->writers_size(); ++i){
-          if((ca_list[i] and ca_list[i] != recv_lan[i]) or sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
-          //if(sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
-			  if (output_count <20){
-				  LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_an[i].second<<", ca list value is "<<ca_list[i]<<", recv_lan:"<<recv_lan[i]);
-				  ++output_count;
+		  if(la_idx == writer_id)
+			  continue;
+		  else{
+			  if(remote_las[la_idx] != recv_lan[i].second){
+	  			  LOG(txn_->txn_id(), " received la is "<<(int)remote_las[la_idx]<<", recv_lan is "<<recv_lan[i].second);
+				  return false;
 			  }
-              return false;
-          }
+			  ++la_idx;
+		  } 
       }
-	  /*
 	  string res = "";
+	  la_idx = 0;
       for (int i = 0; i < txn_->writers_size(); ++i){
-		  res += IntToString(sc_list[i]);
-		  res += IntToString(recv_an[i].second);
+		  if(i == writer_id)
+			 res += 'x';
+		  else
+		  	 res += IntToString(remote_las[la_idx++]);
 	  }
-	  LOG(txn_->txn_id(), " to comm:"<<res);
-	  */
+	  res+=";";
+      for (int i = 0; i < txn_->writers_size(); ++i)
+		  res += IntToString(recv_lan[i].second);
+	  LOG(txn_->txn_id(), " to comm:"<<res<<", writer id "<<writer_id);
       return true;
   }
 
-  inline int CanCommit() {
+  inline int CanCommit(atomic<char>* remote_las) {
 	  if (num_aborted_ != abort_bit_)
 		  return ABORT;
       // Don't remove the compare in the last part: this is added for concurrency issue
-	  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and num_aborted_ == abort_bit_)
+	  else if((txn_->multipartition() == false or GotMatchingPCs(remote_las)) and num_aborted_ == abort_bit_)
 		  return SUCCESS;
 	  else{
 		  LOG(txn_->txn_id(), " not confirmed, uc read is "<<num_unconfirmed_read);
@@ -286,48 +271,8 @@ class StorageManager {
 
   void Abort();
   bool ApplyChange(bool is_committing);
-  void AddSC(MessageProto& msg, int& i);
-  void inline AddCA(int partition, int anum, int64 remote_id) {
-	  if(remote_id == txn_->txn_id()){
-		  for(int i = 0; i < txn_->writers_size(); ++i){
-			  if (partition == recv_an[i].first){
-		  		  LOG(txn_->txn_id(), " adding pca:"<<partition<<", an:"<<anum<<", recv_lan is "<<recv_lan[i]);
-			      if (anum > ca_list[i])
-				  	  ca_list[i] = anum;
-				  break;
-			  }
-		  }
-	  }
-  } 
 
-  inline void AddReadConfirm(int node_id, int num_aborted){
-      LOG(txn_->txn_id(), " adding RC from:"<<node_id<<", left "<<num_unconfirmed_read<<", na is "<<num_aborted);
-	  for(uint i = 0; i<recv_an.size(); ++i){
-		  if(recv_an[i].first == node_id){
-			  added_pc_size = max(added_pc_size, (int)i+1);
-			  if(added_pc_size == writer_id)
-				  added_pc_size = writer_id+1;
-			  if(recv_an[i].second == num_aborted || num_aborted == 0) {
-                  sc_list[i] = num_aborted;
-				  --num_unconfirmed_read;
-                  if (i < (uint)writer_id){
-					  if(prev_unconfirmed)
-                      	  --prev_unconfirmed;
-                      LOG(txn_->txn_id(), " new prev_unconfirmed is "<<prev_unconfirmed);
-                  }
-				  LOG(txn_->txn_id(), "done confirming read for "<<i<<" from node "<<node_id<<", remaining is "<<num_unconfirmed_read<<", prev unconfirmed is "<<prev_unconfirmed);
-                  //AddPendingSC();
-			  }
-			  else{
-                  sc_list[i] = num_aborted;
-				  LOG(txn_->txn_id(), " buffer read confirm:"<<node_id<<", local is "<<recv_an[i].second
-						  <<", got is "<<num_aborted);
-			  }
-			  break;
-		  }
-	  }
-  }
-	void inline spec_commit() {spec_committed_ = true; }
+  void inline spec_commit() {spec_committed_ = true; }
 
  private:
 
@@ -378,12 +323,10 @@ class StorageManager {
 
  public:
   // Indicate whether the message contains any value that should be sent
-  vector<pair<int, int>> recv_an;
+  vector<pair<int, int>> recv_lan;
   vector<int64_t>* aborted_txs;
-  int* recv_lan;
-  int* sc_list;
-  int* ca_list;
-  vector<vector<int>> pending_sc;
+  //int* sc_list;
+  //int* ca_list;
   bool is_suspended_;
   bool spec_committed_;
   int last_add_pc = -1;
@@ -393,13 +336,15 @@ class StorageManager {
   atomic<int32> abort_bit_;
   int num_aborted_;
   atomic<int32> local_aborted_;
-  pthread_mutex_t lock;
+  int global_aborted_ = 0;
+  //pthread_mutex_t lock;
+  vector<MyTuple<int64, int, int>> buffered_cas;
 
   Key suspended_key;
   int output_count = 0;
 
   /****** For statistics ********/
-  std::atomic<bool> has_confirmed = ATOMIC_FLAG_INIT;
+  bool send_before_abort = false;
   bool in_list = false;
 };
 

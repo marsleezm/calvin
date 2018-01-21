@@ -227,8 +227,9 @@ void Sequencer::RunWriter() {
       if (txn_id_offset < max_batch_size) {
         TxnProto* txn;
         int64 involved_nodes = 0;
-        client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime(), involved_nodes);
+        client_->GetTxn(&txn, txn_id_offset++, GetUTime(), involved_nodes);
 		txn->set_involved_nodes(involved_nodes);
+		txn->set_batch_number(batch_number);
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
@@ -238,10 +239,10 @@ void Sequencer::RunWriter() {
            txn_map[-1].push_back(txn);
        else
 		   txn_map[involved_nodes].push_back(txn);
-        txn_id_offset++;
       }
     }
 
+	txn_id_offset = 0;
 	set<int> prev_node_set, after_node_set;
 	for(const auto inv: txn_map){
 		if(inv.first&prev_node)
@@ -253,6 +254,7 @@ void Sequencer::RunWriter() {
 	for(const auto prev_node: prev_node_set){
        for(auto txn: txn_map[prev_node]) {
 		   //LOG(batch_number, " adding "<<txn->txn_id()<<" for "<<prev_node<<", multi "<<txn->multipartition());
+		   txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
            txn->SerializeToString(&txn_string);
            batch.add_data(txn_string);
            delete txn;
@@ -263,6 +265,7 @@ void Sequencer::RunWriter() {
        if(prev_node_set.count(it->first) == 0 and after_node_set.count(it->first) == 0){
           for(auto txn: it->second) {
 		   	   //LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<it->first<<", multi "<<txn->multipartition());
+			   txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
                txn->SerializeToString(&txn_string);
                batch.add_data(txn_string);
                delete txn;
@@ -278,6 +281,7 @@ void Sequencer::RunWriter() {
 	while (it != after_node_set.rend()) {
        	for(auto txn: txn_map[*it]) {
 		   	//LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<after_node<<", multi "<<txn->multipartition());
+		    txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
           	txn->SerializeToString(&txn_string);
            	batch.add_data(txn_string);
            	delete txn;
@@ -537,10 +541,6 @@ void* Sequencer::FetchMessage(int64 last_involved_nodes) {
 			  TxnProto* txn = new TxnProto();
 			  txn->ParseFromString(batch_message->data(i));
 			  txn->set_local_txn_id(fetched_txn_num_++);
-		      if(txn->involved_nodes() and txn->involved_nodes() != last_involved_nodes){
-				  last_involved_nodes = txn->involved_nodes();
-			  	  txn->set_involved_nodes(-1);
-			  }
 			  txns_queue_->Push(txn);
 			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
 			  ++num_fetched_this_round;

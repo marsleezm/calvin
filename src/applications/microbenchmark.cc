@@ -29,23 +29,6 @@ void Microbenchmark::AccumulateRandomKeys(set<int>* keys, int num_keys, int key_
   }
 }
 
-// Fills '*keys' with num_keys unique ints k where
-// 'key_start' <= k < 'key_limit', and k == part (mod nparts).
-// Requires: key_start % nparts == 0
-void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
-                                   int key_limit, int part) const {
-  assert(key_start % nparts == 0);
-  keys->clear();
-  for (int i = 0; i < num_keys; i++) {
-    // Find a key not already in '*keys'.
-    int key;
-    do {
-      key = RandomLocalKey(key_start, key_limit, part);
-    } while (keys->count(key));
-    keys->insert(key);
-  }
-}
-
 void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                                    int key_limit, int part, Rand* rand) const {
   ASSERT(key_start % nparts == 0);
@@ -184,23 +167,45 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		case MICROTXN_MP:
 		{
 			set<int> myownkeys;
+			int remain_index = indexAccessNum;
 			int avg_key_per_part = kRWSetSize/txn->readers_size(),
 				key_first_part = kRWSetSize- avg_key_per_part*(txn->readers_size()-1);
 
+			// TODO: remember to change back before MP test!
 			for(int i = 0; i<txn->readers_size(); ++i){
+				int key_to_get = 0;
+				set<int>* k;
 				if(txn->readers(i) != this_node_id){
-					AccumulateRandomKeys(&keys,
-						  avg_key_per_part,
-						  nparts * index_records,
-						  nparts * kDBSize,
-						  txn->readers(i), rand);
+					key_to_get = avg_key_per_part;
+					k = &keys;
 				}
-				else
-					AccumulateRandomKeys(&myownkeys,
-						key_first_part,
-						nparts * index_records,
-						nparts * kDBSize,
-						this_node_id, rand);
+				else{
+					key_to_get = key_first_part;
+					k = &myownkeys;
+				}
+				
+				if(remain_index >= key_to_get){
+					AccumulateRandomKeys(k,
+						  key_to_get,
+						  0,
+						  nparts * index_records,
+						  txn->readers(i), rand);
+					remain_index -= avg_key_per_part;
+				}
+				else{
+					AccumulateRandomKeys(k,
+					  remain_index,
+					  0,
+					  nparts * index_records,
+					  txn->readers(i), rand);
+
+					AccumulateRandomKeys(k,
+					  key_to_get-remain_index,
+					  nparts * index_records,
+					  nparts * kDBSize,
+					  txn->readers(i), rand);
+					remain_index = 0;
+				}
 			}
 			for (set<int>::iterator it = myownkeys.begin(); it != myownkeys.end(); ++it){
 				//LOG(txn->txn_id(), " adding "<<*it<<", node id is "<<this_node_id);

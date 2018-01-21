@@ -62,6 +62,7 @@ using tr1::unordered_map;
 #define SUSPEND_NOT_SEND 5
 #define NOT_CONFIRMED 6
 #define DO_NOTHING 7
+#define IGNORE 8
 
 #define IS_COPY 2
 #define NOT_COPY 4
@@ -416,13 +417,8 @@ class TxnQueue {
     Lock l(&front_mutex_);
     if (front_ != back_) {
       *result = queue_[front_];
-	  if((*result)->involved_nodes() == -1 and (*result)->local_txn_id() != num_lc_txns){
-		  return false;
-	  } 
-	  else{
-		  front_ = (front_ + 1) % size_;
-		  return true;
-	  }
+	  front_ = (front_ + 1) % size_;
+	  return true;
     }
     return false;
   }
@@ -971,7 +967,7 @@ public:
 class CompareFour 
 {
 public:
-    bool operator() (MyFour<int64_t, int64_t, int, int> left, MyFour<int64_t, int64_t, int, int> right)
+    bool operator() (MyFour<int64_t, int, int, int> left, MyFour<int64_t, int, int, int> right)
     {
     	return (left.first > right.first);
     }

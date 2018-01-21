@@ -29,6 +29,7 @@ class Microbenchmark : public Application {
   Microbenchmark(int nodecount, int node_id) {
     nparts = nodecount;
     this_node_id = node_id;
+	assert(indexAccessNum == 5);
   }
 
   virtual ~Microbenchmark() {}

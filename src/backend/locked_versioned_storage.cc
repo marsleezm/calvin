@@ -93,7 +93,7 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 					DirtyGC(list, max_ts-GC_THRESHOLD, entry);
 					value_pair.assign_first(NOT_COPY);
 					value_pair.second = list->value;
-					//LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
+					LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", NO COPY"); 
 				}
 				else{
 					int size = entry->read_from_list->size();
@@ -101,12 +101,14 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, atomi
 						(*entry->read_from_list)[size-1].num_aborted_ = num_aborted;
 						(*entry->read_from_list)[size-1].read_from_id_ = list->txn_id;
 					}
-					else
+					else{
+						//ASSERT(txn_id > list->txn_id);
 						entry->read_from_list->push_back(ReadFromEntry(txn_id, list->txn_id, abort_bit, local_aborted, num_aborted, abort_queue));
+					}
 
 					value_pair.assign_first(IS_COPY);
 					value_pair.second = new Value(*list->value);
-					//LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", IS COPY addr is "<<reinterpret_cast<int64>(value_pair.second));
+					LOG(txn_id, " reading ["<<key<<"] from"<<list->txn_id<<", IS COPY"); 
 				}
 				break;
 			}
@@ -228,7 +230,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 				LOG(txn_id, " add "<<entry->lock.tx_id_<<" to abort queue, key is "<<key);
 				entry->lock.abort_queue_->Push(make_pair(entry->lock.tx_id_, entry->lock.num_aborted_+1));
 				++(*entry->lock.local_aborted_);
-                if (aborted_txs)
+                if (aborted_txs and entry->lock.tx_id_ > txn_id)
                     aborted_txs->push_back(entry->lock.tx_id_);
 			}
 			//LOG(txn_id, " stole lock from aboted tx "<<entry->lock.tx_id_<<" my abort num is "<<num_aborted<<" for "<<key);
@@ -255,7 +257,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 					LOG(txn_id, " add "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
 					it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 					++(*it->local_aborted_);
-                    if (aborted_txs)
+                	if (aborted_txs and it->my_tx_id_ > txn_id)
                         aborted_txs->push_back(it->my_tx_id_);
 				}
 				it = read_from_list->erase(it);
@@ -287,8 +289,10 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 						(*entry->read_from_list)[size-1].num_aborted_ = num_aborted;
 						(*entry->read_from_list)[size-1].read_from_id_ = list->txn_id;
 					}
-					else
+					else{
+						//ASSERT(txn_id > list->txn_id);
 						entry->read_from_list->push_back(ReadFromEntry(txn_id, list->txn_id, abort_bit, local_aborted, num_aborted, abort_queue));
+					}
 
 					ASSERT(list->txn_id != txn_id);
 					value_pair.first = WRITE;
@@ -359,7 +363,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 					LOG(txn_id, " add "<<entry->lock.tx_id_<<" to abort queue, key is "<<key);
 					entry->lock.abort_queue_->Push(make_pair(entry->lock.tx_id_, entry->lock.num_aborted_+1));
 					++(*entry->lock.local_aborted_);
-                    if (aborted_txs)
+                	if (aborted_txs and entry->lock.tx_id_ > txn_id)
                         aborted_txs->push_back(entry->lock.tx_id_);
 				}
 				LOG(txn_id, " stole lock from aboted tx "<<entry->lock.tx_id_<<" my abort num is "<<num_aborted<<" for "<<key);
@@ -386,7 +390,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, atomic<i
 						LOG(txn_id, " add "<<it->my_tx_id_<< " to abort queue! New abort bit is "<<it->num_aborted_+1);
 						it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 						++it->local_aborted_;
-                        if (aborted_txs)
+                        if (aborted_txs and it->my_tx_id_ > txn_id)
                             aborted_txs->push_back(it->my_tx_id_);
 					}
 					it = read_from_list->erase(it);
@@ -500,6 +504,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 							//LOG(txn_id, "Adding ["<<it->my_tx_id_<<","<< it->num_aborted_<<"] to waiting queue by "<<txn_id);
 							ValuePair vp;
 							if(!is_committing){
+								//ASSERT(it->my_tx_id_ > txn_id);
 								entry->read_from_list->push_back(ReadFromEntry(it->my_tx_id_, txn_id,
 										it->abort_bit_, it->local_aborted_, it->num_aborted_, it->abort_queue_));
 								Value* v= new Value(*value);
@@ -524,9 +529,11 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 			// Give lock to this guy: set the lock as his entry and set its value bit.
 			if (oldest_tx_id != INT_MAX){
 				ASSERT(oldest_tx_id == oldest_tx->my_tx_id_);
-				if(!is_committing)
+				if(!is_committing){
+					//ASSERT(oldest_tx->my_tx_id_ > txn_id);
 					entry->read_from_list->push_back(ReadFromEntry(oldest_tx->my_tx_id_, txn_id,
 							oldest_tx->abort_bit_, oldest_tx->local_aborted_, oldest_tx->num_aborted_, oldest_tx->abort_queue_));
+				}
 				ValuePair vp;
 				vp.first = WRITE;
 				vp.second = new Value(*value);
@@ -610,6 +617,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 							else{
 								//LOG(txn_id, " aborted, but adding ["<<it->my_tx_id_<<","<< it->num_aborted_<<"] to waiting queue by "<<txn_id);
 								ValuePair vp;
+								//ASSERT(it->my_tx_id_ > read_from_txn);
 								entry->read_from_list->push_back(ReadFromEntry(it->my_tx_id_, read_from_txn,
 										it->abort_bit_, it->local_aborted_, it->num_aborted_, it->abort_queue_));
 								Value* v= new Value(*value);
@@ -628,6 +636,7 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 				// Give lock to this guy: set the lock as his entry and set its value bit.
 				if (oldest_tx_id != INT_MAX){
 					ASSERT(oldest_tx_id == oldest_tx->my_tx_id_);
+					//ASSERT(oldest_tx->my_tx_id_ > read_from_txn);
 					entry->read_from_list->push_back(ReadFromEntry(oldest_tx->my_tx_id_, read_from_txn,
 							oldest_tx->abort_bit_, oldest_tx->local_aborted_, oldest_tx->num_aborted_, oldest_tx->abort_queue_));
 					ValuePair vp;
@@ -699,10 +708,10 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 	    								&it->num_aborted_, it->num_aborted_+1);
 			//If the transaction has actually been aborted by me.
 			if (result){
-				LOG(txn_id, " add "<<it->my_tx_id_<<" to abort queue by, new abort bit is "<<it->num_aborted_+1);
+				LOG(txn_id, " add "<<it->my_tx_id_<<" to abort queue by, new abort bit is "<<it->num_aborted_+1<<", key "<<key);
 				it->abort_queue_->Push(make_pair(it->my_tx_id_, it->num_aborted_+1));
 				++(*it->local_aborted_);
-                if (aborted_txs)
+				if (aborted_txs and it->my_tx_id_ > txn_id)
                     aborted_txs->push_back(it->my_tx_id_);
 			}
 			it = read_from_list->erase(it);

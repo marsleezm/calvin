@@ -64,12 +64,12 @@ class DeterministicScheduler : public Scheduler {
 		  LockedVersionedStorage* storage, TxnQueue* txns_queue,
 						 Client* client, const Application* application, int queue_mode);
   virtual ~DeterministicScheduler();
-  bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local, int64 base);
+  //bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local, int64 base);
   void static terminate() { terminated_ = true; }
 
  public:
   static int64_t num_lc_txns_;
-  static int64_t can_gc_txns_;
+  //static int64_t can_gc_txns_;
   static atomic<int64_t> latest_started_tx;
 
  protected:
@@ -133,6 +133,7 @@ class DeterministicScheduler : public Scheduler {
   // Transactions that can only resume execution after all its previous txns have been local-committed
 
   AtomicQueue<MessageProto>** message_queues;
+  static AtomicQueue<MyTuple<int64, int, int>> la_queue;
 
   double* block_time;
   int* sc_block;
@@ -142,10 +143,13 @@ class DeterministicScheduler : public Scheduler {
   int multi_parts;
   int max_sc;
   int sc_array_size;
-  static priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
+  //static priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
 
   pair<int64, int64>** latency;
-  MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;
+  static MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;
+  static int64* involved_nodes;
+  static atomic<char>** remote_la_list;
+  static int64 active_batch_num;
   pthread_mutex_t commit_tx_mutex;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_
