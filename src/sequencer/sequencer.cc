@@ -79,7 +79,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	pthread_mutex_init(&mutex_, NULL);
 	// Start Sequencer main loops running in background thread.
-	txns_queue_ = new AtomicQueue<TxnProto*>();
+	txns_queue_ = new TxnQueue();
 	paxos_queues = new AtomicQueue<string>();
 
 	for(int i = 0; i < THROUGHPUT_SIZE; ++i){

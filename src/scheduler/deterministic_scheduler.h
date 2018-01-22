@@ -61,7 +61,7 @@ class DeterministicScheduler : public Scheduler {
 	friend Sequencer;
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-		  LockedVersionedStorage* storage, AtomicQueue<TxnProto*>* txns_queue,
+		  LockedVersionedStorage* storage, TxnQueue* txns_queue,
 						 Client* client, const Application* application, int queue_mode);
   virtual ~DeterministicScheduler();
   bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local, int64 base);
@@ -109,7 +109,7 @@ class DeterministicScheduler : public Scheduler {
   // Storage layer used in application execution.
   LockedVersionedStorage* storage_;
   
-  AtomicQueue<TxnProto*>* txns_queue_;
+  TxnQueue* txns_queue_;
 
   Client* client_;
 

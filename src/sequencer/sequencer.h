@@ -71,7 +71,7 @@ class Sequencer {
   void output();
 
   // Get the transaction queue
-  inline AtomicQueue<TxnProto*>* GetTxnsQueue(){
+  inline TxnQueue* GetTxnsQueue(){
 	  return txns_queue_;
   }
 
@@ -166,7 +166,7 @@ class Sequencer {
   unordered_map<int, MessageProto*> batches_;
 
   // The queue of fetched transactions
-  AtomicQueue<TxnProto*>* txns_queue_;
+  TxnQueue* txns_queue_;
   AtomicQueue<string>* paxos_queues;
 
   int num_queues_;

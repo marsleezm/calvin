@@ -22,6 +22,7 @@
 
 #include "common/types.h"
 #include "common/logging.h"
+#include "proto/txn.pb.h"
 
 //using std::string;
 //using std::vector;
@@ -365,6 +366,102 @@ class FixedList {
   T* data_;
   int current_;
   int end_;
+};
+
+class TxnQueue {
+ public:
+  TxnQueue() {
+    queue_.resize(256);
+    size_ = 256;
+    front_ = 0;
+    back_ = 0;
+  }
+
+  // Returns the number of elements currently in the queue.
+  inline size_t Size() {
+    Lock l(&size_mutex_);
+    return (back_ + size_ - front_) % size_;
+  }
+
+  // Returns true iff the queue is empty.
+  inline bool Empty() {
+    return front_ == back_;
+  }
+
+  // Atomically pushes 'item' onto the queue.
+  inline void Push(TxnProto*& item) {
+    Lock l(&back_mutex_);
+    // Check if the buffer has filled up. Acquire all locks and resize if so.
+    if (front_ == (back_+1) % size_) {
+      Lock m(&front_mutex_);
+      Lock n(&size_mutex_);
+      uint32 count = (back_ + size_ - front_) % size_;
+      queue_.resize(size_ * 2);
+      for (uint32 i = 0; i < count; i++) {
+        queue_[size_+i] = queue_[(front_ + i) % size_];
+      }
+      front_ = size_;
+      back_ = size_ + count;
+      size_ *= 2;
+    }
+    // Push item to back of queue.
+    queue_[back_] = item;
+    back_ = (back_ + 1) % size_;
+  }
+
+  // If the queue is non-empty, (atomically) sets '*result' equal to the front
+  // element, pops the front element from the queue, and returns true,
+  // otherwise returns false.
+  inline bool Pop(TxnProto** result, int64 num_lc_txns) {
+    Lock l(&front_mutex_);
+    if (front_ != back_) {
+      *result = queue_[front_];
+	  front_ = (front_ + 1) % size_;
+	  return true;
+    }
+    return false;
+  }
+
+  inline bool Pop(TxnProto** result) {
+    Lock l(&front_mutex_);
+    if (front_ != back_) {
+      *result = queue_[front_];
+	  front_ = (front_ + 1) % size_;
+	  return true;
+    }
+    return false;
+  }
+
+  // Sets *result equal to the front element and returns true, unless the
+  // queue is empty, in which case does nothing and returns false.
+  inline bool Front(TxnProto** result) {
+    Lock l(&front_mutex_);
+    if (front_ != back_) {
+      *result = queue_[front_];
+      return true;
+    }
+    return false;
+  }
+
+  TxnProto* Get(int i) {
+	  Lock l(&size_mutex_);
+	  return queue_[i];
+  }
+
+ private:
+  vector<TxnProto*> queue_;  // Circular buffer containing elements.
+  uint32 size_;      // Allocated size of queue_, not number of elements.
+  uint32 front_;     // Offset of first (oldest) element.
+  uint32 back_;      // First offset following all elements.
+
+  // Mutexes for synchronization.
+  Mutex front_mutex_;
+  Mutex back_mutex_;
+  Mutex size_mutex_;
+
+  // DISALLOW_COPY_AND_ASSIGN
+  TxnQueue(const TxnQueue&);
+  TxnQueue& operator=(const TxnQueue&);
 };
 
 template<typename T>
