@@ -120,7 +120,6 @@ class TClient : public Client {
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
     TPCC tpcc;
     *txn = new TxnProto();
-    int remote_node = -1;
 
     // New order txn
     int random_txn_type = rand() % 100;
