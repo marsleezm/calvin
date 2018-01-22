@@ -183,32 +183,45 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 		break;
 		case MICROTXN_MP:
 		{
-			set<int> myownkeys;
+			int remain_index = indexAccessNum;
 			int avg_key_per_part = kRWSetSize/txn->readers_size(),
 				key_first_part = kRWSetSize- avg_key_per_part*(txn->readers_size()-1);
 
 			for(int i = 0; i<txn->readers_size(); ++i){
-				if(txn->readers(i) != this_node_id){
-					AccumulateRandomKeys(&keys,
-						  avg_key_per_part,
-						  nparts * index_records,
-						  nparts * kDBSize,
-						  txn->readers(i), rand);
-				}
+				int key_to_get = 0;
+				if(txn->readers(i) != this_node_id)
+					key_to_get = avg_key_per_part;
 				else
-					AccumulateRandomKeys(&myownkeys,
-						key_first_part,
-						nparts * index_records,
-						nparts * kDBSize,
-						this_node_id, rand);
-			}
-			for (set<int>::iterator it = myownkeys.begin(); it != myownkeys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<*it<<", node id is "<<this_node_id);
-				txn->add_read_write_set(IntToString(*it));
-			}
-			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
-				//LOG(txn->txn_id(), " adding "<<*it<<", node id is "<<this_node_id<<", read "<<txn->readers(i));
-				txn->add_read_write_set(IntToString(*it));
+					key_to_get = key_first_part;
+				
+				if(remain_index >= key_to_get){
+					GetRandomKeys(&keys,
+						  key_to_get,
+						  0,
+						  nparts * index_records,
+						  txn->readers(i), rand);
+					remain_index -= avg_key_per_part;
+					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+						txn->add_read_write_set(IntToString(*it));
+				}
+				else{
+					GetRandomKeys(&keys,
+					  remain_index,
+					  0,
+					  nparts * index_records,
+					  txn->readers(i), rand);
+					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+						txn->add_read_write_set(IntToString(*it));
+
+					GetRandomKeys(&keys,
+					  key_to_get-remain_index,
+					  nparts * index_records,
+					  nparts * kDBSize,
+					  txn->readers(i), rand);
+					remain_index = 0;
+					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+						txn->add_read_write_set(IntToString(*it));
+				}
 			}
 		}
 		break;
