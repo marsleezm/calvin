@@ -73,7 +73,7 @@ AtomicQueue<MyTuple<int64, int, int>> DeterministicScheduler::la_queue;
 atomic<char>** DeterministicScheduler::remote_la_list;
 MyFour<int64, int64, int64, StorageManager*>* DeterministicScheduler::sc_txn_list;
 int64* DeterministicScheduler::involved_nodes;
-int64 DeterministicScheduler::active_batch_num(0);
+//int64 DeterministicScheduler::active_batch_num(0);
 AtomicQueue<MyFour<int64, int, int, int>> DeterministicScheduler::pending_las;
 priority_queue<MyFour<int64_t, int, int, int>, vector<MyFour<int64_t, int, int, int>>, CompareFour> DeterministicScheduler::pending_la_pq;
 
@@ -273,8 +273,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					++num_lc_txns_;
 					tx_index = (tx_index+1)%sc_array_size; 
 					first_tx = scheduler->sc_txn_list[tx_index];
-					if(first_tx.second == num_lc_txns_)
-						active_batch_num = first_tx.fourth->txn_->batch_number();
+					//if(first_tx.second == num_lc_txns_)
+					//	active_batch_num = first_tx.fourth->txn_->batch_number();
 				}
 				else
 					break;
@@ -428,9 +428,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  if (buffered_txns.size()){
 			  txn = buffered_txns.front();
 			  //LOG(txn->txn_id(), " checking if can exec txn, local "<<txn->local_txn_id());
-			  int first_idx = num_lc_txns_%sc_array_size; 
+			  int previdx = (txn->local_txn_id()-1+sc_array_size)%sc_array_size;
 			  int64 myinvolved_nodes = txn->involved_nodes();
-			  if(txn->local_txn_id() == num_lc_txns_ or (sc_txn_list[first_idx].second == num_lc_txns_ and involved_nodes[first_idx] == myinvolved_nodes and active_batch_num >= txn->batch_number()-1)){
+			  if(txn->local_txn_id() == num_lc_txns_ or (sc_txn_list[previdx].second == num_lc_txns_ and involved_nodes[previdx] == myinvolved_nodes)){
 				  buffered_txns.pop();
 			  }
 			  else
@@ -441,15 +441,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  if(txn and latest_started_tx < txn->local_txn_id())
 			  	  latest_started_tx = txn->local_txn_id();
 			  if(txn and txn->multipartition() == true and txn->local_txn_id() != num_lc_txns_){
-				  int first_idx = num_lc_txns_%sc_array_size;
+				  int previdx = (txn->local_txn_id()-1+sc_array_size)%sc_array_size;
 				  int64 myinvolved_nodes = txn->involved_nodes();
-				  if(!(sc_txn_list[first_idx].second == num_lc_txns_ and involved_nodes[first_idx] == myinvolved_nodes and active_batch_num >= txn->batch_number()-1)){
+				  if(!(sc_txn_list[previdx].second == num_lc_txns_ and involved_nodes[previdx] == myinvolved_nodes)){
 					  buffered_txns.push(txn);
 					  LOG(txn->txn_id(), " pushed into buffer txn ");
 					  txn = NULL;
 				  }
 				  else{
-					  LOG(txn->txn_id(), " starting txn, first is "<<num_lc_txns_<<", its batch is "<<active_batch_num<<", involved_nodes is "<<involved_nodes[first_idx]);
+					  LOG(txn->txn_id(), " starting txn, first is "<<num_lc_txns_<<", its batch is "<<txn->batch_number()<<", involved_nodes is "<<involved_nodes[previdx]);
 				  }
 			  }
 		  }
@@ -609,8 +609,8 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 					  	for(int i = 0; i < multi_parts-1; ++i)
 						  	remote_la_list[num_lc_txns_%sc_array_size][i] = 0;
 					++num_lc_txns_;
-					if(sc_txn_list[num_lc_txns_%sc_array_size].second == num_lc_txns_)
-						active_batch_num = sc_txn_list[num_lc_txns_%sc_array_size].fourth->txn_->batch_number();
+					//if(sc_txn_list[num_lc_txns_%sc_array_size].second == num_lc_txns_)
+					//	active_batch_num = sc_txn_list[num_lc_txns_%sc_array_size].fourth->txn_->batch_number();
 					if(txn->writers_size() == 0 || txn->writers(0) == configuration_->this_node_id){
 						++Sequencer::num_committed;
 					}

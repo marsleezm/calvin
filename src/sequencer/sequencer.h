@@ -54,7 +54,8 @@ extern double scheduler_unlock[SAMPLES];
 class Client {
  public:
   virtual ~Client() {}
-  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed, int64& involved_nodes) = 0;
+  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
+  virtual void SetRemote(int64& involved_nodes) = 0;
   //virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
 };
 

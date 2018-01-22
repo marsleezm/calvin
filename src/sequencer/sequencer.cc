@@ -221,24 +221,28 @@ void Sequencer::RunWriter() {
     unordered_map<int64, vector<TxnProto*>> txn_map;
     int txn_id_offset = 0;
     string txn_string;
+	int64 involved_nodes = 0;
+	client_->SetRemote(involved_nodes);
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
       if (txn_id_offset < max_batch_size) {
         TxnProto* txn;
-        int64 involved_nodes = 0;
-        client_->GetTxn(&txn, txn_id_offset++, GetUTime(), involved_nodes);
-		txn->set_involved_nodes(involved_nodes);
+        client_->GetTxn(&txn, txn_id_offset++, GetUTime());
 		txn->set_batch_number(batch_number);
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
         }
 
-       if (involved_nodes == 0)
+       if (txn->multipartition() == false){
+			txn->set_involved_nodes(0);
            txn_map[-1].push_back(txn);
-       else
+	   }
+       else{
+			txn->set_involved_nodes(involved_nodes);
 		   txn_map[involved_nodes].push_back(txn);
+	   }
       }
     }
 
