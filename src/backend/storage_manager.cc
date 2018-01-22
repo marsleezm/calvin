@@ -35,7 +35,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
 	tpcc_args = new TPCCArgs();
 	tpcc_args ->ParseFromString(txn->arg());
-	batch_number = txn->batch_number();
+	//batch_number = txn->batch_number();
 	if (txn->multipartition()){
 		message_ = new MessageProto();
 		message_->set_source_channel(txn->txn_id());
@@ -63,10 +63,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
             sc_list[i] = -1;
             ca_list[i] = 0;
         }
-		if (txn->txn_type() == Microbenchmark::MICROTXN_MP)
-        	prev_unconfirmed = 0;
-		else
-        	prev_unconfirmed = writer_id;
+		prev_unconfirmed = writer_id;
         if(writer_id == 0)
             added_pc_size = 1;
         recv_an[writer_id].second = abort_bit_;
@@ -139,7 +136,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn->multipartition());
 
 	txn_ = txn;
-	batch_number = txn->batch_number();
+	//batch_number = txn->batch_number();
 	message_ = new MessageProto();
 	message_->set_source_channel(txn->txn_id());
 	message_->set_source_node(configuration_->this_node_id);
@@ -161,10 +158,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
     if(writer_id == 0)
         added_pc_size = 1;
     aborted_txs = new vector<int64_t>();
-	if (txn->txn_type() == Microbenchmark::MICROTXN_MP)
-		prev_unconfirmed = 0;
-	else
-		prev_unconfirmed = writer_id;
+	prev_unconfirmed = writer_id;
     sc_list = new int[txn_->readers_size()];
     ca_list = new int[txn_->readers_size()];
     recv_lan = new int[txn_->readers_size()];
@@ -466,7 +460,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   recv_lan[i] = message.local_aborted();
 				  // TODO: The only place that may have concurrency issue 
                   sc_list[i] = message.num_aborted();
-              	  if(i<(uint)writer_id and txn_->txn_type() != Microbenchmark::MICROTXN_MP)
+              	  if(i<(uint)writer_id)
                   	  --prev_unconfirmed;
 				  if(is_suspended_ == false)
 					  return SUCCESS;
@@ -478,8 +472,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   if ( i < (uint)writer_id){
 					  abort_bit_ += 1;
                       aborting = true;
-					  if(txn_->txn_type() != Microbenchmark::MICROTXN_MP)
-                  	  	  --prev_unconfirmed;
+					  --prev_unconfirmed;
                   }
                   recv_an[i].second = message.num_aborted();
                   recv_lan[i] = message.local_aborted();
@@ -511,14 +504,14 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 				  //Deal with pending confirm
                   LOG(StringToInt(message.destination_channel()), i<<" set "<<recv_an[i].second<<" num aborted to "<<message.num_aborted()<<", is suspended is "<<is_suspended_<<", lan:"<<message.local_aborted());
                   int prev_recv = recv_an[i].second;
-				  if(txn_->txn_type() != Microbenchmark::MICROTXN_MP and prev_recv != -1 and i < writer_id) {
+				  if(prev_recv != -1 and i < writer_id) {
 					  abort_bit_ += 1;
 					  LOG(txn_->txn_id(), " aborting"); 
 					  aborting = true;
 				  }
                   recv_an[i].second = message.num_aborted();
                   recv_lan[i] = message.local_aborted();
-				  if(txn_->txn_type() == Microbenchmark::MICROTXN_MP or prev_recv == -1){
+				  if(prev_recv == -1){
 					  if(is_suspended_ == false)  return SUCCESS;
 					  else return DO_NOTHING;
 				  }

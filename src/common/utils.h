@@ -412,7 +412,7 @@ class TxnQueue {
   // If the queue is non-empty, (atomically) sets '*result' equal to the front
   // element, pops the front element from the queue, and returns true,
   // otherwise returns false.
-  inline bool Pop(TxnProto** result, int64 num_lc_txns) {
+  inline bool Pop(TxnProto** result) {
     Lock l(&front_mutex_);
     if (front_ != back_) {
       *result = queue_[front_];
@@ -422,12 +422,31 @@ class TxnQueue {
     return false;
   }
 
-  inline bool Pop(TxnProto** result) {
+  inline bool Pop(TxnProto** result, int64 num_lc_txns) {
     Lock l(&front_mutex_);
-    if (front_ != back_) {
+    if (front_ != back_) { 
       *result = queue_[front_];
-	  front_ = (front_ + 1) % size_;
-	  return true;
+	  if((*result)->involved_nodes() == involved_nodes){
+		  last_txn = (*result)->local_txn_id();
+		  front_ = (front_ + 1) % size_;
+		  return true;
+	  }
+	  else if ((*result)->involved_nodes() == 0){
+		  front_ = (front_ + 1) % size_;
+		  return true;
+	  }
+	  else{
+		  if(num_lc_txns > last_txn or last_txn == -1){
+			  involved_nodes = (*result)->involved_nodes();
+			  last_txn = (*result)->local_txn_id();
+			  front_ = (front_ + 1) % size_;
+			  return true;
+		  }
+		  else{
+			  //LOG((*result)->local_txn_id(), " not given, "<<", local involved is "<<involved_nodes<<", its "<<(*result)->involved_nodes()<<", last txn "<<last_txn<<", num_lc "<<num_lc_txns);
+			  return false;
+		  }
+	  }
     }
     return false;
   }
@@ -453,6 +472,9 @@ class TxnQueue {
   uint32 size_;      // Allocated size of queue_, not number of elements.
   uint32 front_;     // Offset of first (oldest) element.
   uint32 back_;      // First offset following all elements.
+
+  int64 involved_nodes = 0;
+  int64 last_txn = -1;
 
   // Mutexes for synchronization.
   Mutex front_mutex_;

@@ -295,7 +295,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		    // Try to commit txns one by one
             int tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
 		    MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
-            int involved_nodes = first_tx.fourth->involved_nodes, batch_number = first_tx.fourth->batch_number;
+            int involved_nodes = 0;
             MessageProto* msg_to_send = NULL;
             StorageManager* mgr, *first_mgr=NULL;
 
@@ -311,14 +311,14 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						did_something = true;
 						if(result == CAN_ADD){
 							LOG(first_tx.first, " OK, gid:"<<first_tx.third);
-							if (involved_nodes == 0 or (involved_nodes == first_tx.fourth->involved_nodes and first_tx.fourth->batch_number-batch_number==0)){
+							if (involved_nodes == 0 or (involved_nodes == first_tx.fourth->involved_nodes)){// and first_tx.fourth->batch_number-batch_number==0)){
 								INIT_MSG(msg_to_send, this_node);
 								if (mgr->TryAddSC(msg_to_send, record_abort_bit, num_lc_txns_)){ 
                                     LOG(first_tx.first, " added confirm, aborted_tx size is "<<mgr->aborted_txs->size());
                                     if(first_mgr == NULL)
                                         first_mgr = mgr;
 								    involved_nodes = first_tx.fourth->involved_nodes;
-									batch_number = first_tx.fourth->txn_->batch_number(); 
+									//batch_number = first_tx.fourth->txn_->batch_number(); 
                                     if (mgr->aborted_txs and mgr->aborted_txs->size()){
                                         for(uint i = 0; i < mgr->aborted_txs->size(); ++i){
                                             MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= scheduler->sc_txn_list[mgr->aborted_txs->at(i)%sc_array_size];
@@ -505,12 +505,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  }
 	  // Try to start a new transaction
 	  else if (latest_started_tx - num_lc_txns_ < max_sc){ // && scheduler->num_suspend[thread]<=max_suspend) {
-		  //LOG(-1, " lastest is "<<latest_started_tx<<", num_lc_txns_ is "<<num_lc_txns_<<", diff is "<<latest_started_tx-num_lc_txns_);
+		  //LOG(-1, " trying to get, lastest is "<<latest_started_tx<<", num_lc_txns_ is "<<num_lc_txns_<<", diff is "<<latest_started_tx-num_lc_txns_);
 		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
-		  got_it = scheduler->txns_queue_->Pop(&txn);
+		  got_it = scheduler->txns_queue_->Pop(&txn, num_lc_txns_);
 		  //std::cout<<std::this_thread::get_id()<<"My num suspend is "<<scheduler->num_suspend[thread]<<", my to sc txns are "<<my_to_sc_txns->size()<<"YES Starting new txn!!"<<std::endl;
 		  //LOCKLOG(txn->txn_id(), " before starting txn ");
 

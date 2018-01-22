@@ -233,23 +233,28 @@ void Sequencer::RunWriter() {
     unordered_map<int64, vector<TxnProto*>> txn_map;
     int txn_id_offset = 0;
     string txn_string;
+	int64 involved_nodes = 0;
+	client_->SetRemote(involved_nodes);
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
       if (txn_id_offset < max_batch_size) {
         TxnProto* txn;
-        int64 involved_nodes = 0;
-        client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime(), involved_nodes);
-		txn->set_batch_number(batch_number);
+        client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime());
+		//txn->set_batch_number(batch_number);
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
         }
 
-       if (involved_nodes == 0)
-           txn_map[-1].push_back(txn);
-       else
-		   txn_map[involved_nodes].push_back(txn);
+       	if (txn->multipartition() == false){
+			txn->set_involved_nodes(0);
+           	txn_map[-1].push_back(txn);
+		}
+       	else{
+			txn->set_involved_nodes(involved_nodes);
+		   	txn_map[involved_nodes].push_back(txn);
+		}
         txn_id_offset++;
       }
     }
@@ -549,7 +554,7 @@ void* Sequencer::FetchMessage() {
 			  txn->ParseFromString(batch_message->data(i));
 			  txn->set_local_txn_id(fetched_txn_num_++);
 			  txns_queue_->Push(txn);
-			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", multi:"<<txn->multipartition());
+			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", inv:"<<txn->involved_nodes());
 			  ++num_fetched_this_round;
 		  }
 		  delete batch_message;

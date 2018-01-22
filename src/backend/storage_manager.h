@@ -73,6 +73,7 @@ class StorageManager {
   void SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size);
 
   inline void SendLocalReads(bool if_to_confirm, MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size){
+	  LOG(txn_->txn_id(), " trying to send read"); 
       if (!aborting and num_aborted_ == abort_bit_) {
           if (if_to_confirm and has_confirmed.exchange(true) == false){ 
               LOG(txn_->txn_id(), " sending confirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
@@ -203,7 +204,7 @@ class StorageManager {
 	  if (pending_sc.size())
 		  AddPendingSC();
       for (int i = 0; i < txn_->writers_size(); ++i){
-          if((ca_list[i] and ca_list[i] != recv_lan[i]) or sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
+          if((ca_list[i] and ca_list[i] > recv_lan[i]) or sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
           //if(sc_list[i] == -1 or sc_list[i] != recv_an[i].second){
 			  if (output_count <20){
 				  LOG(txn_->txn_id(), "not matching for "<<i<<", pc is "<<sc_list[i]<<", second is "<<recv_an[i].second<<", ca list value is "<<ca_list[i]<<", recv_lan:"<<recv_lan[i]);
@@ -291,7 +292,7 @@ class StorageManager {
 	  if(remote_id == txn_->txn_id()){
 		  for(int i = 0; i < txn_->writers_size(); ++i){
 			  if (partition == recv_an[i].first){
-		  		  LOG(txn_->txn_id(), " adding pca:"<<partition<<", an:"<<anum<<", recv_lan is "<<recv_lan[i]);
+		  		  LOG(txn_->txn_id(), " adding pca:"<<partition<<", an:"<<anum<<", recv_lan is "<<recv_lan[i]<<", local ca:"<<ca_list[i]);
 			      if (anum > ca_list[i])
 				  	  ca_list[i] = anum;
 				  break;
@@ -389,7 +390,7 @@ class StorageManager {
   int last_add_pc = -1;
   int writer_id;
   int involved_nodes = 0;
-  int batch_number = 2147483647;
+  //int batch_number = 2147483647;
   atomic<int32> abort_bit_;
   int num_aborted_;
   atomic<int32> local_aborted_;

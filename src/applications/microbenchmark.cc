@@ -189,11 +189,12 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 
 			for(int i = 0; i<txn->readers_size(); ++i){
 				int key_to_get = 0;
-				if(txn->readers(i) != this_node_id)
+				if(i == 0)
 					key_to_get = avg_key_per_part;
 				else
 					key_to_get = key_first_part;
 				
+				//LOG(txn->txn_id(), " trying to get num of keys "<<key_to_get);
 				if(remain_index >= key_to_get){
 					GetRandomKeys(&keys,
 						  key_to_get,
@@ -201,8 +202,10 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						  nparts * index_records,
 						  txn->readers(i), rand);
 					remain_index -= avg_key_per_part;
-					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+						//LOG(txn->txn_id(), " adding "<<*it);
 						txn->add_read_write_set(IntToString(*it));
+					}
 				}
 				else{
 					GetRandomKeys(&keys,
@@ -210,8 +213,10 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 					  0,
 					  nparts * index_records,
 					  txn->readers(i), rand);
-					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+						//LOG(txn->txn_id(), " adding "<<*it);
 						txn->add_read_write_set(IntToString(*it));
+					}
 
 					GetRandomKeys(&keys,
 					  key_to_get-remain_index,
@@ -219,8 +224,10 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 					  nparts * kDBSize,
 					  txn->readers(i), rand);
 					remain_index = 0;
-					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
+					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
+						//LOG(txn->txn_id(), " adding "<<*it);
 						txn->add_read_write_set(IntToString(*it));
+					}
 				}
 			}
 		}
