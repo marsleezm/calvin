@@ -37,6 +37,7 @@ using namespace std;
 
 double dependent_percent;
 int multi_txn_num_parts;
+int uncertain_percent;
 
 // Microbenchmark load generation client.
 class MClient : public Client {
@@ -47,7 +48,12 @@ class MClient : public Client {
 			parts = new int[multi_txn_num_parts];
   }
   virtual ~MClient() { delete[] parts;}
-  virtual void SetRemote(int64& involved_nodes){
+  virtual void SetRemote(int64& involved_nodes, bool& uncertain){
+	  int if_uncertain = rand() % 100;
+	  if (if_uncertain < uncertain_percent)
+		  uncertain = true;
+	  else
+		  uncertain = false;
 	  involved_nodes = involved_nodes | (1 << config_->this_node_id);
 	  parts[0] = config_->this_node_id;
 	  int counter = 1;
@@ -110,7 +116,13 @@ class TClient : public Client {
       read_rate = 100-ur;
   }
   virtual ~TClient() {}
-  virtual void SetRemote(int64& involved_nodes){
+  virtual void SetRemote(int64& involved_nodes, bool& uncertain){
+    int if_uncertain = rand() % 100;
+    if (if_uncertain < uncertain_percent)
+		uncertain = true;
+	else
+		uncertain = false;
+
 	involved_nodes = involved_nodes | (1 << config_->this_node_id);
 	do {
 		remote_node = rand() % config_->all_nodes.size();
@@ -210,6 +222,7 @@ int main(int argc, char** argv) {
 
 	ConfigReader::Initialize("myconfig.conf");
 	dependent_percent = stof(ConfigReader::Value("dependent_percent").c_str());
+	uncertain_percent = stof(ConfigReader::Value("uncertain_percent").c_str());
 	multi_txn_num_parts = atoi(ConfigReader::Value("multi_txn_num_parts").c_str());
 
 	//freopen("output.txt","w",stdout);

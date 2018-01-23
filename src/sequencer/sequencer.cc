@@ -234,6 +234,7 @@ void Sequencer::RunWriter() {
     int txn_id_offset = 0;
     string txn_string;
 	int64 involved_nodes = 0;
+	bool uncertain;
 	client_->SetRemote(involved_nodes);
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
@@ -253,6 +254,7 @@ void Sequencer::RunWriter() {
 		}
        	else{
 			txn->set_involved_nodes(involved_nodes);
+			txn->set_uncertain(uncertain);
 		   	txn_map[involved_nodes].push_back(txn);
 		}
         txn_id_offset++;
@@ -404,18 +406,23 @@ void Sequencer::RunReader() {
       set<int> to_send;
       google::protobuf::RepeatedField<int>::const_iterator  it;
 
-      for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
-      	  to_send.insert(*it);
-      for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
-          to_send.insert(*it);
+	  if(txn->uncertain() == false){
+		  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
+			  to_send.insert(*it);
+		  for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
+			  to_send.insert(*it);
 
-      // Insert txn into appropriate batches.
-      for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
-    	  //if (*it != configuration_->this_node_id)
-    		  batches[*it].add_data(batch_message->data(i));
-    	  //else
-    	//	  batches_[batch_number] = batch_message;
-      }
+			  // Insert txn into appropriate batches.
+		  for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
+				  batches[*it].add_data(batch_message->data(i));
+		  }
+	  }
+	  else{
+		  for (uint32 j = 0; j < configuration_->all_nodes.size(); j++) {
+			  to_send.insert(j);
+			  batches[j].add_data(batch_message->data(i));
+		  }
+	  }
 
       txn_count++;
     }

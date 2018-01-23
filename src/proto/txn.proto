@@ -9,6 +9,7 @@ message TxnProto {
   optional int64 local_txn_id = 2;
   required int64 involved_nodes = 3;
   required int64 batch_number = 4;
+  required bool uncertain = 5;
 
   // Specifies which stored procedure to invoke at execution time.
   optional int32 txn_type = 10;

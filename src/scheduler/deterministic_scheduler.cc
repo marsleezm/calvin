@@ -344,7 +344,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						}
 						// If can commit
 						if(first_tx.first == num_lc_txns_ and mgr->CanSCToCommit() == SUCCESS){
-							if(mgr->txn_->multipartition() and mgr->last_add_pc == -1 and mgr->has_confirmed == false){
+							if((mgr->txn_->multipartition() and mgr->writer_id != -1) and mgr->last_add_pc == -1 and mgr->has_confirmed == false){
 								INIT_MSG(msg_to_send, this_node); 
 								involved_nodes = mgr->txn_->involved_nodes();
 								if (first_mgr == NULL)

@@ -63,11 +63,18 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
             sc_list[i] = -1;
             ca_list[i] = 0;
         }
-		prev_unconfirmed = writer_id;
-        if(writer_id == 0)
-            added_pc_size = 1;
-        recv_an[writer_id].second = abort_bit_;
-        sc_list[writer_id] = abort_bit_;
+		if(writer_id == -1){
+			ASSERT(txn_->uncertain() == true);
+			prev_unconfirmed = 0;
+			added_pc_size = 0;
+		}
+		else{
+			prev_unconfirmed = writer_id;
+			if(writer_id == 0)
+				added_pc_size = 1;
+			recv_an[writer_id].second = abort_bit_;
+			sc_list[writer_id] = abort_bit_;
+		}
         aborted_txs = new vector<int64_t>();
 	}
 	else{
@@ -149,14 +156,21 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	num_unconfirmed_read = txn_->readers_size() - 1;
 	for (int i = 0; i<txn_->readers_size(); ++i){
 		recv_an.push_back(make_pair(txn_->readers(i), -1));
-        //involved_nodes = involved_nodes | (1 << txn_->readers(i));
-        //invnodes += IntToString(txn_->readers(i));
-        //LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
         if (txn_->readers(i) == configuration_->this_node_id)
             writer_id = configuration_->this_node_id;
     }
-    if(writer_id == 0)
-        added_pc_size = 1;
+	if(writer_id == -1){
+		ASSERT(txn_->uncertain() == true);
+		prev_unconfirmed = 0;
+		added_pc_size = 0;
+	}
+	else{
+		prev_unconfirmed = writer_id;
+		if(writer_id == 0)
+			added_pc_size = 1;
+		recv_an[writer_id].second = abort_bit_;
+		sc_list[writer_id] = abort_bit_;
+	}
     aborted_txs = new vector<int64_t>();
 	prev_unconfirmed = writer_id;
     sc_list = new int[txn_->readers_size()];
@@ -166,8 +180,6 @@ void StorageManager::SetupTxn(TxnProto* txn){
         sc_list[i] = -1;
         ca_list[i] = 0;
     }
-    recv_an[writer_id].second = abort_bit_;
-    sc_list[writer_id] = abort_bit_;
 }
 
 void StorageManager::Abort(){
@@ -258,6 +270,7 @@ void StorageManager::AddPendingSC(){
   }
   pthread_mutex_unlock(&lock);
 }
+
 void StorageManager::AddSC(MessageProto& message, int& i){
     int size=message.received_num_aborted(i), final_index = i+size, j = i+1;
     LOG(txn_->txn_id(), " i:"<<i<<", size:"<<size);
@@ -539,7 +552,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	if(has_confirmed==false and message_ and in_list==false){
+	if(has_confirmed==false and message_ and in_list==false and writer_id != -1){
 		LOG(txn_->txn_id(), " sending confirm when committing");
         MessageProto msg;
         msg.set_type(MessageProto::READ_CONFIRM);

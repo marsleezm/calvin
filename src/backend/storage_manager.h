@@ -108,7 +108,7 @@ class StorageManager {
 		else{
 			return_abort_bit = abort_bit_;
 			if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting){
-				if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
+				if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed or (txn_->uncertain() and writer_id == -1))
 					return ADDED;
 				else
 					return CAN_ADD;
@@ -388,7 +388,7 @@ class StorageManager {
   bool is_suspended_;
   bool spec_committed_;
   int last_add_pc = -1;
-  int writer_id;
+  int writer_id = -1;
   //int involved_nodes = 0;
   int batch_number = 2147483647;
   atomic<int32> abort_bit_;
