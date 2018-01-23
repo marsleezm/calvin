@@ -103,13 +103,24 @@ bool StorageManager::SendSC(MessageProto* msg){
 		msg->set_destination_channel("locker");
 		LOG(txn_->txn_id(), prev_unconfirmed<<" sending to locker, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
 	}
-	for (int i = 0; i < txn_->writers_size(); ++i) {
-		if (txn_->writers(i) != configuration_->this_node_id) {
-			msg->set_destination_node(txn_->writers(i));
-			//LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
-			connection_->Send1(*msg);
-		}
-	}
+    if(txn_->uncertain()){
+        for (int i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
+            if (i != configuration_->this_node_id) {
+                msg->set_destination_node(i);
+                //LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
+                connection_->Send1(*msg);
+            }
+        }
+    }
+    else{
+        for (int i = 0; i < txn_->writers_size(); ++i) {
+            if (txn_->writers(i) != configuration_->this_node_id) {
+                msg->set_destination_node(txn_->writers(i));
+                //LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
+                connection_->Send1(*msg);
+            }
+        }
+    }
 	return true;
 }
 
@@ -130,10 +141,21 @@ void StorageManager::SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* 
             LOG(txn_->txn_id(), txn_->local_txn_id()<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
         }
     }
-    for (int i = 0; i < txn_->writers_size(); ++i) {
-        if (txn_->writers(i) != configuration_->this_node_id) {
-            msg.set_destination_node(txn_->writers(i));
-            connection_->Send1(msg);
+    if(txn_->uncertain()){
+        for (int i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
+            if (i != configuration_->this_node_id) {
+                msg.set_destination_node(i);
+                //LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
+                connection_->Send1(msg);
+            }
+        }
+    }
+    else{
+        for (int i = 0; i < txn_->writers_size(); ++i) {
+            if (txn_->writers(i) != configuration_->this_node_id) {
+                msg.set_destination_node(txn_->writers(i));
+                connection_->Send1(msg);
+            }
         }
     }
 }
@@ -301,9 +323,9 @@ void StorageManager::AddSC(MessageProto& message, int& i){
                 ++i;
         }
         if( i == final_index and message.received_num_aborted(i) >= recv_an[i-j].second){
-            if(size <= writer_id or (!aborting and message.received_num_aborted(j+writer_id) == abort_bit_)){
+            if(writer_id == -1 or size <= writer_id or (!aborting and message.received_num_aborted(j+writer_id) == abort_bit_)){
                 sc_list[size-1] = message.received_num_aborted(i);
-                LOG(txn_->txn_id(), i<<" setting "<<i-j<<" to "<<message.received_num_aborted(i));
+                LOG(txn_->txn_id(), i<<" setting "<<size-1<<" to "<<message.received_num_aborted(i));
                 ++added_pc_size;
                 if(added_pc_size == writer_id)
                     ++added_pc_size;
@@ -559,10 +581,20 @@ StorageManager::~StorageManager() {
         msg.set_source_node(configuration_->this_node_id);
         msg.set_num_aborted(abort_bit_);
         msg.set_destination_channel(IntToString(txn_->txn_id()));
-        for (int i = 0; i < txn_->writers_size(); ++i) {
-            if (i != writer_id) {
-                msg.set_destination_node(txn_->writers(i));
-                connection_->Send1(msg);
+        if(txn_->uncertain()){
+            for (int i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
+                if (i != writer_id) {
+                    msg.set_destination_node(txn_->writers(i));
+                    connection_->Send1(msg);
+                }
+            }
+        }
+        else{
+            for (int i = 0; i < txn_->writers_size(); ++i) {
+                if (i != writer_id) {
+                    msg.set_destination_node(txn_->writers(i));
+                    connection_->Send1(msg);
+                }
             }
         }
 	}

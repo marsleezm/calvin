@@ -86,14 +86,24 @@ class StorageManager {
               LOG(txn_->txn_id(), " sending unconfirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
           message_->set_num_aborted(num_aborted_);
           message_->set_local_aborted(local_aborted_);
-          for (int i = 0; i < txn_->writers().size(); i++) {
-              if (txn_->writers(i) != configuration_->this_node_id) {
-                  //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
-                  message_->set_destination_node(txn_->writers(i));
-                  connection_->Send1(*message_);
+          if(txn_->uncertain()){
+              for (int i = 0; i < (int)configuration_->all_nodes.size(); i++) {
+                  if (i != configuration_->this_node_id) {
+                      //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
+                      message_->set_destination_node(i);
+                      connection_->Send1(*message_);
+                  }
               }
           }
-
+          else{
+              for (int i = 0; i < txn_->writers().size(); i++) {
+                  if (txn_->writers(i) != configuration_->this_node_id) {
+                      //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
+                      message_->set_destination_node(txn_->writers(i));
+                      connection_->Send1(*message_);
+                  }
+              }
+          }
           message_->clear_keys();
           message_->clear_values();
       }

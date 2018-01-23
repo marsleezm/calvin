@@ -29,6 +29,9 @@
 #include "proto/txn.pb.h"
 
 //#define BLOCK_STAT
+#define FOUND 0
+#define NOSAVE 1
+#define SAVE 2
 #define NO_CHECK -1
 
 #ifdef BLOCK_STAT
@@ -89,6 +92,7 @@ using zmq::socket_t;
 using std::map;
 
 int64_t DeterministicScheduler::num_lc_txns_(0);
+int64_t DeterministicScheduler::comm_g_id_(0);
 int64_t DeterministicScheduler::can_gc_txns_(0);
 atomic<int64_t> DeterministicScheduler::latest_started_tx(-1);
 bool DeterministicScheduler::terminated_(false);
@@ -232,17 +236,31 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     int64 local_gc= 0; //prevtx=0; 
     int out_counter1 = 0, latency_count = 0;
     pair<int64, int64>* latency_array = scheduler->latency[thread];
-	vector<MessageProto> buffered_msgs;
+	vector<MyTuple<int, int64, MessageProto>> buffered_msgs;
+    MyTuple<int, int64, MessageProto> buffered_m;
 
     while (!terminated_) {
 	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-			while(buffered_msgs.size() or locker_queue->Pop(&message)){
-				if (buffered_msgs.size()){
-					message = buffered_msgs[0];
-					buffered_msgs.erase(buffered_msgs.begin());
-				}
-              	int64 remote_global_id = message.tx_id(), base_local=-1, local_txn_id, remote_local, base_remote_local= message.tx_local();
+            int s = buffered_msgs.size()-1;
+			while(s >=0 or locker_queue->Pop(&message)){
+                s -= 1;
 				int i = 0;
+              	int64 remote_global_id, base_local, local_txn_id, remote_local, base_remote_local;
+				if (buffered_msgs.size()){
+                    buffered_m = buffered_msgs[0];
+					buffered_msgs.erase(buffered_msgs.begin());
+                    i = buffered_m.first;
+                    base_local = buffered_m.second;
+                    message = buffered_m.third;
+                    base_remote_local = message.tx_local();
+				}
+                else{
+              	    remote_global_id = message.tx_id();
+                    base_remote_local= message.tx_local();
+                    base_local=-1;
+                }
+                if (remote_global_id < comm_g_id_)
+                    continue;
 				AGGRLOG(remote_global_id, " locker msg:"<<message.source_node()<<", size:"<<message.received_num_aborted_size()<<", na is "<<message.num_aborted());
 			  	if(message.num_aborted() != -1){
 					int j = 0;
@@ -250,16 +268,18 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						++j;
 					if(j == sc_array_size){
 						AGGRLOG(remote_global_id, " not yet started, buffering");
-						buffered_msgs.push_back(message);
-						break;
+						buffered_msgs.push_back(MyTuple<int, int64, MessageProto>(0, -1, message));
+                        continue;
 					}
 					base_local = j+num_lc_txns_;
 					StorageManager* manager = scheduler->sc_txn_list[(j+num_lc_txns_)%sc_array_size].fourth;
 					AGGRLOG(remote_global_id, " adding confirm");
 					manager->AddReadConfirm(message.source_node(), message.num_aborted());
+                    message.set_num_aborted(-1);
 			  	}
 				if (base_local == -1){
 					if (scheduler->TryToFindId(message, i, base_local, remote_global_id, base_remote_local, num_lc_txns_) == false){
+                        buffered_msgs.push_back(MyTuple<int, int64, MessageProto>(0, -1, message));
 						AGGRLOG(remote_global_id, " did not find id"); 
 						continue;
 					}
@@ -284,11 +304,21 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                     ++i;
 					remote_global_id = message.received_num_aborted(i); 
 					++i;
-					local_txn_id = base_local+remote_local-base_remote_local; 
-					StorageManager* manager = scheduler->sc_txn_list[local_txn_id % sc_array_size].fourth;
-					AGGRLOG(local_txn_id,  " trying to add SC, i is "<<i<<", global id:"<<remote_global_id<<", mgr id:"<<manager->txn_->txn_id());
-					ASSERT(manager->txn_->txn_id() == remote_global_id);
-					manager->AddSC(message, i);
+                    if(remote_global_id < comm_g_id_){
+                        i += message.received_num_aborted(i)+1;
+                    }
+                    else{
+                        local_txn_id = base_local+remote_local-base_remote_local; 
+                        StorageManager* manager = scheduler->sc_txn_list[local_txn_id % sc_array_size].fourth;
+                        if(manager and manager->txn_->txn_id() == remote_global_id){
+                            AGGRLOG(local_txn_id,  " trying to add SC, i is "<<i<<", global id:"<<remote_global_id<<", mgr id:"<<manager->txn_->txn_id());
+                            manager->AddSC(message, i);
+                        }
+                        else{
+                            buffered_msgs.push_back(MyTuple<int, int64, MessageProto>(i-2, base_local, message));
+                            break;
+                        }
+                    }
 				}
 			}
 
@@ -354,6 +384,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 							LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
 							if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
 								++Sequencer::num_committed;
+                            comm_g_id_ = first_tx.third;
 							scheduler->sc_txn_list[tx_index].third = NO_TXN;
 							++num_lc_txns_;
 						}
@@ -588,6 +619,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 		LOG(txn->txn_id(), " read-only, num lc "<<num_lc_txns_<<", inlist "<<manager->if_inlist());
 		if (num_lc_txns_ == txn->local_txn_id()){
 			if(manager->if_inlist() == false){
+                comm_g_id_ = txn->txn_id();
 				++num_lc_txns_;
 				LOG(txn->local_txn_id(), " being committed, nlc is "<<num_lc_txns_<<", delete "<<reinterpret_cast<int64>(manager));
 				++Sequencer::num_committed;
@@ -661,6 +693,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, uno
 					//AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<num_lc_txns_+1<<", will delete "<<reinterpret_cast<int64>(manager));
 					AGGRLOG(txn->txn_id(), " committed! New num_lc_txns will be "<<num_lc_txns_+1);
 					assert(manager->ApplyChange(true) == true);
+                    comm_g_id_ = txn->txn_id();
 					++num_lc_txns_;
 					if(txn->writers_size() == 0 || txn->writers(0) == configuration_->this_node_id){
 						++Sequencer::num_committed;

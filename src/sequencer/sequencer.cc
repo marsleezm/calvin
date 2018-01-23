@@ -235,13 +235,13 @@ void Sequencer::RunWriter() {
     string txn_string;
 	int64 involved_nodes = 0;
 	bool uncertain;
-	client_->SetRemote(involved_nodes);
+	client_->SetRemote(involved_nodes, uncertain);
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
       if (txn_id_offset < max_batch_size) {
         TxnProto* txn;
-        client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset, GetUTime());
+        client_->GetTxn(&txn, 0, GetUTime());
 		txn->set_batch_number(batch_number);
         if(txn->txn_id() == -1) {
           delete txn;
@@ -260,6 +260,7 @@ void Sequencer::RunWriter() {
         txn_id_offset++;
       }
     }
+    txn_id_offset = 0;
 
 	set<int> prev_node_set, after_node_set;
 	for(const auto inv: txn_map){
@@ -272,6 +273,7 @@ void Sequencer::RunWriter() {
 	for(const auto prev_node: prev_node_set){
        for(auto txn: txn_map[prev_node]) {
 		   //LOG(batch_number, " adding "<<txn->txn_id()<<" for prev node"<<prev_node<<", inv "<<txn->involved_nodes());
+           txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
            txn->SerializeToString(&txn_string);
            batch.add_data(txn_string);
            delete txn;
@@ -282,6 +284,7 @@ void Sequencer::RunWriter() {
        if(prev_node_set.count(it->first) == 0 and after_node_set.count(it->first) == 0){
           for(auto txn: it->second) {
 		   	   //LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<it->first<<", multi "<<txn->involved_nodes());
+               txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
                txn->SerializeToString(&txn_string);
                batch.add_data(txn_string);
                delete txn;
@@ -297,6 +300,7 @@ void Sequencer::RunWriter() {
 	while (it != after_node_set.rend()) {
        	for(auto txn: txn_map[*it]) {
 		   	//LOG(batch_number, " adding "<<txn->txn_id()<<" for after node "<<after_node<<", multi "<<txn->involved_nodes());
+            txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
           	txn->SerializeToString(&txn_string);
            	batch.add_data(txn_string);
            	delete txn;
@@ -406,7 +410,7 @@ void Sequencer::RunReader() {
       set<int> to_send;
       google::protobuf::RepeatedField<int>::const_iterator  it;
 
-	  if(txn->uncertain() == false){
+	  if(txn.uncertain() == false){
 		  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
 			  to_send.insert(*it);
 		  for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
@@ -561,7 +565,7 @@ void* Sequencer::FetchMessage() {
 			  txn->ParseFromString(batch_message->data(i));
 			  txn->set_local_txn_id(fetched_txn_num_++);
 			  txns_queue_->Push(txn);
-			  LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", inv:"<<txn->involved_nodes());
+			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", inv:"<<txn->involved_nodes());
 			  ++num_fetched_this_round;
 		  }
 		  delete batch_message;
