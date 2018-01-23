@@ -48,6 +48,7 @@ class MClient : public Client {
   }
   virtual ~MClient() { delete[] parts;}
   virtual void SetRemote(int64& involved_nodes){
+	  involved_nodes = involved_nodes | (1 << config_->this_node_id);
 	  parts[0] = config_->this_node_id;
 	  int counter = 1;
 	  while (counter != multi_txn_num_parts){
@@ -110,6 +111,7 @@ class TClient : public Client {
   }
   virtual ~TClient() {}
   virtual void SetRemote(int64& involved_nodes){
+	involved_nodes = involved_nodes | (1 << config_->this_node_id);
 	do {
 		remote_node = rand() % config_->all_nodes.size();
 	} while (config_->all_nodes.size() > 1 &&

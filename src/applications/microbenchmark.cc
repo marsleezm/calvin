@@ -189,7 +189,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 
 			for(int i = 0; i<txn->readers_size(); ++i){
 				int key_to_get = 0;
-				if(i == 0)
+				if(i != 0)
 					key_to_get = avg_key_per_part;
 				else
 					key_to_get = key_first_part;
