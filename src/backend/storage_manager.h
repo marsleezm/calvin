@@ -104,6 +104,8 @@ class StorageManager {
         //Stop already if is not MP txn
 		if (ReadOnly())
 			return ADDED;
+        else if (txn_->uncertain() and writer_id == -1)
+            return ADDED;
 		else{
 			return_abort_bit = abort_bit_;
 			if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting){

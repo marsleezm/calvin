@@ -240,8 +240,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	set<int64> finalized_uncertain;
 
     while (!terminated_) {
-	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or buffered_msgs.size() or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
+	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
 			int check_buffer = buffered_msgs.size()-1;
+            LOG(-1, "here, buffer size is "<<check_buffer);
 			while(check_buffer >=0 or locker_queue->Pop(&message)){
 				if (check_buffer >=0){
 					message = buffered_msgs[0];
@@ -462,6 +463,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  StorageManager* mgr = active_g_tids[txn_id];
 			  ASSERT(scheduler->sc_txn_list[mgr->txn_->local_txn_id()%sc_array_size].fourth == mgr);
 			  mgr->finalized = true;
+              scheduler->sc_txn_list[mgr->txn_->local_txn_id()%sc_array_size].first = mgr->txn_->local_txn_id();
 			  LOG(txn_id, " is finalized, active g is "<<active_g_tids.size());
 			  //else{
 			//	  finalized_uncertain.insert(txn_id);

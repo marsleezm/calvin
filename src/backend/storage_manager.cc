@@ -33,42 +33,46 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), 
 	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
-	tpcc_args = new TPCCArgs();
-	tpcc_args ->ParseFromString(txn->arg());
 	batch_number = txn->batch_number();
 	if (txn->multipartition()){
-		LOG(txn_->txn_id(), " linking to channel");
-		message_ = new MessageProto();
-		message_->set_source_channel(txn->txn_id());
-		message_->set_destination_channel(IntToString(txn_->txn_id()));
-		message_->set_type(MessageProto::READ_RESULT);
-		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
 
-		//string invnodes = "";
         for (int i = 0; i<txn_->readers_size(); ++i){
             recv_an.push_back(make_pair(txn_->readers(i), -1));
-            //involved_nodes = involved_nodes | (1 << txn_->readers(i));
-            //invnodes += IntToString(txn_->readers(i));
             if (txn_->readers(i) == configuration_->this_node_id)
                 writer_id = i; 
         }
-		//LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
-        pthread_mutex_init(&lock, NULL);
-        sc_list = new int[txn_->readers_size()];
-        ca_list = new int[txn_->readers_size()];
-        recv_lan = new int[txn_->readers_size()];
-        for(int i = 0; i< txn_->readers_size(); ++i){
-            sc_list[i] = -1;
-            ca_list[i] = 0;
+        if(writer_id != -1 ){
+            message_ = new MessageProto();
+            message_->set_source_channel(txn->txn_id());
+            message_->set_destination_channel(IntToString(txn_->txn_id()));
+            message_->set_type(MessageProto::READ_RESULT);
+            message_->set_source_node(configuration_->this_node_id);
+            tpcc_args = new TPCCArgs();
+            tpcc_args ->ParseFromString(txn->arg());
+            pthread_mutex_init(&lock, NULL);
+            sc_list = new int[txn_->readers_size()];
+            ca_list = new int[txn_->readers_size()];
+            recv_lan = new int[txn_->readers_size()];
+            for(int i = 0; i< txn_->readers_size(); ++i){
+                sc_list[i] = -1;
+                ca_list[i] = 0;
+            }
+            num_unconfirmed_read = txn_->readers_size() - 1;
+            prev_unconfirmed = writer_id;
+            if(writer_id == 0)
+                added_pc_size = 1;
+            recv_an[writer_id].second = abort_bit_;
+            sc_list[writer_id] = abort_bit_;
+            aborted_txs = new vector<int64_t>();
         }
-		num_unconfirmed_read = txn_->readers_size() - 1;
-		prev_unconfirmed = writer_id;
-		if(writer_id == 0)
-			added_pc_size = 1;
-		recv_an[writer_id].second = abort_bit_;
-		sc_list[writer_id] = abort_bit_;
-        aborted_txs = new vector<int64_t>();
+        else{
+            aborted_txs = NULL;
+            message_ = NULL;
+            sc_list = NULL;
+            ca_list = NULL;
+            recv_lan = NULL;
+        }
 	}
 	else{
         aborted_txs = NULL;
@@ -136,43 +140,45 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn->multipartition());
 
 	txn_ = txn;
-	batch_number = txn->batch_number();
-	message_ = new MessageProto();
-	message_->set_source_channel(txn->txn_id());
-	message_->set_source_node(configuration_->this_node_id);
-	message_->set_destination_channel(IntToString(txn_->txn_id()));
-	message_->set_type(MessageProto::READ_RESULT);
-	connection_->LinkChannel(IntToString(txn_->txn_id()));
-	tpcc_args ->ParseFromString(txn->arg());
-    pthread_mutex_init(&lock, NULL);
-
 	for (int i = 0; i<txn_->readers_size(); ++i){
 		recv_an.push_back(make_pair(txn_->readers(i), -1));
         if (txn_->readers(i) == configuration_->this_node_id)
             writer_id = configuration_->this_node_id;
     }
-	if(writer_id == -1){
-		num_unconfirmed_read = txn_->readers_size();
-		ASSERT(txn_->uncertain() == true);
-		prev_unconfirmed = 0;
-		added_pc_size = 0;
-	}
-	else{
+
+	if(writer_id != -1){
+        batch_number = txn->batch_number();
+        message_ = new MessageProto();
+        message_->set_source_channel(txn->txn_id());
+        message_->set_source_node(configuration_->this_node_id);
+        message_->set_destination_channel(IntToString(txn_->txn_id()));
+        message_->set_type(MessageProto::READ_RESULT);
+        connection_->LinkChannel(IntToString(txn_->txn_id()));
+        tpcc_args ->ParseFromString(txn->arg());
+        pthread_mutex_init(&lock, NULL);
+
 		num_unconfirmed_read = txn_->readers_size() - 1;
 		prev_unconfirmed = writer_id;
 		if(writer_id == 0)
 			added_pc_size = 1;
 		recv_an[writer_id].second = abort_bit_;
 		sc_list[writer_id] = abort_bit_;
+        aborted_txs = new vector<int64_t>();
+        prev_unconfirmed = writer_id;
+        sc_list = new int[txn_->readers_size()];
+        ca_list = new int[txn_->readers_size()];
+        recv_lan = new int[txn_->readers_size()];
+        for(int i = 0; i< txn_->readers_size(); ++i){
+            sc_list[i] = -1;
+            ca_list[i] = 0;
+        }
 	}
-    aborted_txs = new vector<int64_t>();
-	prev_unconfirmed = writer_id;
-    sc_list = new int[txn_->readers_size()];
-    ca_list = new int[txn_->readers_size()];
-    recv_lan = new int[txn_->readers_size()];
-    for(int i = 0; i< txn_->readers_size(); ++i){
-        sc_list[i] = -1;
-        ca_list[i] = 0;
+    else{
+        aborted_txs = NULL;
+        message_ = NULL;
+        sc_list = NULL;
+        ca_list = NULL;
+        recv_lan = NULL;
     }
 }
 
@@ -728,7 +734,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				LOG(txn_->txn_id(), "Does not have remote key: "<<key);
 				read_state = SPECIAL;
 				// The tranasction will perform the read again
-				if (message_->keys_size()){
+				if (message_ and message_->keys_size()){
 					//LOG(txn_->txn_id(), " blocked and sent.");
 					return reinterpret_cast<Value*>(SUSPEND_SHOULD_SEND);
 				}
