@@ -86,24 +86,13 @@ class StorageManager {
               LOG(txn_->txn_id(), " sending unconfirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
           message_->set_num_aborted(num_aborted_);
           message_->set_local_aborted(local_aborted_);
-          if(txn_->uncertain()){
-              for (int i = 0; i < (int)configuration_->all_nodes.size(); i++) {
-                  if (i != configuration_->this_node_id) {
-                      //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
-                      message_->set_destination_node(i);
-                      connection_->Send1(*message_);
-                  }
-              }
-          }
-          else{
-              for (int i = 0; i < txn_->writers().size(); i++) {
-                  if (txn_->writers(i) != configuration_->this_node_id) {
-                      //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
-                      message_->set_destination_node(txn_->writers(i));
-                      connection_->Send1(*message_);
-                  }
-              }
-          }
+		  for (int i = 0; i < txn_->writers().size(); i++) {
+			  if (txn_->writers(i) != configuration_->this_node_id) {
+				  //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
+				  message_->set_destination_node(txn_->writers(i));
+				  connection_->Send1(*message_);
+			  }
+		  }
           message_->clear_keys();
           message_->clear_values();
       }
@@ -118,7 +107,7 @@ class StorageManager {
 		else{
 			return_abort_bit = abort_bit_;
 			if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting){
-				if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed or (txn_->uncertain() and writer_id == -1))
+				if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
 					return ADDED;
 				else
 					return CAN_ADD;
@@ -194,6 +183,8 @@ class StorageManager {
 		  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
 	  if (ReadOnly())
 		  return SUCCESS;
+	  else if (txn_->uncertain() and writer_id == -1)
+		  return finalized;
 	  else{
 		  if(num_aborted_ != abort_bit_ or !spec_committed_)
 			  return ABORT;
@@ -397,7 +388,7 @@ class StorageManager {
   bool spec_committed_;
   int last_add_pc = -1;
   int writer_id = -1;
-  //int involved_nodes = 0;
+  bool finalized = false;
   int batch_number = 2147483647;
   atomic<int32> abort_bit_;
   int num_aborted_;

@@ -37,13 +37,13 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	tpcc_args ->ParseFromString(txn->arg());
 	batch_number = txn->batch_number();
 	if (txn->multipartition()){
+		LOG(txn_->txn_id(), " linking to channel");
 		message_ = new MessageProto();
 		message_->set_source_channel(txn->txn_id());
 		message_->set_destination_channel(IntToString(txn_->txn_id()));
 		message_->set_type(MessageProto::READ_RESULT);
 		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
-
 
 		//string invnodes = "";
         for (int i = 0; i<txn_->readers_size(); ++i){
@@ -62,20 +62,12 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
             sc_list[i] = -1;
             ca_list[i] = 0;
         }
-		if(writer_id == -1){
-			num_unconfirmed_read = txn_->readers_size();
-			ASSERT(txn_->uncertain() == true);
-			prev_unconfirmed = 0;
-			added_pc_size = 0;
-		}
-		else{
-			num_unconfirmed_read = txn_->readers_size() - 1;
-			prev_unconfirmed = writer_id;
-			if(writer_id == 0)
-				added_pc_size = 1;
-			recv_an[writer_id].second = abort_bit_;
-			sc_list[writer_id] = abort_bit_;
-		}
+		num_unconfirmed_read = txn_->readers_size() - 1;
+		prev_unconfirmed = writer_id;
+		if(writer_id == 0)
+			added_pc_size = 1;
+		recv_an[writer_id].second = abort_bit_;
+		sc_list[writer_id] = abort_bit_;
         aborted_txs = new vector<int64_t>();
 	}
 	else{
@@ -104,24 +96,13 @@ bool StorageManager::SendSC(MessageProto* msg){
 		msg->set_destination_channel("locker");
 		LOG(txn_->txn_id(), prev_unconfirmed<<" sending to locker, la:"<<num_aborted_<<", ab:"<<abort_bit_<<", np:"<<msg->received_num_aborted_size());
 	}
-    if(txn_->uncertain()){
-        for (int i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
-            if (i != configuration_->this_node_id) {
-                msg->set_destination_node(i);
-                LOG(txn_->txn_id(), " sent uncertain confirm to "<<i<<", dest channel is "<<msg->destination_channel());
-                connection_->Send1(*msg);
-            }
-        }
-    }
-    else{
-        for (int i = 0; i < txn_->writers_size(); ++i) {
-            if (txn_->writers(i) != configuration_->this_node_id) {
-                msg->set_destination_node(txn_->writers(i));
-                //LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
-                connection_->Send1(*msg);
-            }
-        }
-    }
+	for (int i = 0; i < txn_->writers_size(); ++i) {
+		if (txn_->writers(i) != configuration_->this_node_id) {
+			msg->set_destination_node(txn_->writers(i));
+			//LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
+			connection_->Send1(*msg);
+		}
+	}
 	return true;
 }
 
@@ -142,23 +123,12 @@ void StorageManager::SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* 
             LOG(txn_->txn_id(), txn_->local_txn_id()<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
         }
     }
-    if(txn_->uncertain()){
-        for (int i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
-            if (i != configuration_->this_node_id) {
-                msg.set_destination_node(i);
-                //LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
-                connection_->Send1(msg);
-            }
-        }
-    }
-    else{
-        for (int i = 0; i < txn_->writers_size(); ++i) {
-            if (txn_->writers(i) != configuration_->this_node_id) {
-                msg.set_destination_node(txn_->writers(i));
-                connection_->Send1(msg);
-            }
-        }
-    }
+	for (int i = 0; i < txn_->writers_size(); ++i) {
+		if (txn_->writers(i) != configuration_->this_node_id) {
+			msg.set_destination_node(txn_->writers(i));
+			connection_->Send1(msg);
+		}
+	}
 }
 
 void StorageManager::SetupTxn(TxnProto* txn){
@@ -576,33 +546,38 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	if(has_confirmed==false and message_ and in_list==false and writer_id != -1){
-		LOG(txn_->txn_id(), " sending confirm when committing");
-        MessageProto msg;
-        msg.set_type(MessageProto::READ_CONFIRM);
-        msg.set_source_node(configuration_->this_node_id);
-        msg.set_num_aborted(abort_bit_);
-        msg.set_destination_channel(IntToString(txn_->txn_id()));
-        if(txn_->uncertain()){
-            for (int i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
-                if (i != writer_id) {
-                    msg.set_destination_node(txn_->writers(i));
-                    connection_->Send1(msg);
-                }
-            }
-        }
-        else{
-            for (int i = 0; i < txn_->writers_size(); ++i) {
-                if (i != writer_id) {
-                    msg.set_destination_node(txn_->writers(i));
-                    connection_->Send1(msg);
-                }
-            }
-        }
-	}
+	LOG(txn_->txn_id(), " deleting");
 	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
-		//LOG(txn_->txn_id(), "Has message");
+		if(has_confirmed==false and in_list==false and writer_id != -1){
+			LOG(txn_->txn_id(), " sending confirm when committing");
+			MessageProto msg;
+			msg.set_type(MessageProto::READ_CONFIRM);
+			msg.set_source_node(configuration_->this_node_id);
+			msg.set_num_aborted(abort_bit_);
+			msg.set_destination_channel(IntToString(txn_->txn_id()));
+			for (int i = 0; i < txn_->writers_size(); ++i) {
+				if (i != writer_id) {
+					msg.set_destination_node(txn_->writers(i));
+					connection_->Send1(msg);
+				}
+			}
+		}
+		if(txn_->uncertain() and writer_id == 0){
+			LOG(txn_->txn_id(), "Uncertain txn and my id is 0");
+			MessageProto msg;
+			msg.set_type(MessageProto::FINALIZE_UNCERTAIN);
+			msg.set_source_node(configuration_->this_node_id);
+			msg.set_destination_channel(IntToString(txn_->txn_id()));
+			ASSERT(txn_->writers_size() == 2);
+            for (int32 i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
+                if (i != txn_->writers(0) and i != txn_->writers(1)) {
+					LOG(txn_->txn_id(), "sending finalize to "<<i);
+                    msg.set_destination_node(i);
+                    connection_->Send1(msg);
+                }
+			}
+		}
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
 

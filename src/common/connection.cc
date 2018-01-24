@@ -189,6 +189,7 @@ void ConnectionMultiplexer::Run() {
         vector<MessageProto>::iterator i;
         for (i = undelivered_messages_[*new_connection_channel_].begin();
              i != undelivered_messages_[*new_connection_channel_].end(); ++i) {
+			LOG(-1, " undlivered msg to "<<i->destination_channel());
           Send(*i);
         }
         undelivered_messages_.erase(*new_connection_channel_);
@@ -243,6 +244,7 @@ void ConnectionMultiplexer::Run() {
          for (i = undelivered_messages_[message.channel_request()].begin();
               i != undelivered_messages_[message.channel_request()].end();
               ++i) {
+			LOG(-1, " undlivered msg to "<<i->destination_channel());
            Send(*i);
          }
          undelivered_messages_.erase(message.channel_request());
