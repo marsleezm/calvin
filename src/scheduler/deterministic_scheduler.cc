@@ -240,28 +240,31 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     MyTuple<int, int64, MessageProto> buffered_m;
 
     while (!terminated_) {
-	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-            int s = buffered_msgs.size()-1;
-			while(s >=0 or locker_queue->Pop(&message)){
-                s -= 1;
-				int i = 0;
+	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or buffered_msgs.size() or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
+			int msg_to_visit = buffered_msgs.size()-1;
+			while(msg_to_visit >=0 or locker_queue->Pop(&message)){
+            	int msg_idx = 0;
               	int64 remote_global_id, base_local, local_txn_id, remote_local, base_remote_local;
-				if (buffered_msgs.size()){
+				if (msg_to_visit >= 0){
                     buffered_m = buffered_msgs[0];
 					buffered_msgs.erase(buffered_msgs.begin());
-                    i = buffered_m.first;
+                    msg_idx = buffered_m.first;
                     base_local = buffered_m.second;
                     message = buffered_m.third;
+              	    remote_global_id = message.tx_id();
                     base_remote_local = message.tx_local();
+					--msg_to_visit;
 				}
                 else{
               	    remote_global_id = message.tx_id();
                     base_remote_local= message.tx_local();
                     base_local=-1;
                 }
-                if (remote_global_id < comm_g_id_)
+                if (remote_global_id < comm_g_id_){
+					LOG(remote_global_id, " is filtered");
                     continue;
-				AGGRLOG(remote_global_id, " locker msg:"<<message.source_node()<<", size:"<<message.received_num_aborted_size()<<", na is "<<message.num_aborted());
+				}
+				AGGRLOG(remote_global_id, " locker msg:"<<message.source_node()<<", size:"<<message.received_num_aborted_size()<<", na is "<<message.num_aborted()<<", bufersize is "<<buffered_msgs.size());
 			  	if(message.num_aborted() != -1){
 					int j = 0;
 					while(j < sc_array_size and scheduler->sc_txn_list[(j+num_lc_txns_)%sc_array_size].third != remote_global_id)
@@ -269,6 +272,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					if(j == sc_array_size){
 						AGGRLOG(remote_global_id, " not yet started, buffering");
 						buffered_msgs.push_back(MyTuple<int, int64, MessageProto>(0, -1, message));
+						remote_global_id = -1;
                         continue;
 					}
 					base_local = j+num_lc_txns_;
@@ -278,9 +282,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                     message.set_num_aborted(-1);
 			  	}
 				if (base_local == -1){
-					if (scheduler->TryToFindId(message, i, base_local, remote_global_id, base_remote_local, num_lc_txns_) == false){
+					if (scheduler->TryToFindId(message, msg_idx, base_local, remote_global_id, base_remote_local, num_lc_txns_) == false){
                         buffered_msgs.push_back(MyTuple<int, int64, MessageProto>(0, -1, message));
-						AGGRLOG(remote_global_id, " did not find id"); 
+						AGGRLOG(remote_global_id, " did not find id, msg to visit"<<msg_to_visit); 
 						continue;
 					}
 				}
@@ -299,24 +303,24 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                         }
                     }
                 }
-				while(i < message.received_num_aborted_size()){
-				  	remote_local = message.received_num_aborted(i); 
-                    ++i;
-					remote_global_id = message.received_num_aborted(i); 
-					++i;
+				while(msg_idx < message.received_num_aborted_size()){
+				  	remote_local = message.received_num_aborted(msg_idx); 
+                    ++msg_idx;
+					remote_global_id = message.received_num_aborted(msg_idx); 
+					++msg_idx;
                     if(remote_global_id < comm_g_id_){
-                        i += message.received_num_aborted(i)+1;
+                        msg_idx += message.received_num_aborted(msg_idx)+1;
                     }
                     else{
                         local_txn_id = base_local+remote_local-base_remote_local; 
                         StorageManager* manager = scheduler->sc_txn_list[local_txn_id % sc_array_size].fourth;
                         if(manager and manager->txn_->txn_id() == remote_global_id){
-                            AGGRLOG(local_txn_id,  " trying to add SC, i is "<<i<<", global id:"<<remote_global_id<<", mgr id:"<<manager->txn_->txn_id());
-                            manager->AddSC(message, i);
+                            AGGRLOG(local_txn_id,  " trying to add SC, i is "<<msg_idx<<", global id:"<<remote_global_id<<", mgr id:"<<manager->txn_->txn_id());
+                            manager->AddSC(message, msg_idx);
                         }
                         else{
-                            buffered_msgs.push_back(MyTuple<int, int64, MessageProto>(i-2, base_local, message));
-                            break;
+                            buffered_msgs.push_back(MyTuple<int, int64, MessageProto>(msg_idx-2, base_local, message));
+							break;
                         }
                     }
 				}
@@ -560,7 +564,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
-				  LOG(txn->txn_id(), " starting, local is "<<txn->local_txn_id()<<" putting into "<<txn->local_txn_id()%sc_array_size);
+				  LOG(txn->txn_id(), " starting, local is "<<txn->local_txn_id()<<" putting into "<<txn->local_txn_id()%sc_array_size<<", mp"<<txn->multipartition()<<", uncertain:"<<txn->uncertain());
 				  active_g_tids[txn->txn_id()] = manager;
 			  }
 			  else{

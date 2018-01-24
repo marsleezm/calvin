@@ -44,7 +44,6 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
 
-		num_unconfirmed_read = txn_->readers_size() - 1;
 
 		//string invnodes = "";
         for (int i = 0; i<txn_->readers_size(); ++i){
@@ -64,11 +63,13 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
             ca_list[i] = 0;
         }
 		if(writer_id == -1){
+			num_unconfirmed_read = txn_->readers_size();
 			ASSERT(txn_->uncertain() == true);
 			prev_unconfirmed = 0;
 			added_pc_size = 0;
 		}
 		else{
+			num_unconfirmed_read = txn_->readers_size() - 1;
 			prev_unconfirmed = writer_id;
 			if(writer_id == 0)
 				added_pc_size = 1;
@@ -107,7 +108,7 @@ bool StorageManager::SendSC(MessageProto* msg){
         for (int i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
             if (i != configuration_->this_node_id) {
                 msg->set_destination_node(i);
-                //LOG(txn_->txn_id(), " sent confirm to "<<txn_->writers(i)<<", dest channel is "<<msg->destination_channel());
+                LOG(txn_->txn_id(), " sent uncertain confirm to "<<i<<", dest channel is "<<msg->destination_channel());
                 connection_->Send1(*msg);
             }
         }
@@ -175,18 +176,19 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	tpcc_args ->ParseFromString(txn->arg());
     pthread_mutex_init(&lock, NULL);
 
-	num_unconfirmed_read = txn_->readers_size() - 1;
 	for (int i = 0; i<txn_->readers_size(); ++i){
 		recv_an.push_back(make_pair(txn_->readers(i), -1));
         if (txn_->readers(i) == configuration_->this_node_id)
             writer_id = configuration_->this_node_id;
     }
 	if(writer_id == -1){
+		num_unconfirmed_read = txn_->readers_size();
 		ASSERT(txn_->uncertain() == true);
 		prev_unconfirmed = 0;
 		added_pc_size = 0;
 	}
 	else{
+		num_unconfirmed_read = txn_->readers_size() - 1;
 		prev_unconfirmed = writer_id;
 		if(writer_id == 0)
 			added_pc_size = 1;
@@ -481,7 +483,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 	  // TODO: if the transaction has old data, should abort the transaction
 	  for (int i = 0; i < message.keys_size(); i++){
 		  remote_objects_[message.keys(i)] = message.values(i);
-		  LOG(StringToInt(message.destination_channel()), " adding "<<message.keys(i)); 
+		  //LOG(StringToInt(message.destination_channel()), " adding "<<message.keys(i)); 
 	  }
 	  for(uint i = 0; i<recv_an.size(); ++i){
 		  if(recv_an[i].first == source_node){
