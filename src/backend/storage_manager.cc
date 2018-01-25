@@ -34,6 +34,7 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	  txn_(txn), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), 
 	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
 	batch_number = txn->batch_number();
+	tpcc_args = new TPCCArgs();
 	if (txn->multipartition()){
 		connection->LinkChannel(IntToString(txn->txn_id()));
 
@@ -48,7 +49,6 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
             message_->set_destination_channel(IntToString(txn_->txn_id()));
             message_->set_type(MessageProto::READ_RESULT);
             message_->set_source_node(configuration_->this_node_id);
-            tpcc_args = new TPCCArgs();
             tpcc_args ->ParseFromString(txn->arg());
             pthread_mutex_init(&lock, NULL);
             sc_list = new int[txn_->readers_size()];
