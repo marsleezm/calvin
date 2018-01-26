@@ -117,6 +117,7 @@ class TClient : public Client {
   }
   virtual ~TClient() {}
   virtual void SetRemote(int64& involved_nodes, bool& uncertain){
+	LOG(-1, " trying to get remote");
     int if_uncertain = rand() % 100;
     if (if_uncertain < uncertain_percent)
 		uncertain = true;
@@ -126,6 +127,7 @@ class TClient : public Client {
 	involved_nodes = involved_nodes | (1 << config_->this_node_id);
 	do {
 		remote_node = rand() % config_->all_nodes.size();
+		LOG(-1, " remote is "<<remote_node);
 	} while (config_->all_nodes.size() > 1 &&
 			  remote_node == config_->this_node_id);
 	involved_nodes = involved_nodes | (1 << remote_node);

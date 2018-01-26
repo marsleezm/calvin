@@ -192,11 +192,14 @@ void Sequencer::RunWriter() {
 #endif
 
   // Synchronization loadgen start with other sequencers.
+   LOG(-1, " before synchronizing");
   MessageProto synchronization_message;
   synchronization_message.set_type(MessageProto::EMPTY);
   synchronization_message.set_destination_channel("sequencer");
   for (uint32 i = 0; i < configuration_->all_nodes.size(); i++) {
+    synchronization_message.set_source_node(configuration_->this_node_id);
     synchronization_message.set_destination_node(i);
+   LOG(-1, " sending to "<<i);
     if (i != static_cast<uint32>(configuration_->this_node_id))
       connection_->Send(synchronization_message);
   }
@@ -204,10 +207,12 @@ void Sequencer::RunWriter() {
   while (synchronization_counter < configuration_->all_nodes.size()) {
     synchronization_message.Clear();
     if (connection_->GetMessage(&synchronization_message)) {
+   	LOG(-1, " got msg from "<<synchronization_message.source_node());
       ASSERT(synchronization_message.type() == MessageProto::EMPTY);
       synchronization_counter++;
     }
   }
+   LOG(-1, " after synchronizing");
   started = true;
 
   // Set up batch messages for each system node.
@@ -565,7 +570,7 @@ void* Sequencer::FetchMessage() {
 			  txn->ParseFromString(batch_message->data(i));
 			  txn->set_local_txn_id(fetched_txn_num_++);
 			  txns_queue_->Push(txn);
-			  //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", inv:"<<txn->involved_nodes());
+			  LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", inv:"<<txn->involved_nodes());
 			  ++num_fetched_this_round;
 		  }
 		  delete batch_message;

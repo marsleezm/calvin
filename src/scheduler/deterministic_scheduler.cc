@@ -242,7 +242,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     while (!terminated_) {
 	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
 			int check_buffer = buffered_msgs.size()-1;
-            LOG(-1, "here, buffer size is "<<check_buffer);
 			while(check_buffer >=0 or locker_queue->Pop(&message)){
 				if (check_buffer >=0){
 					message = buffered_msgs[0];
@@ -303,7 +302,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		    // Try to commit txns one by one
             int tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
 		    MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
-            int involved_nodes = 0, batch_number = 0;
+           	int involved_nodes=-1, batch_number = -1;
             MessageProto* msg_to_send = NULL;
             StorageManager* mgr, *first_mgr=NULL;
 
@@ -319,10 +318,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						did_something = true;
 						if(result == CAN_ADD){
 							LOG(first_tx.first, " OK, gid:"<<first_tx.third);
-							if ((involved_nodes == 0 or involved_nodes == first_tx.fourth->txn_->involved_nodes()) and (batch_number==0 or first_tx.fourth->batch_number-batch_number==0)){
+							if (batch_number == -1 or (involved_nodes == first_tx.fourth->txn_->involved_nodes() and first_tx.fourth->txn_->batch_number()-batch_number==0)){
 								INIT_MSG(msg_to_send, this_node);
 								if (mgr->TryAddSC(msg_to_send, record_abort_bit, num_lc_txns_)){ 
-                                    LOG(first_tx.first, " added confirm, aborted_tx size is "<<mgr->aborted_txs->size());
+                                    LOG(first_tx.first, " added confirm, aborted_tx size is "<<mgr->aborted_txs->size()<<", my batch "<<first_tx.fourth->txn_->batch_number()<<", nlc batch "<<batch_number<<", nlc "<<num_lc_txns_);
                                     if(first_mgr == NULL)
                                         first_mgr = mgr;
 								    involved_nodes = first_tx.fourth->txn_->involved_nodes();
@@ -341,7 +340,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 								}
 							}
 							else{
-								LOG(-1, " stop as involved node changed from "<< involved_nodes<<" to "<<first_tx.fourth->txn_->involved_nodes());
+								LOG(-1, " stop as involved node changed from "<< scheduler->sc_txn_list[num_lc_txns_%sc_array_size].fourth->txn_->involved_nodes()<<" to "<<first_tx.fourth->txn_->involved_nodes());
 								if (first_mgr){
                                     first_mgr->SendSC(msg_to_send);
 									delete msg_to_send;
@@ -350,11 +349,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                                 break;
 							}
 						}
+
 						// If can commit
 						if(first_tx.first == num_lc_txns_ and mgr->CanSCToCommit() == SUCCESS){
 							if((mgr->txn_->multipartition() and mgr->writer_id != -1) and mgr->last_add_pc == -1 and mgr->has_confirmed == false){
 								INIT_MSG(msg_to_send, this_node); 
-								involved_nodes = mgr->txn_->involved_nodes();
+								//involved_nodes = mgr->txn_->involved_nodes();
 								if (first_mgr == NULL)
 									first_mgr = mgr;
 								ASSERT(mgr->TryAddSC(msg_to_send, NO_CHECK, num_lc_txns_) == true);

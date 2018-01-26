@@ -391,7 +391,6 @@ class StorageManager {
   int last_add_pc = -1;
   int writer_id = -1;
   bool finalized = false;
-  int batch_number = 2147483647;
   atomic<int32> abort_bit_;
   int num_aborted_;
   atomic<int32> local_aborted_;
