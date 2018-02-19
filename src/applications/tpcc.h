@@ -43,9 +43,9 @@ class TPCC : public Application {
 	INITIALIZE = 0,
 	NEW_ORDER = 1,
 	PAYMENT = 2,
-	ORDER_STATUS = 3,
 	DELIVERY = 4,
-	STOCK_LEVEL = 5,
+	ORDER_STATUS = 16,
+	STOCK_LEVEL = 17,
 	};
 
   virtual ~TPCC() {}

@@ -527,7 +527,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	  // Try to start a new transaction
 	  else if (latest_started_tx - num_lc_txns_ < max_sc){ // && scheduler->num_suspend[thread]<=max_suspend) {
 		  //LOG(-1, " trying to get, lastest is "<<latest_started_tx<<", num_lc_txns_ is "<<num_lc_txns_<<", diff is "<<latest_started_tx-num_lc_txns_);
-		  //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
 		  bool got_it;
 		  //TxnProto* txn = scheduler->GetTxn(got_it, thread);
 		  TxnProto* txn;
@@ -537,7 +536,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 		  if (got_it == true) {
 			  txn->set_start_time(GetUTime());
-			  //LOG(txn->txn_id(), " starting, local "<<txn->local_txn_id()<<", latest is ");
+			  LOG(txn->txn_id(), " starting, local "<<txn->local_txn_id()<<", latest is ");
 			  if(latest_started_tx < txn->local_txn_id())
 			  	  latest_started_tx = txn->local_txn_id();
               while (local_sc_txns[txn->local_txn_id()%sc_array_size].first != NO_TXN){

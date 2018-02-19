@@ -230,6 +230,7 @@ void Sequencer::RunWriter() {
        !deconstructor_invoked_;
        batch_number += configuration_->all_nodes.size()) {
     // Begin epoch.
+    LOG(-1, " in for loop");
     double epoch_start = GetTime();
     batch.set_batch_number(batch_number);
     batch.clear_data();
@@ -244,9 +245,12 @@ void Sequencer::RunWriter() {
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
+        LOG(-1, " in while loop");
       if (txn_id_offset < max_batch_size) {
         TxnProto* txn;
+        LOG(batch_number, " before "<<txn->txn_id());
         client_->GetTxn(&txn, 0, GetUTime());
+        LOG(batch_number, " adding "<<txn->txn_id());
 		txn->set_batch_number(batch_number);
         if(txn->txn_id() == -1) {
           delete txn;

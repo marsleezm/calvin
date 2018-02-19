@@ -61,13 +61,13 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
 }
 
 // Create a non-dependent single-partition transaction
-TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
+TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part, int readonly_mask) {
   // Create the new transaction object
   TxnProto* txn = new TxnProto();
 
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
-  txn->set_txn_type(MICROTXN_SP);
+  txn->set_txn_type(MICROTXN_SP|readonly_mask);
 
   txn->add_readers(part);
   txn->add_writers(part);
@@ -77,13 +77,13 @@ TxnProto* Microbenchmark::MicroTxnSP(int64 txn_id, int part) {
 
 // Create a dependent single-partition transaction
 // Read&update five index keys. Then read and update five other keys according to this index.
-TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
+TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part, int readonly_mask) {
   // Create the new transaction object
   TxnProto* txn = new TxnProto();
 
   // Set the transaction's standard attributes
   txn->set_txn_id(txn_id);
-  txn->set_txn_type(MICROTXN_DEP_SP);
+  txn->set_txn_type(MICROTXN_DEP_SP|readonly_mask);
 
   txn->add_readers(part);
   txn->add_writers(part);
@@ -92,14 +92,14 @@ TxnProto* Microbenchmark::MicroTxnDependentSP(int64 txn_id, int part) {
 }
 
 // Create a non-dependent multi-partition transaction
-TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
+TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts, int readonly_mask) {
 	// assert(part1 != part2 || nparts == 1);
 	// Create the new transaction object
 	TxnProto* txn = new TxnProto();
 
 	// Set the transaction's standard attributes
 	txn->set_txn_id(txn_id);
-	txn->set_txn_type(MICROTXN_MP);
+	txn->set_txn_type(MICROTXN_MP|readonly_mask);
 
 	for(int i = 0; i < num_parts; ++i){
 		txn->add_readers(parts[i]);
@@ -110,20 +110,19 @@ TxnProto* Microbenchmark::MicroTxnMP(int64 txn_id, int* parts, int num_parts) {
 }
 
 // Create a non-dependent multi-partition transaction
-TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts) {
+TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts, int readonly_mask) {
 	//assert(part1 != part2 || nparts == 1);
 	// Create the new transaction object
 	TxnProto* txn = new TxnProto();
 
 	// Set the transaction's standard attributes
 	txn->set_txn_id(txn_id);
-	txn->set_txn_type(MICROTXN_DEP_MP);
+	txn->set_txn_type(MICROTXN_DEP_MP|readonly_mask);
 
 	for(int i = 0; i < num_parts; ++i){
 		txn->add_readers(parts[i]);
 		txn->add_writers(parts[i]);
 	}
-
 
 	return txn;
 }
@@ -272,9 +271,32 @@ void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, T
 }
 
 int Microbenchmark::ExecuteReadOnly(StorageManager* storage) const{
-	LOG(-1, " micro has no read-only transaction!");
-	ASSERT(1 == 2);
-	return 1;
+	TxnProto* txn = storage->get_txn();
+    LOG(txn->txn_id(), " executing read-only");
+	storage->Init();
+
+    Rand rand;
+    rand.seed(txn->seed());
+    GetKeys(txn, &rand);
+
+	if(txn->txn_type() & DEPENDENT_MASK){
+        Value* val;
+		for (int i = 0; i < indexAccessNum; i++) {
+            LOG(txn->txn_id(), " reading index");
+			Key indexed_key;
+            val = storage->SafeRead(txn->read_write_set(i), false);
+            val = storage->SafeRead(*val, false);
+		}
+		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++)
+            val = storage->SafeRead(txn->read_write_set(i+indexAccessNum), false);
+        LOG(txn->txn_id(), " done");
+		return SUCCESS;
+	}
+	else{
+		for (int i = 0; i < txn->read_write_set_size(); i++)
+            storage->SafeRead(txn->read_write_set(i), false);
+		return SUCCESS;
+	}
 }
 
 int Microbenchmark::Execute(StorageManager* storage) const {
@@ -286,31 +308,20 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 	storage->Init();
 
 	if(txn->txn_type() & DEPENDENT_MASK){
-		//LOCKLOG(txn->txn_id(), " transactions is dependent!");
-		if (storage->ShouldExec())
-		{
-			Rand rand;
-			rand.seed(txn->seed());
-			GetKeys(txn, &rand);
-//			string rw = "";
-//			for(int i=0; i<txn->read_write_set_size(); ++i)
-//				rw += txn->read_write_set(i) +" ";
-//			std::cout<<txn->txn_id()<<", the seed is "<<txn->seed()<<", rw is "<<rw<<std::endl;
-		}
-
+        if (storage->ShouldExec())
+        {
+            Rand rand;
+            rand.seed(txn->seed());
+            GetKeys(txn, &rand);
+        }
 		for (int i = 0; i < indexAccessNum; i++) {
 			Value* index_val, *next_val;
 			Key indexed_key;
 			if(storage->ShouldRead()){
-				//if(StringToInt(txn->read_write_set(i)) < 0 )
-				//	std::cout<<" something is wrong! "<<txn->read_write_set(i)<<std::endl;
 				index_val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL){
 					indexed_key = *index_val;
-					//LOG(txn->txn_id(), " indexed_key for "<<txn->read_write_set(i)<<", addr is "<<reinterpret_cast<int64>(index_val)<<", v is "<<indexed_key);
 					tpcc_args->add_indexed_keys(indexed_key);
-					//if(StringToInt(indexed_key) < 0 )
-					//	std::cout<<" indexed is wrong! "<<indexed_key<<std::endl;
 					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
 				}
 				else
@@ -318,7 +329,6 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 			}
 			else{
 				indexed_key = tpcc_args->indexed_keys(i);
-				//LOG(txn->txn_id(), " getting key "<<txn->read_write_set(i)<<" which is "<<indexed_key);
 			}
 
 			if(storage->ShouldRead()){
@@ -342,17 +352,12 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 		return SUCCESS;
 	}
 	else{
-		if (storage->ShouldExec())
-		{
-			Rand rand;
-			rand.seed(txn->seed());
-			GetKeys(txn, &rand);
-//			string rw = "";
-//			for(int i=0; i<txn->read_write_set_size(); ++i)
-//				rw += txn->read_write_set(i) +" ";
-//			LOG(txn->txn_id(), ", the seed is "<<txn->seed()<<", rw is "<<rw);
-		}
-
+        if (storage->ShouldExec())
+        {
+            Rand rand;
+            rand.seed(txn->seed());
+            GetKeys(txn, &rand);
+        }
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			if(storage->ShouldRead()){
 				//LOG(txn->txn_id(), " trying to read "<<txn->read_write_set(i));

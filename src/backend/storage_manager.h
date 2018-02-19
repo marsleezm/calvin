@@ -132,7 +132,7 @@ class StorageManager {
 	  return actual_storage_->SafeRead(key, txn_->local_txn_id(), new_object).second;
   }
 
-  bool ReadOnly(){ return txn_->txn_type() == TPCC::ORDER_STATUS || txn_->txn_type() == TPCC::STOCK_LEVEL; };
+  bool ReadOnly(){ return txn_->txn_type()&READONLY_MASK; };
 
   // Some transactions may have this kind of behavior: read a value, if some condition is satisfied, update the
   // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,

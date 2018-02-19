@@ -31,6 +31,7 @@ using tr1::unordered_map;
 
 
 #define DEPENDENT_MASK 8
+#define READONLY_MASK 16
 
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 10000

@@ -42,10 +42,12 @@ int uncertain_percent;
 // Microbenchmark load generation client.
 class MClient : public Client {
  public:
-  MClient(Configuration* config, double mp)
+  MClient(Configuration* config, double mp, double update)
       : microbenchmark(config->all_nodes.size(), config->this_node_id), config_(config),
-        percent_mp_(mp*100) {
-			parts = new int[multi_txn_num_parts];
+        percent_mp_(mp*100), percent_update_(update) {
+        parts = new int[multi_txn_num_parts];
+        if(percent_update_!=100)
+            assert(percent_mp_==0);    
   }
   virtual ~MClient() { delete[] parts;}
   virtual void SetRemote(int64& involved_nodes, bool& uncertain){
@@ -57,7 +59,7 @@ class MClient : public Client {
 	  involved_nodes = involved_nodes | (1 << config_->this_node_id);
 	  parts[0] = config_->this_node_id;
 	  int counter = 1;
-	  while (counter != multi_txn_num_parts){
+	  while ((int)config_->all_nodes.size() >= multi_txn_num_parts and counter != multi_txn_num_parts){
 		  int new_part = abs(rand()) %  config_->all_nodes.size(), i = 0;
 		  for(i =0; i< counter; ++i){
 			  if(parts[i] == new_part){
@@ -71,36 +73,40 @@ class MClient : public Client {
 		  }
 	  }
   }  
-  virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
-	  srand(seed);
+    virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
+	    srand(seed);
+        int read_only_mask = 0;
+        if(rand()%100 >= percent_update_){
+            read_only_mask = READONLY_MASK;
+        }
 
-	  if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
-		  // Multipartition txn.
-		  if (abs(rand())%10000 < 100*dependent_percent)
-			  *txn = microbenchmark.MicroTxnDependentMP(txn_id, parts, multi_txn_num_parts);
-		  else
-			  *txn = microbenchmark.MicroTxnMP(txn_id, parts, multi_txn_num_parts);
+	    if (config_->all_nodes.size() > 1 && abs(rand())%10000 < percent_mp_) {
+		    // Multipartition txn.
+		    if (abs(rand())%10000 < 100*dependent_percent)
+			    *txn = microbenchmark.MicroTxnDependentMP(txn_id, parts, multi_txn_num_parts, read_only_mask);
+		    else
+			    *txn = microbenchmark.MicroTxnMP(txn_id, parts, multi_txn_num_parts, read_only_mask);
 
-		  (*txn)->set_multipartition(true);
-	  } else {
-		  // Single-partition txn.
-		  if (abs(rand())%10000 < 100*dependent_percent)
-			  *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id);
-		  else
-			  *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id);
+		    (*txn)->set_multipartition(true);
+	    } else {
+		    // Single-partition txn.
+		    if (abs(rand())%10000 < 100*dependent_percent)
+			    *txn = microbenchmark.MicroTxnDependentSP(txn_id, config_->this_node_id, read_only_mask);
+		    else
+			    *txn = microbenchmark.MicroTxnSP(txn_id, config_->this_node_id, read_only_mask);
 
-		  (*txn)->set_multipartition(false);
-	  }
+		    (*txn)->set_multipartition(false);
+	    }
+        (*txn)->set_seed(seed);
 		//LOG((*txn)->txn_id(), " the time is "<<GetUTime());
-	  (*txn)->set_seed(seed);
-	  //LOG((*txn)->txn_id(), " the seed is "<<(*txn)->seed());
-  }
+    }
 
  private:
-  Microbenchmark microbenchmark;
-  Configuration* config_;
-  double percent_mp_;
+    Microbenchmark microbenchmark;
+    Configuration* config_;
+    double percent_mp_;
     int* parts;
+    int percent_update_;
 };
 
 // TPCC load generation client.
@@ -238,7 +244,7 @@ int main(int argc, char** argv) {
 
 	// Artificial loadgen clients.
 	Client* client = (argv[2][0] == 'm') ?
-			reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()))) :
+			reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str()))) :
 			reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str())));
 
 	// #ifdef PAXOS

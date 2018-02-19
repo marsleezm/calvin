@@ -38,10 +38,10 @@ class Microbenchmark : public Application {
   virtual int ExecuteReadOnly(StorageManager* storage) const;
 
   TxnProto* InitializeTxn();
-  TxnProto* MicroTxnSP(int64 txn_id, int part);
-  TxnProto* MicroTxnMP(int64 txn_id, int* parts, int num_parts);
-  TxnProto* MicroTxnDependentSP(int64 txn_id, int part);
-  TxnProto* MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts);
+  TxnProto* MicroTxnSP(int64 txn_id, int part, int readonly_mask);
+  TxnProto* MicroTxnMP(int64 txn_id, int* parts, int num_parts, int readonly_mask);
+  TxnProto* MicroTxnDependentSP(int64 txn_id, int part, int readonly_mask);
+  TxnProto* MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts, int readonly_mask);
 
   int nparts;
   int hot_records = atoi(ConfigReader::Value("index_size").c_str());
