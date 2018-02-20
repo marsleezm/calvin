@@ -29,6 +29,7 @@ message MessageProto {
     MESSAGE_PTR = 7;
     READ_CONFIRM = 8;
     MULTI_READ_CONFIRM = 9;
+	FINALIZE_UNCERTAIN = 10;
   };
   required MessageType type = 9;
 

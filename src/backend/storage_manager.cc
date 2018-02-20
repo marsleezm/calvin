@@ -6,6 +6,7 @@
 #include <ucontext.h>
 
 #include "backend/storage.h"
+#include "applications/microbenchmark.h"
 #include "sequencer/sequencer.h"
 #include "common/utils.h"
 #include "applications/application.h"
@@ -34,39 +35,43 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
 	tpcc_args = new TPCCArgs();
 	tpcc_args ->ParseFromString(txn->arg());
-	batch_number = txn->batch_number();
 	if (txn->multipartition()){
-		message_ = new MessageProto();
-		message_->set_source_channel(txn->txn_id());
-		message_->set_destination_channel(IntToString(txn_->txn_id()));
-		message_->set_type(MessageProto::READ_RESULT);
-		message_->set_source_node(configuration_->this_node_id);
 		connection->LinkChannel(IntToString(txn->txn_id()));
-
-        num_unconfirmed_read = txn_->readers_size() - 1;
 
         for (int i = 0; i<txn_->readers_size(); ++i){
             recv_an.push_back(make_pair(txn_->readers(i), -1));
-            involved_nodes = involved_nodes | (1 << txn_->readers(i));
-            //invnodes += IntToString(txn_->readers(i));
-            //LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
             if (txn_->readers(i) == configuration_->this_node_id)
                 writer_id = i; 
         }
-        pthread_mutex_init(&lock, NULL);
-        sc_list = new int[txn_->readers_size()];
-        ca_list = new int[txn_->readers_size()];
-        recv_lan = new int[txn_->readers_size()];
-        for(int i = 0; i< txn_->readers_size(); ++i){
-            sc_list[i] = -1;
-            ca_list[i] = 0;
+        if(writer_id != -1 ){
+            message_ = new MessageProto();
+            message_->set_source_channel(txn->txn_id());
+            message_->set_destination_channel(IntToString(txn_->txn_id()));
+            message_->set_type(MessageProto::READ_RESULT);
+            message_->set_source_node(configuration_->this_node_id);
+            pthread_mutex_init(&lock, NULL);
+            sc_list = new int[txn_->readers_size()];
+            ca_list = new int[txn_->readers_size()];
+            recv_lan = new int[txn_->readers_size()];
+            for(int i = 0; i< txn_->readers_size(); ++i){
+                sc_list[i] = -1;
+                ca_list[i] = 0;
+            }
+            num_unconfirmed_read = txn_->readers_size() - 1;
+            prev_unconfirmed = writer_id;
+            if(writer_id == 0)
+                added_pc_size = 1;
+            recv_an[writer_id].second = abort_bit_;
+            sc_list[writer_id] = abort_bit_;
+            aborted_txs = new vector<int64_t>();
         }
-        prev_unconfirmed = writer_id;
-        if(writer_id == 0)
-            added_pc_size = 1;
-        recv_an[writer_id].second = abort_bit_;
-        sc_list[writer_id] = abort_bit_;
-        aborted_txs = new vector<int64_t>();
+        else{
+            aborted_txs = NULL;
+            message_ = NULL;
+            sc_list = NULL;
+            ca_list = NULL;
+            recv_lan = NULL;
+        }
 	}
 	else{
         aborted_txs = NULL;
@@ -114,19 +119,19 @@ void StorageManager::SendCA(MyFour<int64_t, int64_t, int64_t, StorageManager*>* 
     msg.set_destination_channel("locker");
     for(uint i = 0; i < aborted_txs->size(); ++i){
         MyFour<int64_t, int64_t, int64_t, StorageManager*> tx= sc_txn_list[aborted_txs->at(i)%sc_array_size];
-        if (tx.fourth->involved_nodes == involved_nodes){
+        if (tx.fourth->txn_->involved_nodes() == txn_->involved_nodes()){
             msg.add_ca_tx(tx.first);
             msg.add_ca_tx(tx.third);
             msg.add_ca_num(tx.fourth->local_aborted_);
             LOG(txn_->txn_id(), txn_->local_txn_id()<<" CA: adding "<<tx.third<<", "<<tx.fourth->local_aborted_);
         }
     }
-    for (int i = 0; i < txn_->writers_size(); ++i) {
-        if (txn_->writers(i) != configuration_->this_node_id) {
-            msg.set_destination_node(txn_->writers(i));
-            connection_->Send1(msg);
-        }
-    }
+	for (int i = 0; i < txn_->writers_size(); ++i) {
+		if (txn_->writers(i) != configuration_->this_node_id) {
+			msg.set_destination_node(txn_->writers(i));
+			connection_->Send1(msg);
+		}
+	}
 }
 
 void StorageManager::SetupTxn(TxnProto* txn){
@@ -134,38 +139,45 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn->multipartition());
 
 	txn_ = txn;
-	batch_number = txn->batch_number();
-	message_ = new MessageProto();
-	message_->set_source_channel(txn->txn_id());
-	message_->set_source_node(configuration_->this_node_id);
-	message_->set_destination_channel(IntToString(txn_->txn_id()));
-	message_->set_type(MessageProto::READ_RESULT);
-	connection_->LinkChannel(IntToString(txn_->txn_id()));
 	tpcc_args ->ParseFromString(txn->arg());
-    pthread_mutex_init(&lock, NULL);
-
-	num_unconfirmed_read = txn_->readers_size() - 1;
 	for (int i = 0; i<txn_->readers_size(); ++i){
 		recv_an.push_back(make_pair(txn_->readers(i), -1));
-        involved_nodes = involved_nodes | (1 << txn_->readers(i));
-        //invnodes += IntToString(txn_->readers(i));
-        //LOG(txn_->txn_id(), " inv is "<<involved_nodes<<", strinv "<<invnodes);
         if (txn_->readers(i) == configuration_->this_node_id)
             writer_id = configuration_->this_node_id;
     }
-    if(writer_id == 0)
-        added_pc_size = 1;
-    aborted_txs = new vector<int64_t>();
-    prev_unconfirmed = writer_id;
-    sc_list = new int[txn_->readers_size()];
-    ca_list = new int[txn_->readers_size()];
-    recv_lan = new int[txn_->readers_size()];
-    for(int i = 0; i< txn_->readers_size(); ++i){
-        sc_list[i] = -1;
-        ca_list[i] = 0;
+
+	if(writer_id != -1){
+        message_ = new MessageProto();
+        message_->set_source_channel(txn->txn_id());
+        message_->set_source_node(configuration_->this_node_id);
+        message_->set_destination_channel(IntToString(txn_->txn_id()));
+        message_->set_type(MessageProto::READ_RESULT);
+        connection_->LinkChannel(IntToString(txn_->txn_id()));
+        pthread_mutex_init(&lock, NULL);
+
+		num_unconfirmed_read = txn_->readers_size() - 1;
+		prev_unconfirmed = writer_id;
+		if(writer_id == 0)
+			added_pc_size = 1;
+		recv_an[writer_id].second = abort_bit_;
+		sc_list[writer_id] = abort_bit_;
+        aborted_txs = new vector<int64_t>();
+        prev_unconfirmed = writer_id;
+        sc_list = new int[txn_->readers_size()];
+        ca_list = new int[txn_->readers_size()];
+        recv_lan = new int[txn_->readers_size()];
+        for(int i = 0; i< txn_->readers_size(); ++i){
+            sc_list[i] = -1;
+            ca_list[i] = 0;
+        }
+	}
+    else{
+        aborted_txs = NULL;
+        message_ = NULL;
+        sc_list = NULL;
+        ca_list = NULL;
+        recv_lan = NULL;
     }
-    recv_an[writer_id].second = abort_bit_;
-    sc_list[writer_id] = abort_bit_;
 }
 
 void StorageManager::Abort(){
@@ -255,6 +267,7 @@ void StorageManager::AddPendingSC(){
   }
   pthread_mutex_unlock(&lock);
 }
+
 void StorageManager::AddSC(MessageProto& message, int& i){
     int size=message.received_num_aborted(i), final_index = i+size, j = i+1;
     LOG(txn_->txn_id(), " i:"<<i<<", size:"<<size);
@@ -285,9 +298,9 @@ void StorageManager::AddSC(MessageProto& message, int& i){
                 ++i;
         }
         if( i == final_index and message.received_num_aborted(i) >= recv_an[i-j].second){
-            if(size <= writer_id or (!aborting and message.received_num_aborted(j+writer_id) == abort_bit_)){
+            if(writer_id == -1 or size <= writer_id or (!aborting and message.received_num_aborted(j+writer_id) == abort_bit_)){
                 sc_list[size-1] = message.received_num_aborted(i);
-                LOG(txn_->txn_id(), i<<" setting "<<i-j<<" to "<<message.received_num_aborted(i));
+                LOG(txn_->txn_id(), i<<" setting "<<size-1<<" to "<<message.received_num_aborted(i));
                 ++added_pc_size;
                 if(added_pc_size == writer_id)
                     ++added_pc_size;
@@ -441,8 +454,10 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
   if (message.confirmed()){
       LOG(StringToInt(message.destination_channel()), " adding confirmed read, nunc:"<<num_unconfirmed_read<<", an:"<<message.num_aborted()<<", lan:"<<message.local_aborted());
 	  // TODO: if the transaction has old data, should abort the transaction
-	  for (int i = 0; i < message.keys_size(); i++)
+	  for (int i = 0; i < message.keys_size(); i++){
 		  remote_objects_[message.keys(i)] = message.values(i);
+		  //LOG(StringToInt(message.destination_channel()), " adding "<<message.keys(i)); 
+	  }
 	  for(uint i = 0; i<recv_an.size(); ++i){
 		  if(recv_an[i].first == source_node){
 			  // Mean this is the first time to receive read from this node
@@ -467,7 +482,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
                   if ( i < (uint)writer_id){
 					  abort_bit_ += 1;
                       aborting = true;
-                  	  --prev_unconfirmed;
+					  --prev_unconfirmed;
                   }
                   recv_an[i].second = message.num_aborted();
                   recv_lan[i] = message.local_aborted();
@@ -534,23 +549,38 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	if(has_confirmed==false and message_ and in_list==false){
-		LOG(txn_->txn_id(), " sending confirm when committing");
-        MessageProto msg;
-        msg.set_type(MessageProto::READ_CONFIRM);
-        msg.set_source_node(configuration_->this_node_id);
-        msg.set_num_aborted(abort_bit_);
-        msg.set_destination_channel(IntToString(txn_->txn_id()));
-        for (int i = 0; i < txn_->writers_size(); ++i) {
-            if (i != writer_id) {
-                msg.set_destination_node(txn_->writers(i));
-                connection_->Send1(msg);
-            }
-        }
-	}
+	LOG(txn_->txn_id(), " deleting");
 	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
-		//LOG(txn_->txn_id(), "Has message");
+		if(has_confirmed==false and in_list==false and writer_id != -1){
+			LOG(txn_->txn_id(), " sending confirm when committing");
+			MessageProto msg;
+			msg.set_type(MessageProto::READ_CONFIRM);
+			msg.set_source_node(configuration_->this_node_id);
+			msg.set_num_aborted(abort_bit_);
+			msg.set_destination_channel(IntToString(txn_->txn_id()));
+			for (int i = 0; i < txn_->writers_size(); ++i) {
+				if (i != writer_id) {
+					msg.set_destination_node(txn_->writers(i));
+					connection_->Send1(msg);
+				}
+			}
+		}
+		if(txn_->uncertain() and writer_id == 0){
+			LOG(txn_->txn_id(), "Uncertain txn and my id is 0");
+			MessageProto msg;
+			msg.set_type(MessageProto::FINALIZE_UNCERTAIN);
+			msg.set_source_node(configuration_->this_node_id);
+			msg.set_destination_channel(IntToString(txn_->txn_id()));
+			ASSERT(txn_->writers_size() == 2);
+            for (int32 i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
+                if (i != txn_->writers(0) and i != txn_->writers(1)) {
+					LOG(txn_->txn_id(), "sending finalize to "<<i);
+                    msg.set_destination_node(i);
+                    connection_->Send1(msg);
+                }
+			}
+		}
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
 
@@ -702,7 +732,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				LOG(txn_->txn_id(), "Does not have remote key: "<<key);
 				read_state = SPECIAL;
 				// The tranasction will perform the read again
-				if (message_->keys_size()){
+				if (message_ and message_->keys_size()){
 					//LOG(txn_->txn_id(), " blocked and sent.");
 					return reinterpret_cast<Value*>(SUSPEND_SHOULD_SEND);
 				}

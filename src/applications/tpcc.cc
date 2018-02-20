@@ -852,8 +852,7 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 	assert(district.ParseFromString(*val));
 	latest_order_number = district.next_order_id()-1;
 
-	//for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 20); i--) {
-	for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 1); i--) {
+	for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 20); i--) {
 		char order_key[128];
 		snprintf(order_key, sizeof(order_key),
 				  "%so%d", district_key.c_str(), i);

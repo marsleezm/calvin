@@ -69,6 +69,7 @@ class DeterministicScheduler : public Scheduler {
 
  public:
   static atomic<int64_t> num_lc_txns_;
+  static int64_t comm_g_id_;
   static int64_t can_gc_txns_;
   static atomic<int64_t> latest_started_tx;
 
@@ -141,6 +142,7 @@ class DeterministicScheduler : public Scheduler {
   int multi_parts;
   int max_sc;
   int sc_array_size;
+  priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
 
   pair<int64, int64>** latency;
   MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;

@@ -23,9 +23,6 @@
 #include "common/types.h"
 #include "common/logging.h"
 #include "proto/txn.pb.h"
-//#include "applications/application.h"
-//#include "applications/tpcc.h"
-//#include "proto/tpcc.pb.h"
 
 //class TPCC;
 //using std::string;
@@ -41,6 +38,7 @@ using tr1::unordered_map;
 #define U2R 1
 
 #define DEPENDENT_MASK 8
+#define READONLY_MASK 16
 
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 10000
@@ -426,34 +424,59 @@ class TxnQueue {
     Lock l(&front_mutex_);
     if (front_ != back_) {
       *result = queue_[front_];
-      front_ = (front_ + 1) % size_;
-      return true;
+	  front_ = (front_ + 1) % size_;
+	  return true;
     }
     return false;
   }
 
-  inline bool Pop(TxnProto** result, int& exec_state) {
-      if(exec_state == R2U or exec_state == U2R)
-          return false;
-      else{
-          Lock l(&front_mutex_);
-          if (front_ != back_) {
-            *result = queue_[front_];
-            front_ = (front_ + 1) % size_;
-            // ORDER_STATUS or STOCK_LEVEL
-            if( ((*result)->txn_type() == 3 or (*result)->txn_type() == 5)){
-                if (exec_state == UPDATING)
-                    exec_state = U2R; 
+    inline bool Pop(TxnProto** result, int64 num_lc_txns, int& exec_state) {
+        if(exec_state == R2U or exec_state == U2R)
+            return false;
+        else{
+            Lock l(&front_mutex_);
+            if (front_ != back_) {
+                *result = queue_[front_];
+                // ORDER_STATUS or STOCK_LEVEL
+                if( ((*result)->txn_type() & READONLY_MASK)){
+                    if (exec_state == UPDATING)
+                        exec_state = U2R; 
+                    front_ = (front_ + 1) % size_;
+                    return true;
+                }
+                else{
+                    if((*result)->involved_nodes() == involved_nodes){
+                        last_txn = (*result)->local_txn_id();
+                        front_ = (front_ + 1) % size_;
+                        if (exec_state == READING)
+                            exec_state = R2U; 
+                        return true;
+                    }
+                    else if ((*result)->involved_nodes() == 0){
+                        front_ = (front_ + 1) % size_;
+                        if (exec_state == READING)
+                            exec_state = R2U; 
+                        return true;
+                    }
+                    else{
+                        if(num_lc_txns > last_txn or last_txn == -1){
+                            involved_nodes = (*result)->involved_nodes();
+                            last_txn = (*result)->local_txn_id();
+                            front_ = (front_ + 1) % size_;
+                            if (exec_state == READING)
+                                exec_state = R2U; 
+                            return true;
+                        }
+                        else
+                            return false;
+                    }
+                }
             }
-            else{
-                if (exec_state == READING)
-                    exec_state = R2U; 
-            }
-            return true;
-         }
-         return false;
-      }
-  }
+            else
+                return false;
+        }
+        return false;
+    }
 
   // Sets *result equal to the front element and returns true, unless the
   // queue is empty, in which case does nothing and returns false.
@@ -476,6 +499,9 @@ class TxnQueue {
   uint32 size_;      // Allocated size of queue_, not number of elements.
   uint32 front_;     // Offset of first (oldest) element.
   uint32 back_;      // First offset following all elements.
+
+  int64 involved_nodes = 0;
+  int64 last_txn = -1;
 
   // Mutexes for synchronization.
   Mutex front_mutex_;

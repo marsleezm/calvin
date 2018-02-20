@@ -189,6 +189,7 @@ void ConnectionMultiplexer::Run() {
         vector<MessageProto>::iterator i;
         for (i = undelivered_messages_[*new_connection_channel_].begin();
              i != undelivered_messages_[*new_connection_channel_].end(); ++i) {
+			//LOG(-1, " undlivered msg to "<<i->destination_channel());
           Send(*i);
         }
         undelivered_messages_.erase(*new_connection_channel_);
@@ -243,6 +244,7 @@ void ConnectionMultiplexer::Run() {
          for (i = undelivered_messages_[message.channel_request()].begin();
               i != undelivered_messages_[message.channel_request()].end();
               ++i) {
+			//LOG(-1, " undlivered msg to "<<i->destination_channel());
            Send(*i);
          }
          undelivered_messages_.erase(message.channel_request());
@@ -265,7 +267,7 @@ void* ConnectionMultiplexer::RunMultiplexer(void *multiplexer) {
 
 void ConnectionMultiplexer::Send(const MessageProto& message) {
 
-  if (message.type() == MessageProto::READ_RESULT || message.type() == MessageProto::READ_CONFIRM) {
+  if (message.type() == MessageProto::READ_RESULT || message.type() == MessageProto::READ_CONFIRM || message.type() == MessageProto::FINALIZE_UNCERTAIN) {
     pthread_mutex_lock(&remote_result_mutex_);
     if (remote_result_.count(message.destination_channel()) > 0) {
     	remote_result_[message.destination_channel()]->Push(message);
@@ -352,6 +354,7 @@ void Connection::Send1(const MessageProto& message) {
                      DeleteString,
                      message_string);
    pthread_mutex_lock(&multiplexer()->send_mutex_[message.destination_node()]);                    
+    //LOG(-1, " sending msg to "<<message.destination_node());
   multiplexer()->remote_out_[message.destination_node()]->send(msg);
   pthread_mutex_unlock(&multiplexer()->send_mutex_[message.destination_node()]);
 }

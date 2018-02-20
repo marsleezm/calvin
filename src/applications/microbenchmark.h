@@ -38,10 +38,10 @@ class Microbenchmark : public Application {
   virtual int ExecuteReadOnly(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const;
 
   TxnProto* InitializeTxn();
-  TxnProto* MicroTxnSP(int64 txn_id, int part);
-  TxnProto* MicroTxnMP(int64 txn_id, int* parts, int num_parts);
-  TxnProto* MicroTxnDependentSP(int64 txn_id, int part);
-  TxnProto* MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts);
+  TxnProto* MicroTxnSP(int64 txn_id, int part, int readonly_mask);
+  TxnProto* MicroTxnMP(int64 txn_id, int* parts, int num_parts, int readonly_mask);
+  TxnProto* MicroTxnDependentSP(int64 txn_id, int part, int readonly_mask);
+  TxnProto* MicroTxnDependentMP(int64 txn_id, int* parts, int num_parts, int readonly_mask);
 
   int nparts;
   int hot_records = atoi(ConfigReader::Value("index_size").c_str());
@@ -56,6 +56,8 @@ class Microbenchmark : public Application {
 
  private:
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
+                     int key_limit, int part, Rand* rand) const;
+  void AccumulateRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part, Rand* rand) const;
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part) const;
