@@ -17,7 +17,7 @@
 using std::string;
 
 // ---- THIS IS A HACK TO MAKE ITEMS WORK ON LOCAL MACHINE ---- //
-unordered_map<Key, Value*> ItemList;
+std::tr1::unordered_map<Key, Value*> ItemList;
 Value* TPCC::GetItem(Key key) const             { return ItemList[key]; }
 void TPCC::SetItem(Key key, Value* value) const { ItemList[key] = value; }
 

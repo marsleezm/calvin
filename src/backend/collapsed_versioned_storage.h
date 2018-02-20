@@ -63,7 +63,7 @@ class CollapsedVersionedStorage : public VersionedStorage {
   // We make a simple mapping of keys to a map of "versions" of our value.
   // The int64 represents a simple transaction id and the Value associated with
   // it is whatever value was written out at that time.
-  unordered_map<Key, DataNode*> objects_;
+  tr1::unordered_map<Key, DataNode*> objects_;
 
   // The stable and frozen int64 represent which transaction ID's are stable
   // to write out to storage, and which should be the latest to be overwritten

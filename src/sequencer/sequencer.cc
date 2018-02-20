@@ -235,7 +235,7 @@ void Sequencer::RunWriter() {
     batch.clear_data();
 
     // Collect txn requests for this epoch.
-    unordered_map<int64, vector<TxnProto*>> txn_map;
+    tr1::unordered_map<int64, vector<TxnProto*>> txn_map;
     int txn_id_offset = 0;
     string txn_string;
 	int64 involved_nodes = 0;

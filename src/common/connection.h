@@ -84,25 +84,25 @@ class ConnectionMultiplexer {
 
   // Sockets for outgoing traffic to other nodes. Keyed by node_id.
   // Type = ZMQ_PUSH.
-  unordered_map<int, zmq::socket_t*> remote_out_;
+  tr1::unordered_map<int, zmq::socket_t*> remote_out_;
 
   // Socket listening for messages from Connections. Type = ZMQ_PULL.
   zmq::socket_t* inproc_in_;
 
   // Sockets for forwarding messages to Connections. Keyed by channel
   // name. Type = ZMQ_PUSH.
-  unordered_map<string, zmq::socket_t*> inproc_out_;
+  tr1::unordered_map<string, zmq::socket_t*> inproc_out_;
   
-  unordered_map<string, AtomicQueue<MessageProto>*> remote_result_;
+  tr1::unordered_map<string, AtomicQueue<MessageProto>*> remote_result_;
   
-  unordered_map<string, AtomicQueue<MessageProto>*> link_unlink_queue_;
+  tr1::unordered_map<string, AtomicQueue<MessageProto>*> link_unlink_queue_;
 
   // Stores messages addressed to local channels that do not exist at the time
   // the message is received (so that they may be delivered if a connection is
   // ever created with the specified channel name).
   //
   // TODO(alex): Prune this occasionally?
-  unordered_map<string, vector<MessageProto> > undelivered_messages_;
+  tr1::unordered_map<string, vector<MessageProto> > undelivered_messages_;
 
   // Protects concurrent calls to NewConnection().
   pthread_mutex_t new_connection_mutex_;

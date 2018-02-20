@@ -225,7 +225,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
     // Begin main loop.
     MessageProto message;
-    unordered_map<int64_t, StorageManager*> active_g_tids;
+    std::tr1::unordered_map<int64_t, StorageManager*> active_g_tids;
 
     queue<MyTuple<int64, int, StorageManager*>> retry_txns;
     int this_node = scheduler->configuration_->this_node_id;
@@ -625,7 +625,7 @@ bool DeterministicScheduler::TryToFindId(MessageProto& msg, int& i, int64& base_
 	return false;
 }
 
-bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*>& active_g_tids, int& latency_count){
+bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, std::tr1::unordered_map<int64_t, StorageManager*>& active_g_tids, int& latency_count){
 	TxnProto* txn = manager->get_txn();
 	// No need to resume if the txn is still suspended
     AGGRLOG(txn->txn_id(), " start executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id);

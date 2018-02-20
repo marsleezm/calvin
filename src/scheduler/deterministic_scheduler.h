@@ -89,7 +89,7 @@ class DeterministicScheduler : public Scheduler {
       }
   }
 
-  bool ExecuteTxn(StorageManager* manager, int thread, unordered_map<int64_t, StorageManager*>& active_txns, int& latency_count);
+  bool ExecuteTxn(StorageManager* manager, int thread, std::tr1::unordered_map<int64_t, StorageManager*>& active_txns, int& latency_count);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);

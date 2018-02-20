@@ -752,7 +752,7 @@ class AtomicMap {
 
   inline bool Lookup(const K& k, V* v) {
     ReadLock l(&mutex_);
-    typename unordered_map<K, V>::const_iterator lookup = map_.find(k);
+    typename tr1::unordered_map<K, V>::const_iterator lookup = map_.find(k);
     if (lookup == map_.end()) {
       return false;
     }
@@ -775,7 +775,7 @@ class AtomicMap {
   // was there already).
   inline V PutNoClobber(const K& k, const V& v) {
     WriteLock l(&mutex_);
-    typename unordered_map<K, V>::const_iterator lookup = map_.find(k);
+    typename tr1::unordered_map<K, V>::const_iterator lookup = map_.find(k);
     if (lookup != map_.end()) {
       return lookup->second;
     }
@@ -790,7 +790,7 @@ class AtomicMap {
 
   inline void DeleteVAndClear() {
     WriteLock l(&mutex_);
-    for (typename unordered_map<K, V>::iterator it = map_.begin();
+    for (typename tr1::unordered_map<K, V>::iterator it = map_.begin();
        it != map_.end(); ++it) {
       delete it->second;
     }
@@ -798,7 +798,7 @@ class AtomicMap {
   }
 
  private:
-  unordered_map<K, V> map_;
+  tr1::unordered_map<K, V> map_;
   MutexRW mutex_;
 
   // DISALLOW_COPY_AND_ASSIGN

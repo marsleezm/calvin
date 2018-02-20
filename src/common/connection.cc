@@ -84,26 +84,26 @@ ConnectionMultiplexer::~ConnectionMultiplexer() {
 
   // Close tcp sockets.
   delete remote_in_;
-  for (unordered_map<int, zmq::socket_t*>::iterator it = remote_out_.begin();
+  for (tr1::unordered_map<int, zmq::socket_t*>::iterator it = remote_out_.begin();
        it != remote_out_.end(); ++it) {
     delete it->second;
   }
 
   // Close inproc sockets.
   delete inproc_in_;
-  for (unordered_map<string, zmq::socket_t*>::iterator it = inproc_out_.begin();
+  for (tr1::unordered_map<string, zmq::socket_t*>::iterator it = inproc_out_.begin();
        it != inproc_out_.end(); ++it) {
     delete it->second;
   }
   
   string prefix = "scheduler";
-  for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = remote_result_.begin();
+  for (tr1::unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = remote_result_.begin();
        it != remote_result_.end(); ++it) {
 	  if(!it->first.compare(0, prefix.size(), prefix))
 		  delete it->second;
   }
   
-  for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
+  for (tr1::unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
        it != link_unlink_queue_.end(); ++it) {
     delete it->second;
   }
@@ -229,7 +229,7 @@ void ConnectionMultiplexer::Run() {
         Send(message);
     }
 
-   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
+   for (tr1::unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
         it != link_unlink_queue_.end(); ++it) {
       
      MessageProto message;

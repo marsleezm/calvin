@@ -6,11 +6,13 @@ mkdir ext
 cd ext
 
 #zookeeper
-wget http://apache.org/dist/zookeeper/zookeeper-3.4.6/zookeeper-3.4.6.tar.gz
-tar xzf zookeeper-3.4.6.tar.gz
-rm zookeeper-3.4.6.tar.gz
-mv zookeeper-3.4.6/src/c zookeeper
-rm -fr zookeeper-3.4.6
+if [ 1 == 2 ]
+then
+wget http://apache.org/dist/zookeeper/zookeeper-3.4.10/zookeeper-3.4.10.tar.gz
+tar xzf zookeeper-3.4.10.tar.gz
+rm zookeeper-3.4.10.tar.gz
+mv zookeeper-3.4.10/src/c zookeeper
+rm -fr zookeeper-3.4.10
 cd zookeeper
 ./configure --prefix=$PWD
 make -j6
@@ -25,7 +27,7 @@ make -j6
 cd ..
 
 # googletest
-wget http://pkgs.fedoraproject.org/repo/pkgs/gtest/gtest-1.6.0.zip/4577b49f2973c90bf9ba69aa8166b786/gtest-1.6.0.zip 
+wget https://src.fedoraproject.org/repo/pkgs/gtest/gtest-1.6.0.zip/md5/4577b49f2973c90bf9ba69aa8166b786/gtest-1.6.0.zip 
 unzip gtest-1.6.0.zip
 rm gtest-1.6.0.zip
 mv gtest-1.6.0 googletest
@@ -33,6 +35,7 @@ cd googletest
 ./configure --prefix=$PWD
 make -j6
 cd ..
+fi
 
 
 # zeromq

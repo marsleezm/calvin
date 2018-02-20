@@ -749,7 +749,7 @@ bool LockedVersionedStorage::DeleteObject(const Key& key, int64 txn_id) {
 //
 //  // Next we iterate through all of the objects and write the stable version
 //  // to disk
-//  unordered_map<Key, DataNode*>::iterator it;
+//  tr1::unordered_map<Key, DataNode*>::iterator it;
 //  for (it = objects_.begin(); it != objects_.end(); it++) {
 //    // Read in the stable value
 //    Key key = it->first;

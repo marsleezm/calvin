@@ -350,8 +350,8 @@ class StorageManager {
 
   // Local copy of all data objects read/written by 'txn_', populated at
   // TxnManager construction time.
-  unordered_map<Key, ValuePair> read_set_;
-  unordered_map<Key, Value> remote_objects_;
+  tr1::unordered_map<Key, ValuePair> read_set_;
+  tr1::unordered_map<Key, Value> remote_objects_;
 
   // The message containing read results that should be sent to remote nodes
   MessageProto* message_;

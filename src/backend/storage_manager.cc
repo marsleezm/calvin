@@ -183,7 +183,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 void StorageManager::Abort(){
 	//LOG(txn_->txn_id(), " txn is aborted! AB is "<<abort_bit_);
 	if (!spec_committed_){
-		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
+		for (tr1::unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 		{
 			if(it->second.first & WRITE){
 				//LOG(txn_->txn_id(), " unlocking "<<it->first);
@@ -196,7 +196,7 @@ void StorageManager::Abort(){
 	}
 	else{
 		// Its COPIED data would have been aborted already
-		for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
+		for (tr1::unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 		{
 			if(it->second.first & WRITE){
 				//LOG(txn_->txn_id(), " removing "<<it->first);
@@ -401,7 +401,7 @@ bool StorageManager::ApplyChange(bool is_committing){
 	int applied_counter = 0;
 	bool failed_putting = false;
 	// All copied data before applied count are deleted
-	for (unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
+	for (tr1::unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
 	{
 		if(it->second.first & WRITE){
 			//AGGRLOG(txn_->txn_id(), " putting:"<<it->first);
@@ -416,7 +416,7 @@ bool StorageManager::ApplyChange(bool is_committing){
 		++applied_counter;
 	}
 	if(failed_putting){
-		unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
+		tr1::unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
 		int counter = 0;
 		while(it != read_set_.end()){
 			if(counter < applied_counter){

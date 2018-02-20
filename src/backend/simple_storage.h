@@ -30,7 +30,7 @@ class SimpleStorage : public Storage {
   virtual void Initmutex();
 
  private:
-  unordered_map<Key, Value*> objects_;
+  std::tr1::unordered_map<Key, Value*> objects_;
   pthread_mutex_t mutex_;
 
 };

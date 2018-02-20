@@ -164,7 +164,7 @@ class Sequencer {
   int fetched_txn_num_;
 
   // Returns ptr to heap-allocated
-  unordered_map<int, MessageProto*> batches_;
+  tr1::unordered_map<int, MessageProto*> batches_;
 
   // The queue of fetched transactions
   TxnQueue* txns_queue_;
