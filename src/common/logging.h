@@ -14,7 +14,7 @@
 
 struct None { };
 
-//static pthread_mutex_t stdout_mutex;
+static pthread_mutex_t stdout_mutex;
 static std::ofstream ofs; // ("test.txt", std::ofstream::out);
 
 template <typename First,typename Second>
@@ -63,11 +63,11 @@ void printList(std::ostream &os,const Pair<Begin,Last> &data)
 template <typename List>
 inline void log(const char *file,int line, int64 tx_id, const LogData<List> &data)
 {
-    //pthread_mutex_lock(&stdout_mutex);
+    pthread_mutex_lock(&stdout_mutex);
     std::cout << std::this_thread::get_id() << "--" << line << "): "<<tx_id<<" ";
     printList(std::cout, data.list);
     std::cout<< std::endl;
-    //pthread_mutex_unlock(&stdout_mutex);
+    pthread_mutex_unlock(&stdout_mutex);
     /*
     pthread_mutex_lock(&stdout_mutex);
     ofs << std::this_thread::get_id() << "--" << line << "): "<<tx_id<<" ";

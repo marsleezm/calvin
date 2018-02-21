@@ -528,7 +528,8 @@ void* Sequencer::FetchMessage() {
   }
   TxnProto* txn;
   while(my_queue.Front(&txn) and txns_queue_->try_push(txn)){
-      LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", type:"<<txn->txn_type());
+        LOG(fetched_batch_num_, " add "<<txn->txn_id()<<", f:"<<txns_queue_->first()<<", l:"<<txns_queue_->last());
+      //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", type:"<<txn->txn_type()<<", bound "<<txn->txn_bound());
       my_queue.Pop();
   }
   return NULL;

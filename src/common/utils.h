@@ -29,7 +29,7 @@
 //using std::vector;
 using namespace std;
 using tr1::unordered_map;
-#define RING_BUFFER_SIZE 512
+#define RING_BUFFER_SIZE 1024 
 
 
 #define READING -2
@@ -547,31 +547,35 @@ class SPMCQueue
             ASSERT(RING_BUFFER_SIZE%2==0);
         }
 
-        inline bool try_push(T val)
-        {
-            const auto current_tail = m_last.load();
-            const auto next_tail = (1+current_tail)&size_mask;
-            if (next_tail != m_first.load())
-            {
-                m_buffer[current_tail] = val;
-                m_last.store(next_tail);
-                return true;
-            }
 
-            return false;
+        inline bool try_push(const T& value) {   // only for single producer
+            int32 last = m_last.load(std::memory_order_relaxed);
+            int32 next = (1+last)&size_mask;
+            if(next == m_first.load(std::memory_order_relaxed))
+                return false;
+            m_buffer[last] = value;
+            m_last.store(next, std::memory_order_release);
+            return true;
         }
 
-        inline bool try_pop(T* pval)
+        inline void try_pop(T* pval)
         {
             while (true) {
                 int32 first = m_first.load(std::memory_order_relaxed);
-                if (first == m_last.load(std::memory_order_acquire))
-                    return false;
+                if (first == m_last.load(std::memory_order_acquire)){
+                    *pval = NULL;
+                    return;
+                }
                 *pval = m_buffer[first];
-                if (m_first.compare_exchange_weak(first, (first+1)%size_mask, std::memory_order_release))
-                    return true;
+                if (m_first.compare_exchange_weak(first, (first+1)&size_mask, std::memory_order_relaxed)){
+                    LOG(((TxnProto*)*pval)->txn_id(), " f:"<<first<<", mf:"<<m_first<<" ml:"<<m_last);
+                    return;
+                }
             }
         }
+
+    inline int32 first(){return m_first; };
+    inline int32 last(){return m_last; };
 
     private :
         T m_buffer[RING_BUFFER_SIZE];

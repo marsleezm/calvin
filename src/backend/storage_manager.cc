@@ -549,7 +549,7 @@ int StorageManager::HandleReadResult(const MessageProto& message) {
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	LOG(txn_->txn_id(), " deleting");
+	//LOG(txn_->txn_id(), " deleting");
 	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
 		if(has_confirmed==false and in_list==false and writer_id != -1){

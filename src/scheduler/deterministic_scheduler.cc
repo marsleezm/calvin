@@ -237,6 +237,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     pair<int64, int64>* latency_array = scheduler->latency[thread];
 	vector<MessageProto> buffered_msgs;
 	set<int64> finalized_uncertain;
+    std::thread::id myid = std::this_thread::get_id();
+    (void)myid;
 
     while (!terminated_) {
 	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
@@ -367,9 +369,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						}
 					}
                 }
-				//else{
-				//	LOG(first_tx.first, " can not add pc, so no way to commit!");
-				//}
 
                 if (!did_something){
                     if (msg_to_send){
@@ -537,6 +536,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
           // Fast way to process bunches of read-only txns
 	      while (txn and (txn->txn_type() & READONLY_MASK)) {
+              //LOG(txn->txn_id(), " is taken, first "<<scheduler->txns_queue_->first()<<", last "<<scheduler->txns_queue_->last());
               if(num_lc_txns_ <= txn->txn_bound()){
                   buffered_ro = txn;
                   LOG(buffered_ro->txn_id(), " buffered, num lc txns is "<<num_lc_txns_<<", state "<<scheduler->exec_state);
@@ -549,7 +549,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                       scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, false);
                   ++num_lc_txns_;
                   ++Sequencer::num_committed;
-                  LOG(txn->txn_id(), " finished readonly, new lc is "<<num_lc_txns_<<", my id "<<txn->local_txn_id());
+                  LOG(txn->txn_id(), " done, nlc:"<<num_lc_txns_);
                   AddLatency(latency_count, scheduler->latency[thread], txn);
                   delete txn;
                   scheduler->txns_queue_->try_pop(&txn);
@@ -562,7 +562,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   txn = NULL;
               }
               else{
-                  LOG(txn->txn_id(), " got update, rp "<<scheduler->exec_state<<", num lc" <<num_lc_txns_<<", mine "<<txn->local_txn_id());
+                  //LOG(txn->txn_id(), " got update, rp "<<scheduler->exec_state<<", num lc" <<num_lc_txns_<<", mine "<<txn->local_txn_id());
                   buffered_ro = NULL;
                   LOG(txn->txn_id(), " starting, local "<<txn->local_txn_id()<<", rp "<<scheduler->exec_state);
                   latest_started_tx = txn->local_txn_id();
@@ -605,7 +605,7 @@ bool DeterministicScheduler::TryToFindId(MessageProto& msg, int& i, int64& base_
 			i += 3+msg.received_num_aborted(i+2);				
 		}				
 		else{
-			LOG(g_id, " local id is "<<sc_txn_list[(j+base)%sc_array_size].second<<", local global is "<<sc_txn_list[(j+base)%sc_array_size].fourth->txn_->txn_id()<<", index:"<<(j+base)%sc_array_size);
+			LOG(g_id, " lid:"<<sc_txn_list[(j+base)%sc_array_size].second<<", lg:"<<sc_txn_list[(j+base)%sc_array_size].fourth->txn_->txn_id()<<", index:"<<(j+base)%sc_array_size);
 			base_local = sc_txn_list[(j+base)%sc_array_size].second;	
 			ASSERT(sc_txn_list[(j+base)%sc_array_size].fourth->txn_->txn_id() == g_id);
 			return true;
@@ -617,16 +617,16 @@ bool DeterministicScheduler::TryToFindId(MessageProto& msg, int& i, int64& base_
 bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, std::tr1::unordered_map<int64_t, StorageManager*>& active_g_tids, int& latency_count){
 	TxnProto* txn = manager->get_txn();
 	// No need to resume if the txn is still suspended
-    AGGRLOG(txn->txn_id(), " start executing, local ts is "<<txn->local_txn_id()<<", writer id is "<<manager->writer_id);
+    AGGRLOG(txn->txn_id(), " executing, lts: "<<txn->local_txn_id());
     int result = application_->Execute(manager);
     //AGGRLOG(txn->txn_id(), " result is "<<result);
     if (result == SUSPEND){
-        AGGRLOG(txn->txn_id(),  " suspended");
+        //AGGRLOG(txn->txn_id(),  " suspended");
         return true;
     }
     else if (result == SUSPEND_SHOULD_SEND){
         // There are outstanding remote reads.
-        AGGRLOG(txn->txn_id(),  " suspend and sent for remote read");
+        //AGGRLOG(txn->txn_id(),  " suspend and sent for remote read");
         active_g_tids[txn->txn_id()] = manager;
         manager->aborting = false;
         if(txn->local_txn_id() != num_lc_txns_){
@@ -648,11 +648,11 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, std
     }
     else if (result == SUSPEND_NOT_SEND){
         // There are outstanding remote reads.
-        AGGRLOG(txn->txn_id(),  " suspend and has nothing to send for remote read");
+        //AGGRLOG(txn->txn_id(),  " suspend and has nothing to send for remote read");
         return true;
     }
     else if(result == ABORT) {
-        AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
+        //AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
         manager->Abort();
         ++Sequencer::num_aborted_;
         return false;
@@ -661,7 +661,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, std
         if (num_lc_txns_ == txn->local_txn_id()){
             int can_commit = manager->CanCommit();
             if(can_commit == ABORT){
-                AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
+                //AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
                 manager->Abort();
                 ++Sequencer::num_aborted_;
                 return false;
@@ -714,7 +714,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, std
                     manager->SendLocalReads(false, sc_txn_list, sc_array_size);
                 }
                 manager->spec_commit();
-                AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<num_lc_txns_);
+                //AGGRLOG(txn->txn_id(), " spec-committing, local ts is "<<txn->local_txn_id()<<" num committed txn is "<<num_lc_txns_);
                 to_sc_txns_[thread][txn->local_txn_id()%sc_array_size] = make_pair(txn->local_txn_id(), manager);
 
                 return true;
