@@ -72,7 +72,7 @@ class Sequencer {
   void output();
 
   // Get the transaction queue
-  inline TxnQueue* GetTxnsQueue(){
+  inline SPMCQueue<TxnProto*>* GetTxnsQueue(){
 	  return txns_queue_;
   }
 
@@ -107,14 +107,12 @@ class Sequencer {
   void RunWriter();
   void RunPaxos();
   void RunReader();
-  void RunLoader();
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
-  static void* RunSequencerLoader(void *arg);
 
   void* FetchMessage();
 
@@ -167,9 +165,12 @@ class Sequencer {
   tr1::unordered_map<int, MessageProto*> batches_;
 
   // The queue of fetched transactions
-  TxnQueue* txns_queue_;
+  SPMCQueue<TxnProto*>* txns_queue_;
   AtomicQueue<string>* paxos_queues;
+  Queue<TxnProto*> my_queue;
 
+  int64 txn_bound = -1;
+  bool readonly; 
   int num_queues_;
 
   int max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());

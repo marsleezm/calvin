@@ -37,7 +37,7 @@ message TxnProto {
   optional bytes arg = 23;
   
   required int64 seed = 24;	
-  optional int64 start_time = 25;
+  optional int64 txn_bound = 25;
 
   // Node ids of nodes that participate as readers and writers in this txn.
   repeated int32 readers = 40;

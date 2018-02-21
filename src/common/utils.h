@@ -29,6 +29,7 @@
 //using std::vector;
 using namespace std;
 using tr1::unordered_map;
+#define RING_BUFFER_SIZE 512
 
 
 #define READING -2
@@ -376,33 +377,23 @@ class FixedList {
   int end_;
 };
 
-class TxnQueue {
+template<typename T>
+class Queue {
  public:
-  TxnQueue() {
+  Queue() {
     queue_.resize(256);
     size_ = 256;
     front_ = 0;
     back_ = 0;
   }
 
-  // Returns the number of elements currently in the queue.
-  inline size_t Size() {
-    Lock l(&size_mutex_);
-    return (back_ + size_ - front_) % size_;
-  }
-
-  // Returns true iff the queue is empty.
-  inline bool Empty() {
-    return front_ == back_;
-  }
+  inline size_t Size() { return (back_ + size_ - front_) % size_; }
+  inline bool Empty() { return front_ == back_; }
 
   // Atomically pushes 'item' onto the queue.
-  inline void Push(TxnProto*& item) {
-    Lock l(&back_mutex_);
+  inline void Push(const T& item) {
     // Check if the buffer has filled up. Acquire all locks and resize if so.
     if (front_ == (back_+1) % size_) {
-      Lock m(&front_mutex_);
-      Lock n(&size_mutex_);
       uint32 count = (back_ + size_ - front_) % size_;
       queue_.resize(size_ * 2);
       for (uint32 i = 0; i < count; i++) {
@@ -420,68 +411,23 @@ class TxnQueue {
   // If the queue is non-empty, (atomically) sets '*result' equal to the front
   // element, pops the front element from the queue, and returns true,
   // otherwise returns false.
-  inline bool Pop(TxnProto** result) {
-    Lock l(&front_mutex_);
+  inline bool Pop(T* result) {
     if (front_ != back_) {
       *result = queue_[front_];
-	  front_ = (front_ + 1) % size_;
-	  return true;
+      front_ = (front_ + 1) % size_;
+      return true;
     }
     return false;
   }
 
-    inline bool Pop(TxnProto** result, int64 num_lc_txns, int& exec_state) {
-        if(exec_state == R2U or exec_state == U2R)
-            return false;
-        else{
-            Lock l(&front_mutex_);
-            if (front_ != back_) {
-                *result = queue_[front_];
-                // ORDER_STATUS or STOCK_LEVEL
-                if( ((*result)->txn_type() & READONLY_MASK)){
-                    if (exec_state == UPDATING)
-                        exec_state = U2R; 
-                    front_ = (front_ + 1) % size_;
-                    return true;
-                }
-                else{
-                    if((*result)->involved_nodes() == involved_nodes){
-                        last_txn = (*result)->local_txn_id();
-                        front_ = (front_ + 1) % size_;
-                        if (exec_state == READING)
-                            exec_state = R2U; 
-                        return true;
-                    }
-                    else if ((*result)->involved_nodes() == 0){
-                        front_ = (front_ + 1) % size_;
-                        if (exec_state == READING)
-                            exec_state = R2U; 
-                        return true;
-                    }
-                    else{
-                        if(num_lc_txns > last_txn or last_txn == -1){
-                            involved_nodes = (*result)->involved_nodes();
-                            last_txn = (*result)->local_txn_id();
-                            front_ = (front_ + 1) % size_;
-                            if (exec_state == READING)
-                                exec_state = R2U; 
-                            return true;
-                        }
-                        else
-                            return false;
-                    }
-                }
-            }
-            else
-                return false;
-        }
-        return false;
-    }
+  inline void Pop() {
+    if (front_ != back_) 
+      front_ = (front_ + 1) % size_;
+  }
 
   // Sets *result equal to the front element and returns true, unless the
   // queue is empty, in which case does nothing and returns false.
-  inline bool Front(TxnProto** result) {
-    Lock l(&front_mutex_);
+  inline bool Front(T* result) {
     if (front_ != back_) {
       *result = queue_[front_];
       return true;
@@ -489,28 +435,17 @@ class TxnQueue {
     return false;
   }
 
-  TxnProto* Get(int i) {
-	  Lock l(&size_mutex_);
-	  return queue_[i];
-  }
+  T Get(int i) { return queue_[i]; }
 
  private:
-  vector<TxnProto*> queue_;  // Circular buffer containing elements.
+  vector<T> queue_;  // Circular buffer containing elements.
   uint32 size_;      // Allocated size of queue_, not number of elements.
   uint32 front_;     // Offset of first (oldest) element.
   uint32 back_;      // First offset following all elements.
 
-  int64 involved_nodes = 0;
-  int64 last_txn = -1;
-
-  // Mutexes for synchronization.
-  Mutex front_mutex_;
-  Mutex back_mutex_;
-  Mutex size_mutex_;
-
   // DISALLOW_COPY_AND_ASSIGN
-  TxnQueue(const TxnProto&);
-  TxnQueue& operator=(const TxnProto&);
+  Queue(const Queue<T>&);
+  Queue& operator=(const Queue<T>&);
 };
 
 template<typename T>
@@ -600,6 +535,51 @@ class AtomicQueue {
   AtomicQueue& operator=(const AtomicQueue<T>&);
 };
 
+
+template<typename T>
+class SPMCQueue 
+{
+    public :
+        SPMCQueue()
+        {
+            m_first.store(0);
+            m_last.store(0);
+            ASSERT(RING_BUFFER_SIZE%2==0);
+        }
+
+        inline bool try_push(T val)
+        {
+            const auto current_tail = m_last.load();
+            const auto next_tail = (1+current_tail)&size_mask;
+            if (next_tail != m_first.load())
+            {
+                m_buffer[current_tail] = val;
+                m_last.store(next_tail);
+                return true;
+            }
+
+            return false;
+        }
+
+        inline bool try_pop(T* pval)
+        {
+            while (true) {
+                int32 first = m_first.load(std::memory_order_relaxed);
+                if (first == m_last.load(std::memory_order_acquire))
+                    return false;
+                *pval = m_buffer[first];
+                if (m_first.compare_exchange_weak(first, (first+1)%size_mask, std::memory_order_release))
+                    return true;
+            }
+        }
+
+    private :
+        T m_buffer[RING_BUFFER_SIZE];
+        int32 m_size = RING_BUFFER_SIZE;
+        int32 size_mask = RING_BUFFER_SIZE - 1;
+        std::atomic<int32> m_first;
+        std::atomic<int32> m_last;
+};
 
 
 class MutexRW {

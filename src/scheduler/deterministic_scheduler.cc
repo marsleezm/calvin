@@ -116,7 +116,7 @@ TxnProto* DeterministicScheduler::GetTxnPtr(socket_t* socket,
 DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                Connection* batch_connection,
                                                LockedVersionedStorage* storage,
-											   TxnQueue* txns_queue,
+											   SPMCQueue<TxnProto*>* txns_queue,
 											   Client* client,
                                                const Application* application,
 											   int mode
@@ -533,23 +533,18 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               buffered_ro = NULL;
           }
           else
-              scheduler->txns_queue_->Pop(&txn, num_lc_txns_, scheduler->exec_state);
+              scheduler->txns_queue_->try_pop(&txn);
 
           // Fast way to process bunches of read-only txns
-		  while (txn and (txn->txn_type() & READONLY_MASK)) {
-			  txn->set_start_time(GetUTime());
-			  //LOG(txn->txn_id(), " starting readonly "<<txn->local_txn_id()<<", rp "<<scheduler->read_phase<<", num lc" <<num_lc_txns_<<", mine "<<txn->local_txn_id());
-              if(scheduler->exec_state != READING and num_lc_txns_ < txn->local_txn_id()){
+	      while (txn and (txn->txn_type() & READONLY_MASK)) {
+              if(num_lc_txns_ <= txn->txn_bound()){
                   buffered_ro = txn;
                   LOG(buffered_ro->txn_id(), " buffered, num lc txns is "<<num_lc_txns_<<", state "<<scheduler->exec_state);
                   txn = NULL;
               }
               else{
-                  if (num_lc_txns_ == txn->local_txn_id() and (scheduler->exec_state == U2R or scheduler->exec_state == INIT)){
-			          LOG(txn->txn_id(), " entering read phase "<<num_lc_txns_<<", local is "<<txn->local_txn_id());
-                      scheduler->exec_state = READING; 
+                  if (txn->local_txn_id() == txn->txn_bound()+1)
                       scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, true);
-                  }
                   else
                       scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, false);
                   ++num_lc_txns_;
@@ -557,24 +552,18 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   LOG(txn->txn_id(), " finished readonly, new lc is "<<num_lc_txns_<<", my id "<<txn->local_txn_id());
                   AddLatency(latency_count, scheduler->latency[thread], txn);
                   delete txn;
-                  txn = NULL;
-                  scheduler->txns_queue_->Pop(&txn, num_lc_txns_, scheduler->exec_state);
+                  scheduler->txns_queue_->try_pop(&txn);
               }
 		  }
           if(txn){
-              if(scheduler->exec_state != UPDATING and num_lc_txns_ != txn->local_txn_id()){
+              if(num_lc_txns_ <= txn->txn_bound()){
                   buffered_ro = txn;
                   LOG(buffered_ro->txn_id(), " buffered, num lc txns is "<<num_lc_txns_<<", state "<<scheduler->exec_state);
                   txn = NULL;
               }
               else{
                   LOG(txn->txn_id(), " got update, rp "<<scheduler->exec_state<<", num lc" <<num_lc_txns_<<", mine "<<txn->local_txn_id());
-                  if ((scheduler->exec_state == R2U or scheduler->exec_state == INIT) and num_lc_txns_ == txn->local_txn_id()){
-                      scheduler->exec_state = UPDATING; 
-                      LOG(txn->txn_id(), " leaving read phase "<<num_lc_txns_<<", local "<<txn->local_txn_id());
-                  }
                   buffered_ro = NULL;
-                  txn->set_start_time(GetUTime());
                   LOG(txn->txn_id(), " starting, local "<<txn->local_txn_id()<<", rp "<<scheduler->exec_state);
                   latest_started_tx = txn->local_txn_id();
                   while (local_sc_txns[txn->local_txn_id()%sc_array_size].first != NO_TXN){

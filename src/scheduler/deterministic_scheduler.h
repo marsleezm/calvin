@@ -61,7 +61,7 @@ class DeterministicScheduler : public Scheduler {
 	friend Sequencer;
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-		  LockedVersionedStorage* storage, TxnQueue* txns_queue,
+		  LockedVersionedStorage* storage, SPMCQueue<TxnProto*>* txns_queue,
 						 Client* client, const Application* application, int queue_mode);
   virtual ~DeterministicScheduler();
   bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local, int64 base);
@@ -84,7 +84,7 @@ class DeterministicScheduler : public Scheduler {
           if(latency_count == LATENCY_SIZE)
               latency_count = 0;
           int64 now_time = GetUTime();
-          array[latency_count] = make_pair(now_time - txn->start_time(), now_time - txn->seed());
+          array[latency_count] = make_pair(now_time - txn->seed(), now_time - txn->seed());
           ++latency_count;
       }
   }
@@ -110,7 +110,7 @@ class DeterministicScheduler : public Scheduler {
   // Storage layer used in application execution.
   LockedVersionedStorage* storage_;
   
-  TxnQueue* txns_queue_;
+  SPMCQueue<TxnProto*>* txns_queue_;
 
   Client* client_;
 
