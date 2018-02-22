@@ -72,9 +72,8 @@ class Sequencer {
   void output();
 
   // Get the transaction queue
-  inline SPMCQueue<TxnProto*>* GetTxnsQueue(){
-	  return txns_queue_;
-  }
+  inline AtomicQueue<TxnProto*>* GetTxnsQueue(){  return txns_queue_; }
+  inline vector<AtomicQueue<TxnProto*>*> GetROQueues(){  return ro_queues_; }
 
   void SetScheduler(DeterministicScheduler* scheduler){
 	  scheduler_ = scheduler;
@@ -165,11 +164,12 @@ class Sequencer {
   tr1::unordered_map<int, MessageProto*> batches_;
 
   // The queue of fetched transactions
-  SPMCQueue<TxnProto*>* txns_queue_;
+  AtomicQueue<TxnProto*>* txns_queue_;
   AtomicQueue<string>* paxos_queues;
-  Queue<TxnProto*> my_queue;
+  vector<AtomicQueue<TxnProto*>*> ro_queues_;
 
   int64 txn_bound = -1;
+  uint queue_idx = 0;
   bool readonly; 
   int num_queues_;
 

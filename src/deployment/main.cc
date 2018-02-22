@@ -295,14 +295,14 @@ int main(int argc, char** argv) {
 	    								 batch_connection,
 	                                     storage,
 	  									 sequencer.GetTxnsQueue(), client,
-	                                     new Microbenchmark(config.all_nodes.size(), config.this_node_id), queue_mode);
+	                                     new Microbenchmark(config.all_nodes.size(), config.this_node_id), sequencer.GetROQueues());
 
 	else
 		scheduler = new DeterministicScheduler(&config,
     								 batch_connection,
                                      storage,
 									 sequencer.GetTxnsQueue(), client,
-                                     new TPCC(), queue_mode);
+                                     new TPCC(), sequencer.GetROQueues());
 
 	sequencer.SetScheduler(scheduler);
 

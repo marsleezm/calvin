@@ -61,8 +61,8 @@ class DeterministicScheduler : public Scheduler {
 	friend Sequencer;
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection,
-		  LockedVersionedStorage* storage, SPMCQueue<TxnProto*>* txns_queue,
-						 Client* client, const Application* application, int queue_mode);
+		  LockedVersionedStorage* storage, AtomicQueue<TxnProto*>* txns_queue,
+						 Client* client, const Application* application, vector<AtomicQueue<TxnProto*>*> ro_queues);
   virtual ~DeterministicScheduler();
   bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local, int64 base);
   void static terminate() { terminated_ = true; }
@@ -110,7 +110,7 @@ class DeterministicScheduler : public Scheduler {
   // Storage layer used in application execution.
   LockedVersionedStorage* storage_;
   
-  SPMCQueue<TxnProto*>* txns_queue_;
+  AtomicQueue<TxnProto*>* txns_queue_;
 
   Client* client_;
 
@@ -147,5 +147,6 @@ class DeterministicScheduler : public Scheduler {
   pair<int64, int64>** latency;
   MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;
   pthread_mutex_t commit_tx_mutex;
+  vector<AtomicQueue<TxnProto*>*> ro_queues_;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

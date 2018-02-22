@@ -44,7 +44,7 @@ class LockedVersionedStorage {
   virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
 
-  inline Value* SafeRead(const Key& key, bool new_object, bool first_reader){
+  inline Value* SafeRead(const Key& key, bool new_object, bool first_reader){//, int64 txn_id){
         KeyEntry* entry;
         if(new_object){
             int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
@@ -53,10 +53,11 @@ class LockedVersionedStorage {
         else
             entry = objects_[key];
 
-        if (first_reader){
+        if (first_reader and entry->head->next){
             entry->oldest = entry->head->txn_id;
             DataNode* current = entry->head->next, *next;
             entry->head->next = NULL;
+            //LOG(txn_id, " deleting "<<key);
             while(current){
                 next = current->next;
                 delete current;
@@ -88,8 +89,9 @@ class LockedVersionedStorage {
   inline Value* StableRead(const Key& key) {return objects_[key]->head->value;}
 
   // TODO: It's just a dirty/unsafe hack to do GC to avoid having too many versions
-  void inline DirtyGC(DataNode* list, int from_version, KeyEntry* entry){
+  void inline DirtyGC(DataNode* list, int from_version, KeyEntry* entry){//, int64 txn_id, Key key){
 	  if(entry->oldest <= from_version){
+          //LOG(txn_id, " deleting "<<key);
 		  DataNode* current = list->next, *next, *prev=list;
 		  int i = 0;
 		  while(current){

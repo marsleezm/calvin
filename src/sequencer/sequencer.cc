@@ -74,8 +74,11 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	pthread_mutex_init(&mutex_, NULL);
 	// Start Sequencer main loops running in background thread.
-	txns_queue_ = new SPMCQueue<TxnProto*>();
+	txns_queue_ = new AtomicQueue<TxnProto*>();
 	paxos_queues = new AtomicQueue<string>();
+    assert(num_threads >= RO_QUEUE_SIZE);
+    for(int i = 0; i <RO_QUEUE_SIZE; ++i)
+        ro_queues_.push_back(new AtomicQueue<TxnProto*>());
 
 	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
 		throughput[i] = -1;
@@ -84,16 +87,12 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 
 	cpu_set_t cpuset;
 	if (mode == NORMAL_QUEUE){
-
 		pthread_attr_t attr_writer;
 		pthread_attr_init(&attr_writer);
 		//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 		CPU_ZERO(&cpuset);
-		//CPU_SET(4, &cpuset);
-		//CPU_SET(5, &cpuset);
 		CPU_SET(1, &cpuset);
-		//CPU_SET(7, &cpuset);
 		pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
 		std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
@@ -344,9 +343,6 @@ void Sequencer::RunPaxos() {
 // Send txns to all involved partitions
 void Sequencer::RunReader() {
   Spin(1);
-#ifdef PAXOS
-  Paxos paxos(ZOOKEEPER_CONF, true);
-#endif
   pthread_setname_np(pthread_self(), "reader");
 
   FetchMessage();
@@ -361,23 +357,17 @@ void Sequencer::RunReader() {
     batches[it->first].set_type(MessageProto::TXN_BATCH);
   }
 
+  int last_fetched = 0;
   int txn_count = 0;
   int batch_count = 0;
   int last_aborted = 0;
   int batch_number = configuration_->this_node_id;
   int second = 0;
 
-#ifdef LATENCY_TEST
-  int watched_txn = -1;
-#endif
-
   while (!deconstructor_invoked_) {
     // Get batch from Paxos service.
     string batch_string;
 
-#ifdef PAXOS
-    paxos.GetNextBatchBlocking(&batch_string);
-#else
     bool got_batch = false;
     do {
     	FetchMessage();
@@ -391,7 +381,6 @@ void Sequencer::RunReader() {
     	if (!got_batch)
     		Spin(0.001);
     } while (!deconstructor_invoked_ && !got_batch);
-#endif
     MessageProto* batch_message = new MessageProto();
     batch_message->ParseFromString(batch_string);
     for (int i = 0; i < batch_message->data_size(); i++) {
@@ -440,14 +429,6 @@ void Sequencer::RunReader() {
 
     FetchMessage();
 
-
-#ifdef LATENCY_TEST
-    if (watched_txn != -1) {
-      sequencer_send[watched_txn] = GetTime();
-      watched_txn = -1;
-    }
-#endif
-
     // Report output.
     now_time = GetTime();
     if (now_time > time + 1) {
@@ -460,30 +441,13 @@ void Sequencer::RunReader() {
       		  (static_cast<double>(Sequencer::num_committed-last_committed) / (now_time- time))
       			<< " txns/sec, "
       			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
-      			<< " txns/sec aborted, "
-      			//<< test<< " for drop speed , "
-      			//<< executing_txns << " executing, "
+      			<< " txns/sec aborted, " 
+      			<< " this round fetched "<<fetched_txn_num_- last_fetched<<", "
       			<< num_pend_txns_ << " pending, time is "<<second<<"\n" << std::flush;
       throughput[second] = (Sequencer::num_committed-last_committed) / (now_time- time);
       abort[second] = (Sequencer::num_aborted_-last_aborted) / (now_time- time);
 
       ++second;
-      /*
-	  if(last_committed && Sequencer::num_committed-last_committed == 0){
-		  for(int i = 0; i<num_threads; ++i){
-                if (scheduler_->to_sc_txns_[i]->size())
-			        std::cout<< " doing nothing, top is "<<scheduler_->to_sc_txns_[i]->top().first
-				    <<", num committed txn is "<<Sequencer::num_committed
-				    <<", waiting queue is"<<std::endl;
-                else
-                    std::cout<< " doing nothing, no top,  num committed txn is "<<Sequencer::num_committed
-                    <<", waiting queue is"<<std::endl;
-
-			  //if(scheduler_->pending_txns_[i]->size())
-			//	  std::cout<<"Pend txn size is "<<scheduler_->pending_txns_[i]->top().second<<"\n";
-		  }
-	  }
-      */
 
       // Reset txn count.
       time = now_time;
@@ -491,8 +455,9 @@ void Sequencer::RunReader() {
 
       txn_count = 0;
       batch_count = 0;
-      num_fetched_this_round = 0;
+      last_fetched = fetched_txn_num_;
       last_committed = Sequencer::num_committed;
+        
     }
   }
   Spin(1);
@@ -500,15 +465,7 @@ void Sequencer::RunReader() {
 
 void* Sequencer::FetchMessage() {
   MessageProto* batch_message = NULL;
-  //double time = GetTime();
-  //int executing_txns = 0;
-  //int pending_txns = 0;
-
-  //TxnProto* done_txn;
-  TxnProto* txn;
-  while(my_queue.Front(&txn) and txns_queue_->try_push(txn))
-      my_queue.Pop();
-  if (my_queue.Size() < 2000){
+  //if (txns_queue_->Size() < 2000){
 	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
 	  // Have we run out of txns in our batch? Let's get some new ones.
 	  if (batch_message != NULL) {
@@ -516,27 +473,28 @@ void* Sequencer::FetchMessage() {
 		  {
 			  TxnProto* txn = new TxnProto();
 			  txn->ParseFromString(batch_message->data(i));
-              if(readonly != ((txn->txn_type() & READONLY_MASK) != 0)){
-                  readonly = ((txn->txn_type() & READONLY_MASK) != 0);
+              int ro_mask = txn->txn_type() & READONLY_MASK;
+              if(readonly != (ro_mask != 0)){
+                  readonly = (ro_mask != 0);
                   txn_bound = fetched_txn_num_-1;
               }
               txn->set_txn_bound(txn_bound);
 			  txn->set_local_txn_id(fetched_txn_num_++);
-              if(my_queue.Empty()){
-                  if(txns_queue_->try_push(txn) == false)
-                      my_queue.Push(txn);
+              if(ro_mask){
+                  if(fetched_batch_num_ == 0)
+		              LOG(fetched_batch_num_, " RO adding "<<txn->txn_id()<<" of lid "<<txn->local_txn_id());
+                  ro_queues_[queue_idx++%RO_QUEUE_SIZE]->Push(txn);
               }
               else{
-                  my_queue.Push(txn);
-                  while(my_queue.Front(&txn) and txns_queue_->try_push(txn))
-                      my_queue.Pop();
+                  if(fetched_batch_num_ == 0)
+		              LOG(fetched_batch_num_, " adding "<<txn->txn_id()<<" of lid "<<txn->local_txn_id());
+                  txns_queue_->Push(txn);
               }
-			  ++num_fetched_this_round;
 		  }
 		  delete batch_message;
 		  ++fetched_batch_num_;
 	  }
-  }
+  //}
   return NULL;
 
 //    // Report throughput.

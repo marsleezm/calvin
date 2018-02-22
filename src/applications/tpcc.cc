@@ -713,19 +713,19 @@ int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* 
 
 	//Warehouse warehouse;
 	Warehouse warehouse;
-	//val = storage->SafeRead(txn->read_set(0), false);
-    val = storage->SafeRead(txn->read_set(0), false, first_read_txn);
+	val = storage->SafeRead(txn->read_set(0), false, first_read_txn);
+    //val = storage->SafeRead(txn->read_set(0), false, first_read_txn, txn->txn_id());
 	assert(warehouse.ParseFromString(*val));
 
 	//District district;
 	District district;
-	//val = storage->SafeRead(txn->read_set(1), false);
-    val = storage->SafeRead(txn->read_set(1), false, first_read_txn);
+	val = storage->SafeRead(txn->read_set(1), false, first_read_txn);
+    //val = storage->SafeRead(txn->read_set(1), false, first_read_txn, txn->txn_id());
 	assert(district.ParseFromString(*val));
 
 	Customer customer;
-	//val = storage->SafeRead(txn->read_set(2), false);
-    val = storage->SafeRead(txn->read_set(2), false, first_read_txn);
+	val = storage->SafeRead(txn->read_set(2), false, first_read_txn);
+    //val = storage->SafeRead(txn->read_set(2), false, first_read_txn, txn->txn_id());
 	assert(customer.ParseFromString(*val));
 
 	if(customer.last_order() == ""){
@@ -740,8 +740,8 @@ int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* 
 	int order_line_count;
 
 	//FULL_READ(storage, customer.last_order(), order, read_state, val)
-	//val = storage->SafeRead(customer.last_order(), true);
-    val = storage->SafeRead(customer.last_order(), true, first_read_txn);
+	val = storage->SafeRead(customer.last_order(), true, first_read_txn);
+    //val = storage->SafeRead(customer.last_order(), true, first_read_txn, txn->txn_id());
 	Order order;
 	assert(order.ParseFromString(*val));
 	order_line_count = order.order_line_count();
@@ -749,8 +749,8 @@ int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* 
 	char order_line_key[128];
 	for(int i = 0; i < order_line_count; i++) {
 		snprintf(order_line_key, sizeof(order_line_key), "%sol%d", customer.last_order().c_str(), i);
-		//val = storage->SafeRead(order_line_key, true);
-        val = storage->SafeRead(order_line_key, true, first_read_txn);
+		val = storage->SafeRead(order_line_key, true, first_read_txn);
+        //val = storage->SafeRead(order_line_key, true, first_read_txn, txn->txn_id());
 		OrderLine order_line;
 		assert(order_line.ParseFromString(*val));
 	}
@@ -858,8 +858,8 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 				  "%so%d", district_key.c_str(), i);
 
 		Order order;
-		//val = storage->SafeRead(order_key, true);
-	    val = storage->SafeRead(order_key, true, first_read_txn);
+		val = storage->SafeRead(order_key, true, first_read_txn);
+	    //val = storage->SafeRead(order_key, true, first_read_txn, txn->txn_id());
 		assert(order.ParseFromString(*val));
 
 		int ol_number = order.order_line_count();
@@ -869,8 +869,8 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 			snprintf(order_line_key, sizeof(order_line_key), "%sol%d",
 						order_key, j);
 			OrderLine order_line;
-			//val = storage->SafeRead(order_line_key, true);
-	        val = storage->SafeRead(order_line_key, true, first_read_txn);
+			val = storage->SafeRead(order_line_key, true, first_read_txn);
+	        //val = storage->SafeRead(order_line_key, true, first_read_txn, txn->txn_id());
 			assert(order_line.ParseFromString(*val));
 
 			string item = order_line.item_id();
@@ -879,8 +879,8 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 						warehouse_key.c_str(), item.c_str());
 
 			Stock stock;
-			//val = storage->SafeRead(stock_key, false);
-	        val = storage->SafeRead(stock_key, false, first_read_txn);
+			val = storage->SafeRead(stock_key, false, first_read_txn);
+	        //val = storage->SafeRead(stock_key, false, first_read_txn, txn->txn_id());
 			assert(stock.ParseFromString(*val));
 		 }
 	}

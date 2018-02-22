@@ -607,7 +607,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 	else{
 		int node = configuration_->LookupPartition(key);
 		if (node ==  configuration_->this_node_id){
-			LOG(txn_->txn_id(), "Trying to read local key "<<key);
+			//LOG(txn_->txn_id(), "Trying to read local key "<<key);
 			if (read_set_[key].second == NULL){
 				read_set_[key].first = read_set_[key].first | new_obj;
 				ValuePair result = actual_storage_->ReadObject(key, txn_->local_txn_id(), &abort_bit_, &local_aborted_,
@@ -627,7 +627,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 						return reinterpret_cast<Value*>(SUSPEND);
 					}
 					else{
-						LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
+						//LOCKLOG(txn_->txn_id(), " trying to read "<<key<<", exec counter is "<<exec_counter_);
 						++exec_counter_;
 						++max_counter_;
 						//LOG(txn_->txn_id(),  " read and assigns key value "<<key<<","<<*val);
@@ -676,7 +676,6 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 	if(abort_bit_ > num_aborted_){
 		LOCKLOG(txn_->txn_id(), " is just aborted!! Num restarted is "<<num_aborted_<<", abort bit is "<<abort_bit_);
 		max_counter_ = 0;
-		//num_aborted_ = abort_bit_;
 		read_state = SPECIAL;
 		return reinterpret_cast<Value*>(ABORT);
 	}
@@ -704,6 +703,11 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					is_suspended_ = true;
 					return reinterpret_cast<Value*>(SUSPEND);
 				}
+                else if(result.first == ABORT){
+                    max_counter_ = 0;
+                    read_state = SPECIAL;
+                    return reinterpret_cast<Value*>(ABORT);
+                }
 				else{
 					//LOG(txn_->txn_id(), " successfully read&lock "<<key<<", exec counter is "<<exec_counter_<<", value.first is "<<result.first);
 					++exec_counter_;
