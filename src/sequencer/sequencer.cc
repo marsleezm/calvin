@@ -505,6 +505,9 @@ void* Sequencer::FetchMessage() {
   //int pending_txns = 0;
 
   //TxnProto* done_txn;
+  TxnProto* txn;
+  while(my_queue.Front(&txn) and txns_queue_->try_push(txn))
+      my_queue.Pop();
   if (my_queue.Size() < 2000){
 	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
 	  // Have we run out of txns in our batch? Let's get some new ones.
@@ -519,18 +522,20 @@ void* Sequencer::FetchMessage() {
               }
               txn->set_txn_bound(txn_bound);
 			  txn->set_local_txn_id(fetched_txn_num_++);
-			  my_queue.Push(txn);
+              if(my_queue.Empty()){
+                  if(txns_queue_->try_push(txn) == false)
+                      my_queue.Push(txn);
+              }
+              else{
+                  my_queue.Push(txn);
+                  while(my_queue.Front(&txn) and txns_queue_->try_push(txn))
+                      my_queue.Pop();
+              }
 			  ++num_fetched_this_round;
 		  }
 		  delete batch_message;
 		  ++fetched_batch_num_;
 	  }
-  }
-  TxnProto* txn;
-  while(my_queue.Front(&txn) and txns_queue_->try_push(txn)){
-        LOG(fetched_batch_num_, " add "<<txn->txn_id()<<", f:"<<txns_queue_->first()<<", l:"<<txns_queue_->last());
-      //LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", type:"<<txn->txn_type()<<", bound "<<txn->txn_bound());
-      my_queue.Pop();
   }
   return NULL;
 
