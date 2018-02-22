@@ -77,8 +77,6 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	txns_queue_ = new AtomicQueue<TxnProto*>();
 	paxos_queues = new AtomicQueue<string>();
     assert(num_threads >= RO_QUEUE_SIZE);
-    for(int i = 0; i <RO_QUEUE_SIZE; ++i)
-        ro_queues_.push_back(new AtomicQueue<TxnProto*>());
 
 	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
 		throughput[i] = -1;
@@ -480,16 +478,7 @@ void* Sequencer::FetchMessage() {
               }
               txn->set_txn_bound(txn_bound);
 			  txn->set_local_txn_id(fetched_txn_num_++);
-              if(ro_mask){
-                  if(fetched_batch_num_ == 0)
-		              LOG(fetched_batch_num_, " RO adding "<<txn->txn_id()<<" of lid "<<txn->local_txn_id());
-                  ro_queues_[queue_idx++%RO_QUEUE_SIZE]->Push(txn);
-              }
-              else{
-                  if(fetched_batch_num_ == 0)
-		              LOG(fetched_batch_num_, " adding "<<txn->txn_id()<<" of lid "<<txn->local_txn_id());
-                  txns_queue_->Push(txn);
-              }
+              txns_queue_->Push(txn);
 		  }
 		  delete batch_message;
 		  ++fetched_batch_num_;

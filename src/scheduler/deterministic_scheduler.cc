@@ -118,11 +118,10 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                LockedVersionedStorage* storage,
 											   AtomicQueue<TxnProto*>* txns_queue,
 											   Client* client,
-                                               const Application* application,
-                                               vector<AtomicQueue<TxnProto*>*> ro_queues
+                                               const Application* application
 											   )
     : configuration_(conf), batch_connection_(batch_connection), storage_(storage),
-	   txns_queue_(txns_queue), client_(client), application_(application), ro_queues_(ro_queues) {
+	   txns_queue_(txns_queue), client_(client), application_(application) {
 
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 
@@ -220,7 +219,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     pair<int64, StorageManager*>* local_sc_txns= scheduler->to_sc_txns_[thread];
     AtomicQueue<pair<int64_t, int>> abort_queue;
     AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;
-    AtomicQueue<TxnProto*>* my_ro_queue = scheduler->ro_queues_[thread%RO_QUEUE_SIZE];
 
     AtomicQueue<MessageProto>* locker_queue = scheduler->message_queues[scheduler->num_threads];
 
@@ -234,7 +232,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     int max_sc = scheduler->max_sc, sc_array_size=scheduler->sc_array_size; 
     int64 local_gc= 0; //prevtx=0; 
     int latency_count = 0;
-    TxnProto* buffered_tx = NULL, *buffered_ro = NULL;
+    TxnProto* buffered_tx = NULL;
     pair<int64, int64>* latency_array = scheduler->latency[thread];
 	vector<MessageProto> buffered_msgs;
 	set<int64> finalized_uncertain;
@@ -513,21 +511,27 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		  }
 	  }
 	  // Try to start a new transaction
-	  else if (buffered_ro!= NULL or latest_started_tx - num_lc_txns_ < max_sc){ // && scheduler->num_suspend[thread]<=max_suspend) {
+	  else if (buffered_tx!= NULL or latest_started_tx - num_lc_txns_ < max_sc){ // && scheduler->num_suspend[thread]<=max_suspend) {
 		  //LOG(-1, " lastest is "<<latest_started_tx<<", num_lc_txns_ is "<<num_lc_txns_<<", diff is "<<latest_started_tx-num_lc_txns_);
 
           // Fast way to process bunches of read-only txns
 		  TxnProto* txn = NULL;
-          if(buffered_ro != NULL){
-              txn = buffered_ro;
-              buffered_ro = NULL;
+          if(buffered_tx != NULL){
+              txn = buffered_tx;
+              buffered_tx = NULL;
               LOG(txn->txn_id(), " from buffered txn");
           }
           else{
               txn = NULL;
-              my_ro_queue->Pop(&txn);
+              scheduler->txns_queue_->Pop(&txn);
           }
-	      while (txn and num_lc_txns_ > txn->txn_bound()) {
+	      while (txn and (txn->txn_type() & READONLY_MASK)) {
+              if(num_lc_txns_ <= txn->txn_bound()) {
+                  buffered_tx = txn;
+                  LOG(txn->txn_id(), " being buffered, bound is "<<txn->txn_bound());
+                  txn = NULL;
+                  continue;
+              }
               LOG(txn->txn_id(), " RO  is taken, bound "<<txn->txn_bound());
               //my_ro_queue->Inc();
               if (txn->local_txn_id() == txn->txn_bound()+1)
@@ -540,26 +544,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               LOG(txn->txn_id(), " commit, nlc:"<<num_lc_txns_);
               delete txn;
               txn = NULL;
-              my_ro_queue->Pop(&txn);
-		  }
-
-          if(txn){
-              buffered_ro = txn;
-              LOG(txn->txn_id(), " being buffered, bound is "<<txn->txn_bound());
-              txn = NULL;
-          }
-
-          if (latest_started_tx - num_lc_txns_ >= max_sc)
-              continue;
-          if(buffered_tx != NULL){
-              txn = buffered_tx;
-              buffered_tx = NULL;
-              LOG(txn->txn_id(), " from buffered txn");
-          }
-          else{
-              txn = NULL;
               scheduler->txns_queue_->Pop(&txn);
-          }
+		  }
 
           if(txn){
               if(num_lc_txns_ <= txn->txn_bound()){
@@ -731,9 +717,6 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread, std
 DeterministicScheduler::~DeterministicScheduler() {
 	for(int i = 0; i<num_threads; ++i)
 		pthread_join(threads_[i], NULL);
-
-	for(int i = 0; i<RO_QUEUE_SIZE; ++i)
-        delete ro_queues_[i];
 
     delete[] to_sc_txns_;
 	double total_block = 0;

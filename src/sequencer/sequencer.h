@@ -73,7 +73,6 @@ class Sequencer {
 
   // Get the transaction queue
   inline AtomicQueue<TxnProto*>* GetTxnsQueue(){  return txns_queue_; }
-  inline vector<AtomicQueue<TxnProto*>*> GetROQueues(){  return ro_queues_; }
 
   void SetScheduler(DeterministicScheduler* scheduler){
 	  scheduler_ = scheduler;
@@ -166,7 +165,6 @@ class Sequencer {
   // The queue of fetched transactions
   AtomicQueue<TxnProto*>* txns_queue_;
   AtomicQueue<string>* paxos_queues;
-  vector<AtomicQueue<TxnProto*>*> ro_queues_;
 
   int64 txn_bound = -1;
   uint queue_idx = 0;
