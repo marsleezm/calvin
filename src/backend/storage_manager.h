@@ -128,9 +128,9 @@ class StorageManager {
 
   Value* ReadValue(const Key& key, int& read_state, bool new_object);
   Value* ReadLock(const Key& key, int& read_state, bool new_object);
-  //inline Value* SafeRead(const Key& key, bool new_object){
-//	  return actual_storage_->SafeRead(key, new_object, first_read_txn);
-//  }
+  inline Value* SafeRead(const Key& key, bool new_object){
+      return actual_storage_->SafeRead(key, txn_->local_txn_id(), new_object).second;
+  }
 
   bool ReadOnly(){ return txn_->txn_type()&READONLY_MASK; };
 

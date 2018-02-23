@@ -349,7 +349,29 @@ int TPCC::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, bool f
       return ABORT;
       break;
   }
+  return ABORT;
+}
 
+
+int TPCC::ExecuteReadOnly(StorageManager* storage) const {
+  TxnProto* txn = storage->get_txn();
+  switch (txn->txn_type()) {
+    // Initialize
+
+    case ORDER_STATUS:
+    	return OrderStatusTransactionFast(storage, txn);
+    	break;
+
+    case STOCK_LEVEL:
+    	// Force quit, this is a bug!
+    	return StockLevelTransactionFast(storage, txn);
+    	break;
+
+    // Invalid transaction
+    default:
+      return ABORT;
+      break;
+  }
   return ABORT;
 }
 
@@ -703,6 +725,55 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 }
 */
 
+int TPCC::OrderStatusTransactionFast(StorageManager* storage, TxnProto* txn) const {
+	//LOCKLOG(txn->txn_id(), "Executing ORDERSTATUS Fast, is multipart? "<<txn->multipartition());
+
+	Value* val;
+
+	// Read & update the warehouse object
+
+	//Warehouse warehouse;
+	Warehouse warehouse;
+	val = storage->SafeRead(txn->read_set(0), false);
+	assert(warehouse.ParseFromString(*val));
+
+	//District district;
+	District district;
+    val = storage->SafeRead(txn->read_set(1), false);
+	assert(district.ParseFromString(*val));
+
+	Customer customer;
+	val = storage->SafeRead(txn->read_set(2), false);
+	assert(customer.ParseFromString(*val));
+
+	if(customer.last_order() == ""){
+		return SUCCESS;
+	}
+
+	//  double customer_balance = customer->balance();
+	// string customer_first = customer.first();
+	// string customer_middle = customer.middle();
+	// string customer_last = customer.last();
+
+	int order_line_count;
+
+	//FULL_READ(storage, customer.last_order(), order, read_state, val)
+	val = storage->SafeRead(customer.last_order(), true);
+	Order order;
+	assert(order.ParseFromString(*val));
+	order_line_count = order.order_line_count();
+
+	char order_line_key[128];
+	for(int i = 0; i < order_line_count; i++) {
+		snprintf(order_line_key, sizeof(order_line_key), "%sol%d", customer.last_order().c_str(), i);
+		val = storage->SafeRead(order_line_key, true);
+		OrderLine order_line;
+		assert(order_line.ParseFromString(*val));
+	}
+
+	return SUCCESS;
+}
+
 // Read order and orderline new key.
 int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* txn, bool first_read_txn) const {
 	//LOCKLOG(txn->txn_id(), "Executing ORDERSTATUS Fast, is multipart? "<<txn->multipartition());
@@ -831,6 +902,59 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	return SUCCESS;
 }
 */
+
+int TPCC::StockLevelTransactionFast(StorageManager* storage, TxnProto* txn) const {
+	//LOCKLOG(txn->txn_id(), "Executing STOCKLEVEL Fast, is multipart? "<<txn->multipartition());
+
+	Value* val;
+	Key warehouse_key = txn->read_set(0);
+	//PART_READ(storage, Warehouse, warehouse_key, read_state, val)
+	// Read & update the warehouse object
+	val = storage->SafeRead(warehouse_key, false);
+	Warehouse warehouse;
+	assert(warehouse.ParseFromString(*val));
+
+	District district;
+	Key district_key = txn->read_set(1);
+	int latest_order_number;
+	//val = storage->SafeRead(district_key,false);
+	val = storage->SafeRead(district_key, false);
+	assert(district.ParseFromString(*val));
+	latest_order_number = district.next_order_id()-1;
+
+	for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 20); i--) {
+		char order_key[128];
+		snprintf(order_key, sizeof(order_key),
+				  "%so%d", district_key.c_str(), i);
+
+		Order order;
+		val = storage->SafeRead(order_key, true);
+	    //val = storage->SafeRead(order_key, true, first_read_txn, txn->txn_id());
+		assert(order.ParseFromString(*val));
+
+		int ol_number = order.order_line_count();
+
+		for(int j = 0; j < ol_number;j++) {
+			char order_line_key[128];
+			snprintf(order_line_key, sizeof(order_line_key), "%sol%d",
+						order_key, j);
+			OrderLine order_line;
+			val = storage->SafeRead(order_line_key, true);
+			assert(order_line.ParseFromString(*val));
+
+			string item = order_line.item_id();
+			char stock_key[128];
+			snprintf(stock_key, sizeof(stock_key), "%ss%s",
+						warehouse_key.c_str(), item.c_str());
+
+			Stock stock;
+			val = storage->SafeRead(stock_key, false);
+			assert(stock.ParseFromString(*val));
+		 }
+	}
+
+	return SUCCESS;
+}
 
 // Read order and orderline new key.
 int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* txn, bool first_read_txn) const {

@@ -69,6 +69,7 @@ class LockedVersionedStorage {
             return entry->head->value;
   }
 
+  virtual ValuePair SafeRead(const Key& key, int64 txn_id, bool new_object);
   virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
     			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object, vector<int64>* aborted_txs);
   virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,

@@ -596,6 +596,48 @@ void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_objec
 	}
 }
 
+ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool new_object) {
+    //ASSERT(objects_.count(key) != 0);
+
+    // Access new object table, I should take the corresponding mutex. This serves two purposes
+    // 1. To avoid another concurrent transaction to insert elements into the table, which may cause map rehash and invalidate my
+    // value entry
+    // 2. To avoid another concurrent transaction to insert an element that I am just going to read as well as inserting an empty entry,
+    // which causes data races.
+    KeyEntry* entry;
+    if(new_object){
+        int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
+        pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
+        // If its empty entry, create a new entry
+        //LOG(txn_id, " trying to safe read new obj ["<<key<<"]");
+        assert(new_objects_[new_tab_num].count(key) != 0);
+        entry = new_objects_[new_tab_num][key];
+        pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
+    }
+    else{
+        ASSERT(objects_.count(key) != 0);
+        entry = objects_[key];
+    }
+
+    // If the transaction that requested the lock is ordered before me, I have to wait for him
+    pthread_mutex_lock(&(entry->mutex_));
+    ValuePair value_pair;
+    //LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
+    for (DataNode* list = entry->head; list; list = list->next) {
+        if (list->txn_id <= txn_id) {
+            ASSERT(list->txn_id < DeterministicScheduler::num_lc_txns_);
+            DirtyGC(list, DeterministicScheduler::num_lc_txns_-GC_THRESHOLD, entry);
+            value_pair.first = NOT_COPY;
+            value_pair.second = list->value;
+            //LOG(txn_id, " safe reading ["<<key<<"] from"<<list->txn_id<<", addr is "<<reinterpret_cast<int64>(value_pair.second));
+            break;
+        }
+    }
+    pthread_mutex_unlock(&(entry->mutex_));
+    ASSERT(value_pair.second!=NULL);
+    return value_pair;
+}
+
 void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64_t>* aborted_txs) {
 	//LOG(txn_id, " unlock "<<key);
 	KeyEntry* entry;
