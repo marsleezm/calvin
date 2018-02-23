@@ -272,6 +272,7 @@ void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, T
 }
 
 int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, bool first) const{
+    return SUCCESS;
     LOG(txn->txn_id(), " executing read-only");
     //return SUCCESS;
 
@@ -300,6 +301,7 @@ int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* t
 }
 
 int Microbenchmark::Execute(StorageManager* storage) const {
+    return SUCCESS;
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 	TxnProto* txn = storage->get_txn();

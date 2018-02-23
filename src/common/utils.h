@@ -30,7 +30,6 @@
 using namespace std;
 using tr1::unordered_map;
 #define RING_BUFFER_SIZE 1024 
-#define RO_QUEUE_SIZE 4 
 
 
 #define READING -2

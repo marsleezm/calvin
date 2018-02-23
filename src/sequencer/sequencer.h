@@ -168,6 +168,7 @@ class Sequencer {
 
   int64 txn_bound = -1;
   uint queue_idx = 0;
+  uint generated_txn = 0;
   bool readonly; 
   int num_queues_;
 

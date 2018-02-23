@@ -76,7 +76,6 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	// Start Sequencer main loops running in background thread.
 	txns_queue_ = new AtomicQueue<TxnProto*>();
 	paxos_queues = new AtomicQueue<string>();
-    assert(num_threads >= RO_QUEUE_SIZE);
 
 	for(int i = 0; i < THROUGHPUT_SIZE; ++i){
 		throughput[i] = -1;
@@ -247,6 +246,7 @@ void Sequencer::RunWriter() {
 		   	txn_map[involved_nodes].push_back(txn);
 		}
         txn_id_offset++;
+        ++generated_txn;
       }
     }
     txn_id_offset = 0;
@@ -280,7 +280,6 @@ void Sequencer::RunWriter() {
            }
        }
    }
-
 
 	// Create a map iterator and point to the end of map
 	std::set<int>::reverse_iterator it = after_node_set.rbegin();
@@ -359,6 +358,7 @@ void Sequencer::RunReader() {
   int txn_count = 0;
   int batch_count = 0;
   int last_aborted = 0;
+  int last_generated = 0;
   int batch_number = configuration_->this_node_id;
   int second = 0;
 
@@ -440,7 +440,8 @@ void Sequencer::RunReader() {
       			<< " txns/sec, "
       			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
       			<< " txns/sec aborted, " 
-      			<< " this round fetched "<<fetched_txn_num_- last_fetched<<", "
+      			<< " fetched "<<fetched_txn_num_- last_fetched<<", "
+                << " generated "<<generated_txn - last_generated<<", "
       			<< num_pend_txns_ << " pending, time is "<<second<<"\n" << std::flush;
       throughput[second] = (Sequencer::num_committed-last_committed) / (now_time- time);
       abort[second] = (Sequencer::num_aborted_-last_aborted) / (now_time- time);
@@ -454,6 +455,7 @@ void Sequencer::RunReader() {
       txn_count = 0;
       batch_count = 0;
       last_fetched = fetched_txn_num_;
+      last_generated = generated_txn;
       last_committed = Sequencer::num_committed;
         
     }

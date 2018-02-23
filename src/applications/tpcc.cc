@@ -286,6 +286,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int TPCC::Execute(StorageManager* storage) const {
+    return SUCCESS;
   switch (storage->get_txn()->txn_type()) {
     // Initialize
     case INITIALIZE:
@@ -332,6 +333,7 @@ int TPCC::Execute(StorageManager* storage) const {
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int TPCC::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, bool first_read_txn) const {
+    return SUCCESS;
   switch (txn->txn_type()) {
     // Initialize
 
@@ -354,6 +356,7 @@ int TPCC::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, bool f
 
 
 int TPCC::ExecuteReadOnly(StorageManager* storage) const {
+    return SUCCESS;
   TxnProto* txn = storage->get_txn();
   switch (txn->txn_type()) {
     // Initialize
