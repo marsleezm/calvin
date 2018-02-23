@@ -30,6 +30,7 @@ message TPCCArgs {
   optional int32 threshold = 51;
   repeated int32 order_line_count = 52;
   repeated bytes indexed_keys = 53;
+  optional int32 remote_warehouse_id = 54;
   
   // Needed for transaction exection;
   optional bytes warehouse_key = 60;
