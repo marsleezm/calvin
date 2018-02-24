@@ -268,7 +268,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 
 // The load generator can be called externally to return a transaction proto
 // containing a new type of transaction.
-void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* txn, int remote_node) const {
+void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* txn, int remote_node) {
 }
 
 int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, bool first) const{

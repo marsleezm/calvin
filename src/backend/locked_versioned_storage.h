@@ -19,7 +19,7 @@
 #include <inttypes.h>
 
 #define CHKPNTDIR "../db/checkpoints"
-#define NUM_NEW_TAB 4
+#define NUM_NEW_TAB 16 
 #define BIT_MASK (NUM_NEW_TAB-1)
 
 using std::tr1::unordered_map;

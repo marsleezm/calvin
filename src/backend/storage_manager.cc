@@ -19,7 +19,6 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), 
 	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
-	tpcc_args = new TPCCArgs();
 	txn_ = NULL;
     sc_list = NULL;
     ca_list = NULL;
@@ -33,8 +32,6 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), 
 	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
-	tpcc_args = new TPCCArgs();
-	tpcc_args ->ParseFromString(txn->arg());
 	if (txn->multipartition()){
 		connection->LinkChannel(IntToString(txn->txn_id()));
 
@@ -139,7 +136,6 @@ void StorageManager::SetupTxn(TxnProto* txn){
 	ASSERT(txn->multipartition());
 
 	txn_ = txn;
-	tpcc_args ->ParseFromString(txn->arg());
 	for (int i = 0; i<txn_->readers_size(); ++i){
 		recv_an.push_back(make_pair(txn_->readers(i), -1));
         if (txn_->readers(i) == configuration_->this_node_id)
@@ -181,6 +177,7 @@ void StorageManager::SetupTxn(TxnProto* txn){
 }
 
 void StorageManager::Abort(){
+    spec_commit_time = 0;
 	//LOG(txn_->txn_id(), " txn is aborted! AB is "<<abort_bit_);
 	if (!spec_committed_){
 		for (tr1::unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
@@ -212,8 +209,10 @@ void StorageManager::Abort(){
 	}
 	suspended_key = "";
 	read_set_.clear();
-	tpcc_args->Clear();
-	tpcc_args ->ParseFromString(txn_->arg());
+    if(tpcc_args){
+        tpcc_args->Clear();
+        tpcc_args ->ParseFromString(txn_->arg());
+    }
     assert(has_confirmed == false);
 	max_counter_ = 0;
     spec_committed_ = false;

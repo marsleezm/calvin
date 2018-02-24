@@ -29,7 +29,7 @@
 #include "common/config_reader.h"
 
 #define LATENCY_SIZE 2000
-#define SAMPLE_RATE 1000
+#define SAMPLE_RATE 100
 //#define NUM_SC_TXNS 1000
 // Checking the number of pending txns to decide if start a new txn is not totally synchronized, so we allocate a little bit more space
 //#define SC_ARRAY_SIZE (NUM_SC_TXNS+NUM_THREADS*2)
@@ -78,18 +78,28 @@ class DeterministicScheduler : public Scheduler {
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
 
-  inline static void AddLatency(int& latency_count, pair<int64, int64>* array, TxnProto* txn){
+  inline static void AddLatency(MyTuple<int64, int64, int64>* array, int64 sc_time, TxnProto* txn){
       if (txn->seed() % SAMPLE_RATE == 0)
       {
+          /*
           if(latency_count == LATENCY_SIZE)
               latency_count = 0;
           int64 now_time = GetUTime();
-          array[latency_count] = make_pair(now_time - txn->seed(), now_time - txn->seed());
+          if(sc_time == 0)
+              array[latency_count] = make_pair(0, now_time - txn->seed());
+          else
+              array[latency_count] = make_pair(now_time-sc_time, now_time - txn->seed());
           ++latency_count;
+          */
+          int64 now_time = GetUTime();
+          if(sc_time != 0)
+              array[0].first += now_time-sc_time;
+          array[0].second += now_time - txn->seed();
+          array[0].third += 1;
       }
   }
 
-  bool ExecuteTxn(StorageManager* manager, int thread, std::tr1::unordered_map<int64_t, StorageManager*>& active_txns, int& latency_count);
+  bool ExecuteTxn(StorageManager* manager, int thread, std::tr1::unordered_map<int64_t, StorageManager*>& active_txns);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);
@@ -144,7 +154,7 @@ class DeterministicScheduler : public Scheduler {
   int sc_array_size;
   priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
 
-  pair<int64, int64>** latency;
+  MyTuple<int64, int64, int64>** latency;
   MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;
   pthread_mutex_t commit_tx_mutex;
 };

@@ -302,7 +302,7 @@ int main(int argc, char** argv) {
     								 batch_connection,
                                      storage,
 									 sequencer.GetTxnsQueue(), client,
-                                     new TPCC());
+                                     new TPCC(&config));
 
 	sequencer.SetScheduler(scheduler);
 

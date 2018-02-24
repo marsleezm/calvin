@@ -281,6 +281,7 @@ class StorageManager {
 
   inline TxnProto* get_txn(){ return txn_; }
   inline TPCCArgs* get_args() { return tpcc_args;}
+  inline void set_args() {  tpcc_args = new TPCCArgs(); tpcc_args->ParseFromString(txn_->arg()); }
   inline void put_inlist() { in_list = true; }
   inline bool if_inlist() { return in_list;}
 
@@ -327,7 +328,7 @@ class StorageManager {
 		  }
 	  }
   }
-	void inline spec_commit() {spec_committed_ = true; }
+	void inline spec_commit() {spec_committed_ = true; spec_commit_time = GetUTime(); }
 
  private:
 
@@ -367,7 +368,7 @@ class StorageManager {
   AtomicQueue<pair<int64_t, int>>* abort_queue_;
   AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue_;
 
-  TPCCArgs* tpcc_args;
+  TPCCArgs* tpcc_args = NULL;
 
   // Direct hack to track nodes whose read-set will affect my execution, namely owners of all data that appears before data of my node
 
@@ -393,6 +394,7 @@ class StorageManager {
   int num_aborted_;
   atomic<int32> local_aborted_;
   pthread_mutex_t lock;
+  int64 spec_commit_time;
 
   Key suspended_key;
   bool first_read_txn = false;

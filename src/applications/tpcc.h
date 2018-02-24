@@ -23,7 +23,7 @@
 //#define NUMBER_OF_ITEMS 500
 
 //#define WAREHOUSES_PER_NODE 12
-#define WAREHOUSES_PER_NODE 12 
+#define WAREHOUSES_PER_NODE 20 
 #define DISTRICTS_PER_WAREHOUSE 10
 #define DISTRICTS_PER_NODE (WAREHOUSES_PER_NODE * DISTRICTS_PER_WAREHOUSE)
 #define CUSTOMERS_PER_DISTRICT 3000
@@ -49,12 +49,14 @@ class TPCC : public Application {
 	STOCK_LEVEL = 17,
 	};
 
+  TPCC(Configuration* config):  config_(config) {}
+  TPCC()  {}
   virtual ~TPCC() {}
 
   // Load generator for a new transaction
   virtual void NewTxn(int64 txn_id, int txn_type,
-                           Configuration* config, TxnProto* txn, int remote_node) const;
-  void NewTxnWorker(Configuration* config, TxnProto* txn) const;
+                           Configuration* config, TxnProto* txn, int remote_node);
+  void NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto* txn) const;
 
   // The key converter takes a valid key (string) and converts it to an id
   // for the checkpoint to use
@@ -134,6 +136,8 @@ class TPCC : public Application {
   // The following are implementations of retrieval and writing for local items
   Value* GetItem(Key key) const;
   void SetItem(Key key, Value* value) const;
+  
+  Configuration* config_;
 };
 
 #endif // _DB_APPLICATIONS_TPCC_H_

@@ -465,7 +465,7 @@ void Sequencer::RunReader() {
 
 void* Sequencer::FetchMessage() {
   MessageProto* batch_message = NULL;
-  //if (txns_queue_->Size() < 2000){
+  if (txns_queue_->Size() < 3000){
 	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
 	  // Have we run out of txns in our batch? Let's get some new ones.
 	  if (batch_message != NULL) {
@@ -485,7 +485,7 @@ void* Sequencer::FetchMessage() {
 		  delete batch_message;
 		  ++fetched_batch_num_;
 	  }
-  //}
+  }
   return NULL;
 
 //    // Report throughput.
@@ -541,7 +541,8 @@ void Sequencer::output(){
     for(int i = 0; i<num_threads; ++i){
     	count = 0;
 		while(scheduler_->latency[i][count].first != 0 && count < LATENCY_SIZE){
-			myfile << scheduler_->latency[i][count].first<<", "<<scheduler_->latency[i][count].second << '\n';
+            int cnt = scheduler_->latency[i][count].third;
+			myfile << scheduler_->latency[i][count].first/cnt<<", "<<scheduler_->latency[i][count].second/cnt << '\n';
 			++count;
 		}
     }
