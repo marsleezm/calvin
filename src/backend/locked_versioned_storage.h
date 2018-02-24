@@ -54,7 +54,7 @@ class LockedVersionedStorage {
             entry = objects_[key];
 
         if (first_reader and entry->head->next){
-            entry->oldest = entry->head->txn_id;
+            entry->oldest = entry->head;
             DataNode* current = entry->head->next, *next;
             entry->head->next = NULL;
             //LOG(txn_id, " deleting "<<key);
@@ -91,30 +91,17 @@ class LockedVersionedStorage {
 
   // TODO: It's just a dirty/unsafe hack to do GC to avoid having too many versions
   void inline DirtyGC(DataNode* list, int from_version, KeyEntry* entry){//, int64 txn_id, Key key){
-	  if(entry->oldest <= from_version){
+	  if(entry->oldest and entry->oldest->txn_id <= from_version){
           //LOG(txn_id, " deleting "<<key);
-		  DataNode* current = list->next, *next, *prev=list;
-		  int i = 0;
-		  while(current){
-			  if(current->txn_id <= from_version){
-				  if(i>=2){
-					  prev->next = NULL;
-					  entry->oldest = prev->txn_id;
-					  //std::cout<<tx_id<<" GCing "<<key<<", prev "<<list->txn_id<<" since "<<from_version<<", del "<<current->txn_id<<", new oldest "<<prev->txn_id<<endl;
-					  while(current){
-						  next = current->next;
-						  delete current;
-						  current = next;
-					  }
-				  }
-				  break;
-			  }
-			  else{
-				  prev = current;
-				  current = current->next;
-				  ++i;
-			  }
+		  DataNode* current = entry->oldest, *prev=current->prev;
+		  while(current and prev and prev->txn_id <= from_version){
+              delete current;
+              prev->next = NULL;
+              current = prev;
+              if(current)
+                  prev = current->prev;
 		  }
+          entry->oldest = current;
 	  }
   }
 
