@@ -131,6 +131,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	pend_block = new int[num_threads];
 	suspend_block = new int[num_threads];
 	message_queues = new AtomicQueue<MessageProto>*[num_threads+1];
+	//abort_queues = new AtomicQueue<pair<int64_t, int>>*[num_threads];
+	//waiting_queues = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>*[num_threads];
 
 	latency = new MyTuple<int64, int64, int64>*[num_threads];
 
@@ -143,6 +145,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	for (int i = 0; i < num_threads; i++) {
 		latency[i] = new MyTuple<int64, int64, int64>[LATENCY_SIZE];
 		message_queues[i] = new AtomicQueue<MessageProto>();
+		//abort_queues[i] = new AtomicQueue<pair<int64_t, int>>();
+		//waiting_queues[i] = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>();
         to_sc_txns_[i] = new pair<int64, StorageManager*>[sc_array_size];
         for(int j = 0; j<sc_array_size; ++j)
             to_sc_txns_[i][j] = pair<int64, StorageManager*>(NO_TXN, NULL);
@@ -218,8 +222,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
         reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
     pair<int64, StorageManager*>* local_sc_txns= scheduler->to_sc_txns_[thread];
-    AtomicQueue<pair<int64_t, int>> abort_queue;
-    AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;
+    AtomicQueue<pair<int64_t, int>> abort_queue;// = scheduler->abort_queues[thread];
+    AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;// = scheduler->waiting_queues[thread];
 
     AtomicQueue<MessageProto>* locker_queue = scheduler->message_queues[scheduler->num_threads];
 
@@ -557,6 +561,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   txn = NULL;
               }
               else{
+                  if(txn->seed() % SAMPLE_RATE == 0)
+                      txn->set_start_time(GetUTime());
                   LOG(txn->txn_id(), " starting, local "<<txn->local_txn_id());
                   latest_started_tx = txn->local_txn_id();
                   while (local_sc_txns[txn->local_txn_id()%sc_array_size].first != NO_TXN){
@@ -583,6 +589,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
           }
 	  }
   }
+  usleep(1000000);
   return NULL;
 }
 
@@ -747,6 +754,7 @@ DeterministicScheduler::~DeterministicScheduler() {
 	for(int i = 0; i<num_threads; ++i)
 		pthread_join(threads_[i], NULL);
 
+    delete txns_queue_;
     delete[] to_sc_txns_;
 	double total_block = 0;
 	int total_sc_block = 0, total_pend_block = 0, total_suspend_block =0;
@@ -757,6 +765,8 @@ DeterministicScheduler::~DeterministicScheduler() {
 		total_suspend_block += suspend_block[i];
 		//delete pending_txns_[i];
 		delete thread_connections_[i];
+        //delete abort_queues[i];
+        //delete waiting_queues[i];
 	}
 	delete thread_connections_[num_threads];
 	std::cout<<" Scheduler done, total block time is "<<total_block/1e6<<std::endl;

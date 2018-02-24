@@ -538,13 +538,16 @@ void Sequencer::output(){
     }
     myfile << "LATENCY" << '\n';
 
+    int64 cnt = 0, exec_lat = 0, total_lat = 0;
     for(int i = 0; i<num_threads; ++i){
     	count = 0;
 		while(scheduler_->latency[i][count].first != 0 && count < LATENCY_SIZE){
-            int cnt = scheduler_->latency[i][count].third;
-			myfile << scheduler_->latency[i][count].first/cnt<<", "<<scheduler_->latency[i][count].second/cnt << '\n';
-			++count;
+            cnt += scheduler_->latency[i][count].third;
+            exec_lat += scheduler_->latency[i][count].first;
+            total_lat += scheduler_->latency[i][count].second;
+            ++count;
 		}
     }
+    myfile << exec_lat/cnt<<", "<<total_lat/cnt << '\n';
     myfile.close();
 }

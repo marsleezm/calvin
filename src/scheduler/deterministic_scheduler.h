@@ -92,9 +92,12 @@ class DeterministicScheduler : public Scheduler {
           ++latency_count;
           */
           int64 now_time = GetUTime();
-          if(sc_time != 0)
+          if(sc_time != 0){
+              //if(now_time -sc_time > 10000)
+              //   std::cout<<" Now "<<now_time<<", sc "<<sc_time<<", start "<<txn->start_time()<<std::endl;
               array[0].first += now_time-sc_time;
-          array[0].second += now_time - txn->seed();
+          }
+          array[0].second += now_time - txn->start_time();
           array[0].third += 1;
       }
   }
@@ -143,6 +146,8 @@ class DeterministicScheduler : public Scheduler {
   // Transactions that can only resume execution after all its previous txns have been local-committed
 
   AtomicQueue<MessageProto>** message_queues;
+  //AtomicQueue<pair<int64_t, int>>** abort_queues;
+  //AtomicQueue<MyTuple<int64_t, int, ValuePair>>** waiting_queues;
 
   double* block_time;
   int* sc_block;

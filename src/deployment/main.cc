@@ -313,6 +313,7 @@ int main(int argc, char** argv) {
 	delete scheduler;
 	delete batch_connection;
 	delete sequencer_connection;
+    delete storage;
 	return 0;
 }
 

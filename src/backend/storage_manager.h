@@ -394,7 +394,7 @@ class StorageManager {
   int num_aborted_;
   atomic<int32> local_aborted_;
   pthread_mutex_t lock;
-  int64 spec_commit_time;
+  int64 spec_commit_time = 0;
 
   Key suspended_key;
   bool first_read_txn = false;
