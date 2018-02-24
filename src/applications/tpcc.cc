@@ -100,24 +100,18 @@ void TPCC::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* t
 void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto* txn) const {
 
   // Because a switch is not scoped we declare our variables outside of it
+  int thread = storage->thread;
   int warehouse_id, district_id, customer_id;
   char warehouse_key[128], district_key[128], customer_key[128];
   int order_line_count;
   Value customer_value;
   std::set<int> items_used;
-  Rand rand;
-  rand.seed(txn->seed());
   TPCCArgs* tpcc_args = new TPCCArgs();
   tpcc_args->ParseFromString(txn->arg());
   int remote_warehouse_id = tpcc_args->remote_warehouse_id();
 
   // We set the read and write set based on type
   switch (txn->txn_type()) {
-    // Initialize
-    case INITIALIZE:
-      // Finished with INITIALIZE txn creation
-      break;
-
     // New Order
     case NEW_ORDER:
     	{
@@ -125,7 +119,7 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
     	readers.insert(config->this_node_id);
 
       // First, we pick a local warehouse
-        warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+        warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
         snprintf(warehouse_key, sizeof(warehouse_key), "w%d",
                  warehouse_id);
 
@@ -133,21 +127,21 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
         txn->add_read_set(warehouse_key);
 
         // Next, we pick a random district
-        district_id = rand.next() % DISTRICTS_PER_WAREHOUSE;
+        district_id = thread % DISTRICTS_PER_WAREHOUSE;
         snprintf(district_key, sizeof(district_key), "w%dd%d",
         		warehouse_id, district_id);
         // 0th key in read-write set is district
         txn->add_read_write_set(district_key);
 
         // Finally, we pick a random customer
-        customer_id = rand.next() % CUSTOMERS_PER_DISTRICT;
+        customer_id = thread % CUSTOMERS_PER_DISTRICT;
         snprintf(customer_key, sizeof(customer_key),
         		"w%dd%dc%d", warehouse_id, district_id, customer_id);
         // 1st key in read set is customer
         txn->add_read_set(customer_key);
 
         // We set the length of the read and write set uniformly between 5 and 15
-        order_line_count = (rand.next() % 11) + 5;
+        order_line_count = (thread % 11) + 5;
 
         char remote_warehouse_key[128];
         if(txn->multipartition())
@@ -162,7 +156,7 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
         	// Set the item id (Invalid orders have the last item be -1)
         	int item;
         	do {
-        		item = rand.next() % NUMBER_OF_ITEMS;
+        		item = (thread*100+i) % NUMBER_OF_ITEMS;
         	} while (items_used.count(item) > 0);
         	items_used.insert(item);
 
@@ -176,7 +170,7 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
 
 			// Set the quantity randomly within [1..10]
 			//tpcc_args->add_items(item);
-			tpcc_args->add_quantities(rand.next() % 10 + 1);
+			tpcc_args->add_quantities(thread % 10 + 1);
       }
         LOG(txn->txn_id(), " setting order line count to "<<order_line_count);
         tpcc_args->add_order_line_count(order_line_count);
@@ -188,16 +182,16 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
     // Payment
     case PAYMENT:
 		// Specify an amount for the payment
-		tpcc_args->set_amount(rand.next() / (static_cast<double>(RAND_MAX + 1.0)) *
+		tpcc_args->set_amount(thread / (static_cast<double>(RAND_MAX + 1.0)) *
                             4999.0 + 1);
 
 		// First, we pick a local warehouse
-		warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+		warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
 		snprintf(warehouse_key, sizeof(warehouse_key), "w%dy", warehouse_id);
 		txn->add_read_write_set(warehouse_key);
 
 		// Next, we pick a district
-		district_id = rand.next() % DISTRICTS_PER_WAREHOUSE;
+		district_id = thread % DISTRICTS_PER_WAREHOUSE;
 		snprintf(district_key, sizeof(district_key), "w%dd%dy",
                warehouse_id, district_id);
 		txn->add_read_write_set(district_key);
@@ -211,7 +205,7 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
 
 		// Next, we find the customer as a local one
 		if (txn->readers_size() == 1) {
-			customer_id = rand.next() % CUSTOMERS_PER_DISTRICT;
+			customer_id = thread % CUSTOMERS_PER_DISTRICT;
 			snprintf(customer_key, sizeof(customer_key),
                  "w%dd%dc%d", warehouse_id, district_id, customer_id);
 
@@ -221,14 +215,14 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
             int remote_customer_id;
             char remote_warehouse_key[40];
             snprintf(remote_warehouse_key, sizeof(remote_warehouse_key), "w%d", remote_warehouse_id);
-            remote_district_id = rand.next() % DISTRICTS_PER_WAREHOUSE;
-            remote_customer_id = rand.next() % CUSTOMERS_PER_DISTRICT;
+            remote_district_id = thread % DISTRICTS_PER_WAREHOUSE;
+            remote_customer_id = thread % CUSTOMERS_PER_DISTRICT;
             snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d",
 			remote_warehouse_id, remote_district_id, remote_customer_id);
 		}
 
 		// We only do secondary keying ~60% of the time
-		if (rand.next() / (static_cast<double>(RAND_MAX + 1.0)) < 0.00) {
+		if (thread / (static_cast<double>(RAND_MAX + 1.0)) < 0.00) {
 			// Now that we have the object, let's create the txn arg
 			tpcc_args->set_last_name(customer_key);
 			txn->add_read_set(customer_key);
@@ -239,6 +233,22 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
 		}
 		break;
 
+     case DELIVERY :
+     {
+         warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+         snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
+         txn->add_read_set(warehouse_key);
+         //char order_line_key[128];
+         //int oldest_order;
+       
+         for(int i = 0; i < DISTRICTS_PER_WAREHOUSE; i++) {
+        	 snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key, i);
+        	 txn->add_read_set(district_key);
+         }
+
+         break;
+      }
+
      case ORDER_STATUS :
      {
     	string customer_string;
@@ -247,13 +257,13 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
         string district_string;
         //int customer_order_line_number;
 
-        warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+        warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
         snprintf(warehouse_key, sizeof(warehouse_key), "w%dy",
     		   warehouse_id);
-        district_id = rand.next() % DISTRICTS_PER_WAREHOUSE;
+        district_id = thread % DISTRICTS_PER_WAREHOUSE;
         snprintf(district_key, sizeof(district_key), "w%dd%dy",
               warehouse_id, district_id);
-        customer_id = rand.next() % CUSTOMERS_PER_DISTRICT;
+        customer_id = thread % CUSTOMERS_PER_DISTRICT;
 	    snprintf(customer_key, sizeof(customer_key),
 				"w%dd%dc%d",
 				warehouse_id, district_id, customer_id);
@@ -267,35 +277,20 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto
 
      case STOCK_LEVEL:
      {
-    	 warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+    	 warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
             
     	 // Next, we pick a random district
-    	 district_id = rand.next() % DISTRICTS_PER_WAREHOUSE;
+    	 district_id = thread % DISTRICTS_PER_WAREHOUSE;
     	 snprintf(district_key, sizeof(district_key), "w%dd%d",warehouse_id, district_id);
        
     	 txn->add_read_set(warehouse_key);
     	 txn->add_read_set(district_key);
 
-    	 tpcc_args->set_threshold(rand.next()%10 + 10);
+    	 tpcc_args->set_threshold(thread%10 + 10);
     	 break;
       }
 
-     case DELIVERY :
-     {
-         warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
-         snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
-         txn->add_read_set(warehouse_key);
-         //char order_line_key[128];
-         //int oldest_order;
-       
-         for(int i = 0; i < DISTRICTS_PER_WAREHOUSE; i++) {
-        	 snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key, i);
-        	 txn->add_read_set(district_key);
-         }
-
-         break;
-      }
 
     // Invalid transaction
     default:

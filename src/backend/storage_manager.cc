@@ -15,10 +15,10 @@
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		LockedVersionedStorage* actual_storage,  AtomicQueue<pair<int64_t, int>>* abort_queue,
-								 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue)
+								 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, int thread)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), 
-	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
+	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""), thread(thread){
 	txn_ = NULL;
     sc_list = NULL;
     ca_list = NULL;
@@ -28,10 +28,10 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn)
+			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn, int thread)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), 
-	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""){
+	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_aborted_(0), local_aborted_(0), suspended_key(""), thread(thread){
 	if (txn->multipartition()){
 		connection->LinkChannel(IntToString(txn->txn_id()));
 

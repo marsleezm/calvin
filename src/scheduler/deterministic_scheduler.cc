@@ -467,7 +467,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  if (active_g_tids.count(txn_id) == false){
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
-								   scheduler->storage_, &abort_queue, &waiting_queue);
+								   scheduler->storage_, &abort_queue, &waiting_queue, thread);
 				  // The transaction has not started, so I do not need to abort even if I am receiving different values than before
 				  manager->HandleReadResult(message);
 				  active_g_tids[txn_id] = manager;
@@ -573,7 +573,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   if (active_g_tids.count(txn->txn_id()) == 0){
                       manager = new StorageManager(scheduler->configuration_,
                                        scheduler->thread_connections_[thread],
-                                       scheduler->storage_, &abort_queue, &waiting_queue, txn);
+                                       scheduler->storage_, &abort_queue, &waiting_queue, txn, thread);
                       active_g_tids[txn->txn_id()] = manager;
                   }
                   else{
