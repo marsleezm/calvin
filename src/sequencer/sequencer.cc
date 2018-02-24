@@ -287,7 +287,7 @@ void Sequencer::RunWriter() {
 	// Iterate over the map using Iterator till beginning.
 	while (it != after_node_set.rend()) {
        	for(auto txn: txn_map[*it]) {
-		   	//LOG(batch_number, " adding "<<txn->txn_id()<<" for after node "<<after_node<<", multi "<<txn->involved_nodes());
+		   	LOG(batch_number, " adding "<<txn->txn_id()<<" for after node "<<after_node<<", multi "<<txn->involved_nodes());
             txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
           	txn->SerializeToString(&txn_string);
            	batch.add_data(txn_string);

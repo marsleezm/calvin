@@ -17,13 +17,13 @@
 #define COLD_CUTOFF 990000
 
 void Microbenchmark::AccumulateRandomKeys(set<int>* keys, int num_keys, int key_start,
-                                   int key_limit, int part, Rand* rand) const {
+                                   int key_limit, int part, Rand* rand, int thread) const {
   ASSERT(key_start % nparts == 0);
   for (int i = 0; i < num_keys; i++) {
     // Find a key not already in '*keys'.
     int key;
     do {
-    	key = RandomLocalKey(key_start, key_limit, part, rand);
+        key = key_start + part + nparts * (thread*100+i) % ((key_limit - key_start)/nparts);
     } while (keys->count(key));
     keys->insert(key);
   }
@@ -47,14 +47,15 @@ void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
 }
 
 void Microbenchmark::GetRandomKeys(set<int>* keys, int num_keys, int key_start,
-                                   int key_limit, int part, Rand* rand) const {
+                                   int key_limit, int part, Rand* rand, int thread) const {
   ASSERT(key_start % nparts == 0);
   keys->clear();
   for (int i = 0; i < num_keys; i++) {
     // Find a key not already in '*keys'.
     int key;
     do {
-    	key = RandomLocalKey(key_start, key_limit, part, rand);
+        key = key_start + part + nparts * (thread*100+i) % ((key_limit - key_start)/nparts);
+        LOG(-1, " adding "<<key);
     } while (keys->count(key));
     keys->insert(key);
   }
@@ -128,7 +129,7 @@ TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_
 }
 
 
-void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
+void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand, int thread) const {
 	set<int> keys;
 
 	switch (txn->txn_type()|READONLY_MASK) {
@@ -141,7 +142,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						indexAccessNum,
 						nparts * 0,
 						nparts * index_records,
-						part, rand);
+						part, rand, thread);
 
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
@@ -150,7 +151,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						kRWSetSize-indexAccessNum,
 						nparts * index_records,
 						nparts * kDBSize,
-						part, rand);
+						part, rand, thread);
 
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
@@ -164,7 +165,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						  indexAccessNum,
 							nparts * 0,
 							nparts * index_records,
-							part, rand);
+							part, rand, thread);
 
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
@@ -173,7 +174,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						  kRWSetSize-2*indexAccessNum,
 						  nparts * index_records,
 						  nparts * kDBSize,
-						  part, rand);
+						  part, rand, thread);
 
 
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
@@ -199,7 +200,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						  key_to_get,
 						  0,
 						  nparts * index_records,
-						  txn->readers(i), rand);
+						  txn->readers(i), rand, thread);
 					remain_index -= avg_key_per_part;
 					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 						//LOG(txn->txn_id(), " adding "<<*it);
@@ -211,7 +212,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 					  remain_index,
 					  0,
 					  nparts * index_records,
-					  txn->readers(i), rand);
+					  txn->readers(i), rand, thread);
 					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 						//LOG(txn->txn_id(), " adding "<<*it);
 						txn->add_read_write_set(IntToString(*it));
@@ -221,7 +222,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 					  key_to_get-remain_index,
 					  nparts * index_records,
 					  nparts * kDBSize,
-					  txn->readers(i), rand);
+					  txn->readers(i), rand, thread);
 					remain_index = 0;
 					for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 						//LOG(txn->txn_id(), " adding "<<*it);
@@ -241,7 +242,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 						index_first_part,
 		                nparts * 0,
 		                nparts * index_records,
-						txn->readers(0), rand);
+						txn->readers(0), rand, thread);
 			for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it)
 				txn->add_read_write_set(IntToString(*it));
 
@@ -251,7 +252,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand) const {
 							  avg_index_per_part,
 				              nparts * 0,
 							  nparts * index_records,
-							  txn->readers(i), rand);
+							  txn->readers(i), rand, thread);
 				for (set<int>::iterator it = keys.begin(); it != keys.end(); ++it){
 					txn->add_read_write_set(IntToString(*it));
 					//std::cout<<txn_id<<" adding "<<IntToString(*it)<<" for "<<parts[i]<<std::endl;
@@ -272,13 +273,13 @@ void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, T
 }
 
 int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, bool first) const{
-    return SUCCESS;
     LOG(txn->txn_id(), " executing read-only");
     //return SUCCESS;
 
     Rand rand;
     rand.seed(txn->seed());
-    GetKeys(txn, &rand);
+    ASSERT(1 == 2);
+    GetKeys(txn, &rand, 0);
 
 	if(txn->txn_type() & DEPENDENT_MASK){
         Value* val;
@@ -301,7 +302,6 @@ int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* t
 }
 
 int Microbenchmark::Execute(StorageManager* storage) const {
-    return SUCCESS;
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 	TxnProto* txn = storage->get_txn();
@@ -314,7 +314,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
         {
             Rand rand;
             rand.seed(txn->seed());
-            GetKeys(txn, &rand);
+            GetKeys(txn, &rand, storage->thread);
         }
 		for (int i = 0; i < indexAccessNum; i++) {
 			Value* index_val, *next_val;
@@ -354,15 +354,17 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 		return SUCCESS;
 	}
 	else{
+        LOG(txn->txn_id(), " start "<<GetUTime()/1000);
         if (storage->ShouldExec())
         {
             Rand rand;
             rand.seed(txn->seed());
-            GetKeys(txn, &rand);
+            GetKeys(txn, &rand, storage->thread);
         }
+        LOG(txn->txn_id(), " got key "<<GetUTime()/1000);
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			if(storage->ShouldRead()){
-				//LOG(txn->txn_id(), " trying to read "<<txn->read_write_set(i));
+				LOG(txn->txn_id(), " trying to read "<<txn->read_write_set(i));
 				Value* val = storage->ReadLock(txn->read_write_set(i), read_state, false);
 				if(read_state == NORMAL)
 					*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
@@ -370,6 +372,7 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 					return reinterpret_cast<int64>(val);
 			}
 		}
+        LOG(txn->txn_id(), " done "<<GetUTime()/1000);
 		return SUCCESS;
 	}
 }
