@@ -374,6 +374,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 					LOG(txn_id,  " trying to delete "<<key);
 					next = current->next;
 					delete current;
+                    next->prev = NULL;
 					current = next;
 				}
 				else{
@@ -382,6 +383,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 					//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 					node->txn_id = txn_id;
 					node->next = current;
+                    current->prev = node;
 					entry->head = node;
 					break;
 				}
@@ -392,6 +394,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 				//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 				node->txn_id = txn_id;
 				node->next = current;
+                current->prev = node;
 				entry->head = node;
 			}
 
@@ -661,12 +664,16 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 	while (list) {
 	  if (list->txn_id == txn_id) {
 		  entry->head =	list->next;
+          if(entry->head)
+              entry->head->prev = NULL;
 		  delete list;
 		  break;
 	  }
 	  else if(list->txn_id > txn_id){
 		  //LOG(txn_id, " deleting "<<key); 
 		  entry->head = list->next;
+          if(entry->head != NULL)
+              entry->head->prev = NULL;
 		  delete list;
 		  list = entry->head;
 	  }

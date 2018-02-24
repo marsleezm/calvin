@@ -1082,6 +1082,7 @@ class DataNode {
 	int64_t txn_id;
 	Value* value = NULL;
 	DataNode* next = NULL;
+	DataNode* prev = NULL;
 	bool operator== (DataNode another)
 	{
 		return (txn_id == another.txn_id
@@ -1105,14 +1106,14 @@ class KeyEntry {
 		LockEntry lock;
 		std::vector<ReadFromEntry>* read_from_list;
 		std::vector<PendingReadEntry>* pend_list;
-		int64 oldest;
+		DataNode* oldest;
 		DataNode* head;
 
 		KeyEntry(){
 			read_from_list = new vector<ReadFromEntry>();
 			pend_list = new vector<PendingReadEntry>();
 			head = NULL;
-			oldest = -1;
+			oldest = NULL;
 			pthread_mutex_init(&mutex_, NULL);
 		}
 
