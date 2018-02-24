@@ -97,7 +97,7 @@ class LockedVersionedStorage {
 		  int i = 0;
 		  while(current){
 			  if(current->txn_id <= from_version){
-				  if(i>=2){
+				  if(i>=3){
 					  prev->next = NULL;
 					  entry->oldest = prev->txn_id;
 					  //std::cout<<tx_id<<" GCing "<<key<<", prev "<<list->txn_id<<" since "<<from_version<<", del "<<current->txn_id<<", new oldest "<<prev->txn_id<<endl;
