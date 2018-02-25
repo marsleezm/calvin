@@ -394,7 +394,6 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 				//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 				node->txn_id = txn_id;
 				node->next = current;
-                current->prev = node;
 				entry->head = node;
 			}
 
