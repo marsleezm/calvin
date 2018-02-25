@@ -77,6 +77,7 @@ class DeterministicScheduler : public Scheduler {
   static bool terminated_;
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
+  static void* RunDedicateWorkerThread(void* arg);
 
   inline static void AddLatency(MyTuple<int64, int64, int64>* array, int64 sc_time, TxnProto* txn){
       if (txn->seed() % SAMPLE_RATE == 0)
