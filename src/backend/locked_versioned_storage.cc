@@ -374,7 +374,8 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 					LOG(txn_id,  " trying to delete "<<key);
 					next = current->next;
 					delete current;
-                    next->prev = NULL;
+                    if(next)
+                        next->prev = NULL;
 					current = next;
 				}
 				else{
@@ -394,7 +395,6 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 				//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 				node->txn_id = txn_id;
 				node->next = current;
-                current->prev = node;
 				entry->head = node;
 			}
 
