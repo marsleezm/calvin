@@ -55,7 +55,7 @@ class Client {
  public:
   virtual ~Client() {}
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
-    virtual void SetRemote(int64& involved_nodes, bool& uncertain) = 0;
+    virtual void SetRemote(int64& involved_nodes, int& uncertain_node) = 0;
   //virtual void GetDetTxn(TxnProto** txn, int txn_id, int64 seed) = 0;
 };
 

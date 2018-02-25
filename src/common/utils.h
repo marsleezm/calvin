@@ -35,6 +35,8 @@ using tr1::unordered_map;
 #define NO_LOCK INT_MAX
 #define GC_THRESHOLD 10000
 
+#define CERTAIN -2
+#define ALL_UNCERTAIN -1
 #define ASSERTS_ON true
 
 #define DCHECK(ARG) do { if (ASSERTS_ON) assert(ARG); } while (0)
@@ -997,6 +999,7 @@ class DataNode {
 	int64_t txn_id;
 	Value* value = NULL;
 	DataNode* next = NULL;
+	DataNode* prev = NULL;
 	bool operator== (DataNode another)
 	{
 		return (txn_id == another.txn_id
@@ -1020,14 +1023,14 @@ class KeyEntry {
 		LockEntry lock;
 		std::vector<ReadFromEntry>* read_from_list;
 		std::vector<PendingReadEntry>* pend_list;
-		int64 oldest;
+		DataNode* oldest;
 		DataNode* head;
 
 		KeyEntry(){
 			read_from_list = new vector<ReadFromEntry>();
 			pend_list = new vector<PendingReadEntry>();
 			head = NULL;
-			oldest = -1;
+			oldest = NULL;
 			pthread_mutex_init(&mutex_, NULL);
 		}
 

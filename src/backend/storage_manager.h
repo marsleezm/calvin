@@ -104,7 +104,7 @@ class StorageManager {
         //Stop already if is not MP txn
 		if (ReadOnly())
 			return ADDED;
-        else if (txn_->uncertain() and writer_id == -1)
+        else if (txn_->uncertain_node() != CERTAIN and writer_id == -1)
             return ADDED;
 		else{
 			return_abort_bit = abort_bit_;
@@ -185,7 +185,7 @@ class StorageManager {
 		  //LOG(txn_->txn_id(), " check if can sc commit: sc is "<<spec_committed_<<", numabort is"<<num_aborted_<<", abort bit is "<<abort_bit_ <<", unconfirmed read is "<<num_unconfirmed_read);
 	  if (ReadOnly())
 		  return SUCCESS;
-	  else if (txn_->uncertain() and writer_id == -1)
+	  else if (txn_->uncertain_node() != CERTAIN and writer_id == -1)
 		  return finalized;
 	  else{
 		  if(num_aborted_ != abort_bit_ or !spec_committed_)

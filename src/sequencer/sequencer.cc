@@ -239,8 +239,8 @@ void Sequencer::RunWriter() {
     int txn_id_offset = 0;
     string txn_string;
 	int64 involved_nodes = 0;
-	bool uncertain;
-	client_->SetRemote(involved_nodes, uncertain);
+	int uncertain_node;
+	client_->SetRemote(involved_nodes, uncertain_node);
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
@@ -255,11 +255,12 @@ void Sequencer::RunWriter() {
 
        	if (txn->multipartition() == false){
 			txn->set_involved_nodes(0);
+			txn->set_uncertain_node(CERTAIN);
            	txn_map[0].push_back(txn);
 		}
        	else{
 			txn->set_involved_nodes(involved_nodes);
-			txn->set_uncertain(uncertain);
+			txn->set_uncertain_node(uncertain_node);
 		   	txn_map[involved_nodes].push_back(txn);
 		}
         txn_id_offset++;
@@ -415,22 +416,22 @@ void Sequencer::RunReader() {
       set<int> to_send;
       google::protobuf::RepeatedField<int>::const_iterator  it;
 
-	  if(txn.uncertain() == false){
-		  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
-			  to_send.insert(*it);
-		  for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
-			  to_send.insert(*it);
-
-			  // Insert txn into appropriate batches.
-		  for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
-				  batches[*it].add_data(batch_message->data(i));
-		  }
-	  }
-	  else{
+	  if(txn.uncertain_node() == ALL_UNCERTAIN){
 		  for (uint32 j = 0; j < configuration_->all_nodes.size(); j++) {
 			  to_send.insert(j);
 			  batches[j].add_data(batch_message->data(i));
 		  }
+	  }
+	  else{
+		  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
+			  to_send.insert(*it);
+		  for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
+			  to_send.insert(*it);
+			  // Insert txn into appropriate batches.
+		  if(txn.uncertain_node() != CERTAIN)
+			  to_send.insert(txn.uncertain_node());
+		  for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it)
+			  batches[*it].add_data(batch_message->data(i));
 	  }
 
       txn_count++;

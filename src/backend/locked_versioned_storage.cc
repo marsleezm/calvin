@@ -189,20 +189,8 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 		}
 	}
 	else{
-		//If we are accessing the old-object table, then the entry can not be empty!
-//		if(objects_.count(key) == 0){
-//				LOG(txn_id, key<<" does not exist!!! "<<objects_[key]);
-//				ASSERT(1 == 2);
-//			}
-
-//		if(objects_.count(key) == 0){
-//			std::cout<<"Key is "<<key<<",  txn is "<<txn_id<<", check again "<<objects_.count(key)<<std::endl;
-//			//
-//			assert(1==2);
-//		}
 		ASSERT(objects_.count(key) != 0);
 		entry = objects_[key];
-
 	}
 
 	pthread_mutex_lock(&entry->mutex_);
@@ -299,12 +287,15 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, atomic<
 				break;
 			}
 		}
-
-		pthread_mutex_unlock(&(entry->mutex_));
-		// It's not blind update, so in micro and TPC-C, must always find a value.
-		ASSERT(value_pair.second!=NULL);
-		return value_pair;
-
+		if(value_pair.second == NULL){
+            entry->lock.tx_id_ = NO_LOCK;
+		    pthread_mutex_unlock(&(entry->mutex_));
+            return ValuePair(ABORT, NULL);
+        }
+        else{
+		    pthread_mutex_unlock(&(entry->mutex_));
+            return value_pair;
+        }
 	}
 }
 
@@ -449,6 +440,8 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 					//LOG(txn_id,  " trying to delete value from "<<current->txn_id);
 					next = current->next;
 					delete current;
+					if(next)
+						next->prev = NULL;
 					current = next;
 				}
 				else{
@@ -457,6 +450,7 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 					//LOG(txn_id,  " trying to add my version ["<<key<<"], value addr is "<<reinterpret_cast<int64>(node->value));
 					node->txn_id = txn_id;
 					node->next = current;
+					current->prev = node;
 					entry->head = node;
 					break;
 				}
@@ -694,13 +688,15 @@ void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_
 	while (list) {
 	  if (list->txn_id == txn_id) {
 		  entry->head =	list->next;
-		  //LOG(txn_id, key<<" trying to remove his own value "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
+		  if(entry->head)
+              entry->head->prev = NULL;
 		  delete list;
 		  break;
 	  }
 	  else if(list->txn_id > txn_id){
-		  //LOG(txn_id, " not mine, invalid version is "<<list->txn_id<<", value addr is "<<reinterpret_cast<int64>(list->value)<<", next is "<<reinterpret_cast<int64>(list->next));
 		  entry->head = list->next;
+		  if(entry->head)
+              entry->head->prev = NULL;
 		  delete list;
 		  list = entry->head;
 	  }

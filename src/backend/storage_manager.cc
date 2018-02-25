@@ -567,19 +567,26 @@ StorageManager::~StorageManager() {
 				}
 			}
 		}
-		if(txn_->uncertain() and writer_id == 0){
+		if(txn_->uncertain_node() != CERTAIN and writer_id == 0){
 			LOG(txn_->txn_id(), "Uncertain txn and my id is 0");
 			MessageProto msg;
 			msg.set_type(MessageProto::FINALIZE_UNCERTAIN);
 			msg.set_source_node(configuration_->this_node_id);
 			msg.set_destination_channel(IntToString(txn_->txn_id()));
 			ASSERT(txn_->writers_size() == 2);
-            for (int32 i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
-                if (i != txn_->writers(0) and i != txn_->writers(1)) {
-					LOG(txn_->txn_id(), "sending finalize to "<<i);
-                    msg.set_destination_node(i);
-                    connection_->Send1(msg);
-                }
+			if(txn_->uncertain_node() == ALL_UNCERTAIN){
+				for (int32 i = 0; i < (int)configuration_->all_nodes.size(); ++i) {
+					if (i != txn_->writers(0) and i != txn_->writers(1)) {
+						LOG(txn_->txn_id(), "sending finalize to "<<i);
+						msg.set_destination_node(i);
+						connection_->Send1(msg);
+					}
+				}
+			}
+			else{
+				LOG(txn_->txn_id(), "sending finalize to "<<i);
+				msg.set_destination_node(txn_->uncertain_node());
+				connection_->Send1(msg);
 			}
 		}
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));

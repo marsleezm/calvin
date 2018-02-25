@@ -38,6 +38,7 @@ using namespace std;
 double dependent_percent;
 int multi_txn_num_parts;
 int uncertain_percent;
+bool all_uncertain;
 
 // Microbenchmark load generation client.
 class MClient : public Client {
@@ -48,16 +49,11 @@ class MClient : public Client {
 			parts = new int[multi_txn_num_parts];
   }
   virtual ~MClient() { delete[] parts;}
-  virtual void SetRemote(int64& involved_nodes, bool& uncertain){
-	  int if_uncertain = rand() % 100;
-	  if (if_uncertain < uncertain_percent)
-		  uncertain = true;
-	  else
-		  uncertain = false;
+  virtual void SetRemote(int64& involved_nodes, int& uncertain_node){
 	  involved_nodes = involved_nodes | (1 << config_->this_node_id);
 	  parts[0] = config_->this_node_id;
 	  int counter = 1;
-	  while (counter != multi_txn_num_parts){
+	  while ((int)config_->all_nodes.size() >= multi_txn_num_parts and counter != multi_txn_num_parts){
 		  int new_part = abs(rand()) %  config_->all_nodes.size(), i = 0;
 		  for(i =0; i< counter; ++i){
 			  if(parts[i] == new_part){
@@ -70,6 +66,28 @@ class MClient : public Client {
 			  ++counter;
 		  }
 	  }
+	  int if_uncertain = rand() % 100;
+	  if (if_uncertain < uncertain_percent){
+	      ASSERT((int)config_->all_nodes.size() > multi_txn_num_parts);
+		  if(all_uncertain)
+		  	  uncertain_node = ALL_UNCERTAIN;
+		  else{
+			  while (true){
+				  int new_part = rand() %  config_->all_nodes.size(), i = 0;
+				  for(i =0; i< counter; ++i){
+					  if(parts[i] == new_part){
+						  break;
+					  }
+				  }
+				  if (i == counter){
+					  uncertain_node = new_part;
+					  break;
+				  }
+			  }
+		  }
+	  }
+	  else
+		  uncertain_node = CERTAIN;
   }  
   virtual void GetTxn(TxnProto** txn, int txn_id, int64 seed) {
 	  srand(seed);
@@ -116,7 +134,7 @@ class TClient : public Client {
       read_rate = 100-ur;
   }
   virtual ~TClient() {}
-  virtual void SetRemote(int64& involved_nodes, bool& uncertain){
+  virtual void SetRemote(int64& involved_nodes, int& uncertain){
 	LOG(-1, " trying to get remote");
     int if_uncertain = rand() % 100;
     if (if_uncertain < uncertain_percent)
@@ -225,6 +243,7 @@ int main(int argc, char** argv) {
 	ConfigReader::Initialize("myconfig.conf");
 	dependent_percent = stof(ConfigReader::Value("dependent_percent").c_str());
 	uncertain_percent = stof(ConfigReader::Value("uncertain_percent").c_str());
+	all_uncertain = atoi(ConfigReader::Value("all_uncertain").c_str());
 	multi_txn_num_parts = atoi(ConfigReader::Value("multi_txn_num_parts").c_str());
 
 	//freopen("output.txt","w",stdout);

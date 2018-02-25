@@ -237,7 +237,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     int out_counter1 = 0, latency_count = 0;
     pair<int64, int64>* latency_array = scheduler->latency[thread];
 	vector<MessageProto> buffered_msgs;
-	set<int64> finalized_uncertain;
 
     while (!terminated_) {
 	    if ((scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ or !locker_queue->Empty()) && pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
@@ -465,10 +464,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  mgr->finalized = true;
               scheduler->sc_txn_list[mgr->txn_->local_txn_id()%sc_array_size].first = mgr->txn_->local_txn_id();
 			  LOG(txn_id, " is finalized, active g is "<<active_g_tids.size());
-			  //else{
-			//	  finalized_uncertain.insert(txn_id);
-			//	  LOG(txn_id, " not started, adding to set, size "<<finalized_uncertain.size());
-			//  }
 		  }
 	      else if(message.type() == MessageProto::READ_RESULT)
 	      {
@@ -546,22 +541,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               }
 			  // Create manager.
 			  StorageManager* manager;
-			  /*
-			  if(txn->uncertain() and finalized_uncertain.count(txn->txn_id())){
-				  LOG(txn->txn_id(), " is finalized even before starting!, size of set is "<<finalized_uncertain.size());
-				  manager = new StorageManager(NULL, NULL, NULL, NULL, NULL);
-				  manager->finalized = true;
-              	  scheduler->sc_txn_list[txn->local_txn_id()%sc_array_size] = MyFour<int64, int64, int64, StorageManager*>(txn->local_txn_id(), txn->local_txn_id(), txn->txn_id(), manager);
-				  finalized_uncertain.erase(txn->txn_id());
-				  continue;
-			  }
-			 */
 
 			  if (active_g_tids.count(txn->txn_id()) == 0){
 				  manager = new StorageManager(scheduler->configuration_,
 								   scheduler->thread_connections_[thread],
 								   scheduler->storage_, &abort_queue, &waiting_queue, txn);
-				  LOG(txn->txn_id(), " starting, local is "<<txn->local_txn_id()<<" putting into "<<txn->local_txn_id()%sc_array_size<<", mp"<<txn->multipartition()<<", uncertain:"<<txn->uncertain());
+				  LOG(txn->txn_id(), " starting, local is "<<txn->local_txn_id()<<" putting into "<<txn->local_txn_id()%sc_array_size<<", mp"<<txn->multipartition()<<", uncertain node:"<<txn->uncertain_node());
 				  active_g_tids[txn->txn_id()] = manager;
 			  }
 			  else{
