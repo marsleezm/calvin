@@ -248,6 +248,7 @@ void* DeterministicScheduler::RunDedicateWorkerThread(void* arg) {
     std::thread::id myid = std::this_thread::get_id();
     (void)myid;
 
+    std::cout<<" Dedicate committing thread "<<std::endl;
     while (!terminated_) {
         if(thread == 0){
 			int check_buffer = buffered_msgs.size()-1;

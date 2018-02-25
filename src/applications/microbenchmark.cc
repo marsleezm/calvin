@@ -304,6 +304,7 @@ int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* t
 int Microbenchmark::Execute(StorageManager* storage) const {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
+    //return SUCCESS;
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
 	int read_state;
