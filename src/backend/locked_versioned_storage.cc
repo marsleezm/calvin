@@ -374,7 +374,8 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 					LOG(txn_id,  " trying to delete "<<key);
 					next = current->next;
 					delete current;
-                    next->prev = NULL;
+                    if(next)
+                        next->prev = NULL;
 					current = next;
 				}
 				else{
