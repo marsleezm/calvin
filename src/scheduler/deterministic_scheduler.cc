@@ -538,9 +538,9 @@ void* DeterministicScheduler::RunDedicateWorkerThread(void* arg) {
                       LOG(txn->txn_id(), " RO  is taken, bound "<<txn->txn_bound());
                       //my_ro_queue->Inc();
                       if (txn->local_txn_id() == txn->txn_bound()+1)
-                          scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, true);
+                          scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, thread, true);
                       else
-                          scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, false);
+                          scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, thread, false);
                       ++num_lc_txns_;
                       ++Sequencer::num_committed;
                       //AddLatency(latency_count, scheduler->latency[thread], manager->spec_commit_time, txn);
@@ -941,9 +941,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   LOG(txn->txn_id(), " RO  is taken, bound "<<txn->txn_bound());
                   //my_ro_queue->Inc();
                   if (txn->local_txn_id() == txn->txn_bound()+1)
-                      scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, true);
+                      scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, thread, true);
                   else
-                      scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, false);
+                      scheduler->application_->ExecuteReadOnly(scheduler->storage_, txn, thread, false);
                   ++num_lc_txns_;
                   ++Sequencer::num_committed;
                   //AddLatency(latency_count, scheduler->latency[thread], manager->spec_commit_time, txn);

@@ -56,7 +56,7 @@ class TPCC : public Application {
   // Load generator for a new transaction
   virtual void NewTxn(int64 txn_id, int txn_type,
                            Configuration* config, TxnProto* txn, int remote_node);
-  void NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto* txn) const;
+  void NewTxnWorker(Configuration* config, StorageManager* storage, int thread, TxnProto* txn) const;
 
   // The key converter takes a valid key (string) and converts it to an id
   // for the checkpoint to use
@@ -97,7 +97,7 @@ class TPCC : public Application {
   // Simple execution of a transaction using a given storage
   virtual int Execute(StorageManager* storage) const;
   // Simple execution of a transaction using a given storage
-  virtual int ExecuteReadOnly(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const;
+  virtual int ExecuteReadOnly(LockedVersionedStorage* actual_storage, TxnProto* txn, int thread, bool first) const;
   virtual int ExecuteReadOnly(StorageManager* actual_storage) const;
 
 /* TODO(Thad): Uncomment once testing friend class exists

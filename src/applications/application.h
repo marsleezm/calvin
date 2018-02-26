@@ -34,7 +34,7 @@ class Application {
   virtual int Execute(StorageManager* storage) const = 0;
 
   // Execute read-only transaction.
-  virtual int ExecuteReadOnly(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const = 0;
+  virtual int ExecuteReadOnly(LockedVersionedStorage* actual_storage, TxnProto* txn, int thread, bool first) const = 0;
   virtual int ExecuteReadOnly(StorageManager* actual_storage) const = 0;
 
   // Storage initialization method.
