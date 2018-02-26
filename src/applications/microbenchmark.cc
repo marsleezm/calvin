@@ -272,7 +272,7 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand, int thread) const {
 void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* txn, int remote_node) {
 }
 
-int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, bool first) const{
+int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, int thread,  bool first) const{
     LOG(txn->txn_id(), " executing read-only");
     //return SUCCESS;
 

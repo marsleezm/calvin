@@ -97,10 +97,9 @@ void TPCC::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* t
 
 // The load generator can be called externally to return a
 // transaction proto containing a new type of transaction.
-void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, TxnProto* txn) const {
+void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thread, TxnProto* txn) const {
 
   // Because a switch is not scoped we declare our variables outside of it
-  int thread = storage->thread;
   int warehouse_id, district_id, customer_id;
   char warehouse_key[128], district_key[128], customer_key[128];
   int order_line_count;
@@ -316,7 +315,7 @@ int TPCC::Execute(StorageManager* storage) const {
     LOG(storage->get_txn()->txn_id(), " rs size is "<<storage->get_txn()->read_set_size());
     if(storage->get_txn()->read_set_size() == 0){
         LOG(storage->get_txn()->txn_id(), " initing");
-        NewTxnWorker(config_, storage, storage->get_txn());
+        NewTxnWorker(config_, storage, storage->thread, storage->get_txn());
     }
   switch (storage->get_txn()->txn_type()) {
     // Initialize
@@ -362,10 +361,10 @@ int TPCC::Execute(StorageManager* storage) const {
 
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
-int TPCC::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, bool first_read_txn) const {
+int TPCC::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, int thread, bool first_read_txn) const {
     //return SUCCESS;
     if(txn->read_set_size() == 0)
-        NewTxnWorker(config_, NULL, txn);
+        NewTxnWorker(config_, NULL, thread, txn);
   switch (txn->txn_type()) {
     // Initialize
 
@@ -392,7 +391,7 @@ int TPCC::ExecuteReadOnly(StorageManager* storage) const {
     //return SUCCESS;
   TxnProto* txn = storage->get_txn();
     if(storage->get_txn()->read_set_size() == 0)
-        NewTxnWorker(config_, storage, storage->get_txn());
+        NewTxnWorker(config_, storage, storage->thread, storage->get_txn());
   switch (txn->txn_type()) {
     // Initialize
 
