@@ -628,7 +628,6 @@ ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool ne
     //LOG(txn_id, " trying to read version! Key is ["<<key<<"], num aborted is "<<num_aborted);
     for (DataNode* list = entry->head; list; list = list->next) {
         if (list->txn_id <= txn_id) {
-            ASSERT(list->txn_id < DeterministicScheduler::num_lc_txns_);
             DirtyGC(list, DeterministicScheduler::num_lc_txns_-GC_THRESHOLD, entry);
             value_pair.first = NOT_COPY;
             value_pair.second = list->value;
