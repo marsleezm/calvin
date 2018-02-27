@@ -456,7 +456,8 @@ class TxnQueue {
     size_mask_ = size_ - 1;
     front_ = 0;
     back_ = 0;
-    pthread_spin_init(&front_mutex_, PTHREAD_PROCESS_SHARED);
+    //ptread_spin_init(&front_mutex_, PTHREAD_PROCESS_SHARED);
+    ptread_mutex_init(&front_mutex_, NULL);
   }
 
   // Returns the number of elements currently in the queue.
@@ -473,7 +474,7 @@ class TxnQueue {
   inline void Push(TxnProto*& item) {
     // Check if the buffer has filled up. Acquire all locks and resize if so.
     if (front_ == ((back_+1) & size_mask_)) {
-      pthread_spin_lock(&front_mutex_);
+      pthread_mutex_lock(&front_mutex_);
       uint32 count = (back_ + size_ - front_) & size_mask_;
       queue_.resize(size_ * 2);
       for (uint32 i = 0; i < count; i++) {
@@ -483,7 +484,7 @@ class TxnQueue {
       back_ = size_ + count;
       size_ *= 2;
       size_mask_ = size_-1;
-      pthread_spin_unlock(&front_mutex_);
+      pthread_mutex_unlock(&front_mutex_);
     }
     // Push item to back of queue.
     queue_[back_] = item;
@@ -494,14 +495,14 @@ class TxnQueue {
   // element, pops the front element from the queue, and returns true,
   // otherwise returns false.
   inline bool Pop(TxnProto** result) {
-    pthread_spin_lock(&front_mutex_);
+    pthread_mutex_lock(&front_mutex_);
     if (front_ != back_) {
       *result = queue_[front_];
       front_ = (front_ + 1) & size_mask_;
-      pthread_spin_unlock(&front_mutex_);
+      pthread_mutex_unlock(&front_mutex_);
       return true;
     }
-    pthread_spin_unlock(&front_mutex_);
+    pthread_mutex_unlock(&front_mutex_);
     return false;
   }
 
@@ -513,7 +514,7 @@ class TxnQueue {
   uint32 back_;      // First offset following all elements.
 
   // Mutexes for synchronization.
-  pthread_spinlock_t front_mutex_;
+  pthread_mutex_t front_mutex_;
 
   // DISALLOW_COPY_AND_ASSIGN
   TxnQueue(const TxnQueue&);
