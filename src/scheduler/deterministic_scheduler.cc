@@ -117,7 +117,7 @@ TxnProto* DeterministicScheduler::GetTxnPtr(socket_t* socket,
 DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                Connection* batch_connection,
                                                LockedVersionedStorage* storage,
-											   AtomicQueue<TxnProto*>* txns_queue,
+											   TxnQueue* txns_queue,
 											   Client* client,
                                                const Application* application
 											   )

@@ -72,7 +72,7 @@ class Sequencer {
   void output();
 
   // Get the transaction queue
-  inline AtomicQueue<TxnProto*>* GetTxnsQueue(){  return txns_queue_; }
+  inline TxnQueue* GetTxnsQueue(){  return txns_queue_; }
 
   void SetScheduler(DeterministicScheduler* scheduler){
 	  scheduler_ = scheduler;
@@ -163,7 +163,7 @@ class Sequencer {
   tr1::unordered_map<int, MessageProto*> batches_;
 
   // The queue of fetched transactions
-  AtomicQueue<TxnProto*>* txns_queue_;
+  TxnQueue* txns_queue_;
   AtomicQueue<string>* paxos_queues;
 
   int64 txn_bound = -1;
