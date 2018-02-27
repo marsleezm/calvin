@@ -448,6 +448,78 @@ class Queue {
   Queue& operator=(const Queue<T>&);
 };
 
+class TxnQueue {
+ public:
+  TxnQueue() {
+    queue_.resize(256);
+    size_ = 256;
+    size_mask_ = size_ - 1;
+    front_ = 0;
+    back_ = 0;
+    pthread_spin_init(&front_mutex_, PTHREAD_PROCESS_SHARED);
+  }
+
+  // Returns the number of elements currently in the queue.
+  inline size_t Size() {
+    return (back_ + size_ - front_) & size_mask_;
+  }
+
+  // Returns true iff the queue is empty.
+  inline bool Empty() {
+    return front_ == back_;
+  }
+
+  // Atomically pushes 'item' onto the queue.
+  inline void Push(TxnProto*& item) {
+    // Check if the buffer has filled up. Acquire all locks and resize if so.
+    if (front_ == ((back_+1) & size_mask_)) {
+      pthread_spin_lock(&front_mutex_);
+      uint32 count = (back_ + size_ - front_) & size_mask_;
+      queue_.resize(size_ * 2);
+      for (uint32 i = 0; i < count; i++) {
+        queue_[size_+i] = queue_[(front_ + i) & size_mask_];
+      }
+      front_ = size_;
+      back_ = size_ + count;
+      size_ *= 2;
+      size_mask_ = size_-1;
+      pthread_spin_unlock(&front_mutex_);
+    }
+    // Push item to back of queue.
+    queue_[back_] = item;
+    back_ = (back_ + 1) & size_mask_;
+  }
+
+  // If the queue is non-empty, (atomically) sets '*result' equal to the front
+  // element, pops the front element from the queue, and returns true,
+  // otherwise returns false.
+  inline bool Pop(TxnProto** result) {
+    pthread_spin_lock(&front_mutex_);
+    if (front_ != back_) {
+      *result = queue_[front_];
+      front_ = (front_ + 1) & size_mask_;
+      pthread_spin_unlock(&front_mutex_);
+      return true;
+    }
+    pthread_spin_unlock(&front_mutex_);
+    return false;
+  }
+
+ private:
+  vector<TxnProto*> queue_;  // Circular buffer containing elements.
+  uint32 size_;      // Allocated size of queue_, not number of elements.
+  uint32 size_mask_;
+  uint32 front_;     // Offset of first (oldest) element.
+  uint32 back_;      // First offset following all elements.
+
+  // Mutexes for synchronization.
+  pthread_spinlock_t front_mutex_;
+
+  // DISALLOW_COPY_AND_ASSIGN
+  TxnQueue(const TxnQueue&);
+  TxnQueue& operator=(const TxnQueue&);
+};
+
 template<typename T>
 class AtomicQueue {
  public:
@@ -537,79 +609,6 @@ class AtomicQueue {
   AtomicQueue(const AtomicQueue<T>&);
   AtomicQueue& operator=(const AtomicQueue<T>&);
 };
-
-class TxnQueue {
- public:
-  TxnQueue() {
-    queue_.resize(512);
-    size_ = 512;
-    size_mask_ = size_-1;
-    front_ = 0;
-    back_ = 0;
-  }
-
-  // Returns the number of elements currently in the queue.
-  inline size_t Size() {
-    return (back_ + size_ - front_) & size_mask_;
-  }
-
-  // Returns true iff the queue is empty.
-  inline bool Empty() {
-    return front_ == back_;
-  }
-
-  // Atomically pushes 'item' onto the queue.
-  inline bool Push(TxnProto*& item) {
-    // Check if the buffer has filled up. Acquire all locks and resize if so.
-    if (front_ != ((back_+1) & size_mask_)) {
-        queue_[back_] = item;
-        back_ = (back_ + 1) & size_mask_;
-        return true;
-    }
-    else
-        return false;
-  }
-
-  inline void Inc() { front_ = (front_ + 1) & size_mask_;}
-
-  // If the queue is non-empty, (atomically) sets '*result' equal to the front
-  // element, pops the front element from the queue, and returns true,
-  // otherwise returns false.
-  inline void Pop(TxnProto** result) {
-    if (front_ != back_) {
-      *result = queue_[front_];
-      front_ = (front_ + 1) & size_mask_;
-    }
-  }
-
-  // Sets *result equal to the front element and returns true, unless the
-  // queue is empty, in which case does nothing and returns false.
-  inline bool Front(TxnProto** result) {
-    if (front_ != back_) {
-      *result = queue_[front_];
-      return true;
-    }
-    return false;
-  }
-
-  TxnProto* Get(int i) {
-	  return queue_[i];
-  }
-
- private:
-  vector<TxnProto*> queue_;  // Circular buffer containing elements.
-  uint32 size_;      // Allocated size of queue_, not number of elements.
-  uint32 size_mask_;
-  uint32 front_;     // Offset of first (oldest) element.
-  uint32 back_;      // First offset following all elements.
-
-  // Mutexes for synchronization.
-
-  // DISALLOW_COPY_AND_ASSIGN
-  TxnQueue(const TxnQueue&);
-  TxnQueue& operator=(const TxnQueue&);
-};
-
 
 template<typename T>
 class SPMCQueue 
