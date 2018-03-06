@@ -257,6 +257,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     MyTuple<int64, int64, int64>* latency_array = scheduler->latency[thread];
 	vector<MessageProto> buffered_msgs;
 	set<int64> finalized_uncertain;
+    TxnProto** multi_txn = new TxnProto*[MULTI_POP_NUM];
     std::thread::id myid = std::this_thread::get_id();
     (void)myid;
 
@@ -266,6 +267,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
           // Fast way to process bunches of read-only txns
 		  TxnProto* txn = NULL;
+          int multi_pop = 0, remain = 0;
           if(enable_batch){
               if(buffered_tx != NULL){
                   txn = buffered_tx;
@@ -296,16 +298,19 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   scheduler->txns_queue_->Pop(&txn);
               }
           }
-          else
-              scheduler->txns_queue_->Pop(&txn);
+          else{
+              multi_pop = scheduler->txns_queue_->MultiPop(multi_txn, MULTI_POP_NUM);
+              remain = multi_pop;
+          }
 
-          if(txn){
+          while(txn or remain){
               if(enable_batch and num_lc_txns_ <= txn->txn_bound()){
                   buffered_tx = txn;
                   LOG(buffered_tx->txn_id(), " buffered, num lc txns is "<<num_lc_txns_<<", state "<<scheduler->exec_state);
                   txn = NULL;
               }
               else{
+                  txn = multi_txn[multi_pop-remain];
                   if(txn->seed() % SAMPLE_RATE == 0)
                       txn->set_start_time(GetUTime());
                   LOG(txn->txn_id(), " starting, local "<<txn->local_txn_id());
@@ -330,6 +335,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                       AGGRLOG(txn->txn_id(), " got aborted, pushing "<<manager->abort_bit_);
                       retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->abort_bit_, manager));
                   }
+                  --remain;
+                  txn = NULL;
               }
           }
 	  }

@@ -506,6 +506,18 @@ class TxnQueue {
     return false;
   }
 
+  inline int MultiPop(TxnProto** result, int num) {
+    pthread_mutex_lock(&front_mutex_);
+     int cnt = 0;
+     while (front_ != back_ and cnt!=num) {
+        result[cnt] = queue_[front_];
+        front_ = (front_ + 1) & size_mask_;
+        ++cnt;
+      }
+     pthread_mutex_unlock(&front_mutex_);
+     return cnt;
+  }
+
  private:
   vector<TxnProto*> queue_;  // Circular buffer containing elements.
   uint32 size_;      // Allocated size of queue_, not number of elements.

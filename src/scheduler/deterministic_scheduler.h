@@ -30,6 +30,7 @@
 
 #define LATENCY_SIZE 2000
 #define SAMPLE_RATE 100
+#define MULTI_POP_NUM 5
 //#define NUM_SC_TXNS 1000
 // Checking the number of pending txns to decide if start a new txn is not totally synchronized, so we allocate a little bit more space
 //#define SC_ARRAY_SIZE (NUM_SC_TXNS+NUM_THREADS*2)
