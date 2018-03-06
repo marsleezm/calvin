@@ -457,7 +457,7 @@ class TxnQueue {
     front_ = 0;
     back_ = 0;
     //ptread_spin_init(&front_mutex_, PTHREAD_PROCESS_SHARED);
-    ptread_mutex_init(&front_mutex_, NULL);
+    pthread_mutex_init(&front_mutex_, NULL);
   }
 
   // Returns the number of elements currently in the queue.
