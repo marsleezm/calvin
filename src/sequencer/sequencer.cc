@@ -43,11 +43,11 @@ double worker_end[SAMPLES];
 double scheduler_unlock[SAMPLES];
 #endif
 
-atomic<int64_t> Sequencer::num_committed(0);
+std::atomic<int64_t> Sequencer::num_committed(0);
 //int64_t Sequencer::max_commit_ts=-1;
 //int64_t Sequencer::num_c_txns_=0;
-atomic<int64_t> Sequencer::num_aborted_(0);
-atomic<int64_t> Sequencer::num_pend_txns_(0);
+std::atomic<int64_t> Sequencer::num_aborted_(0);
+std::atomic<int64_t> Sequencer::num_pend_txns_(0);
 
 void* Sequencer::RunSequencerWriter(void *arg) {
   reinterpret_cast<Sequencer*>(arg)->RunWriter();
@@ -465,7 +465,7 @@ void Sequencer::RunReader() {
 
 void* Sequencer::FetchMessage() {
   MessageProto* batch_message = NULL;
-  if (txns_queue_->Size() < 3000){
+  if (txns_queue_->Size() < 6000){
 	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
 	  // Have we run out of txns in our batch? Let's get some new ones.
 	  if (batch_message != NULL) {

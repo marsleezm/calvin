@@ -390,9 +390,9 @@ class StorageManager {
   int last_add_pc = -1;
   int writer_id = -1;
   bool finalized = false;
-  atomic<int32> abort_bit_;
+  std::atomic<int32> abort_bit_;
   int num_aborted_;
-  atomic<int32> local_aborted_;
+  std::atomic<int32> local_aborted_;
   pthread_mutex_t lock;
   int64 spec_commit_time = 0;
 

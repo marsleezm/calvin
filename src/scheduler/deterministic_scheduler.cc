@@ -90,9 +90,9 @@ using std::tr1::unordered_map;
 using zmq::socket_t;
 using std::map;
 
-atomic<int64_t> DeterministicScheduler::num_lc_txns_(0);
+std::atomic<int64_t> DeterministicScheduler::num_lc_txns_(0);
 int64_t DeterministicScheduler::can_gc_txns_(0);
-atomic<int64_t> DeterministicScheduler::latest_started_tx(-1);
+std::atomic<int64_t> DeterministicScheduler::latest_started_tx(-1);
 bool DeterministicScheduler::terminated_(false);
 
 static void DeleteTxnPtr(void* data, void* hint) { free(data); }
@@ -257,7 +257,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     MyTuple<int64, int64, int64>* latency_array = scheduler->latency[thread];
 	vector<MessageProto> buffered_msgs;
 	set<int64> finalized_uncertain;
-    TxnProto** multi_txn = new TxnProto*[MULTI_POP_NUM];
+    //TxnProto** multi_txn = new TxnProto*[MULTI_POP_NUM];
+    int64 ii=0;
+    bool jj=false;
+    scheduler->client_->SetRemote(ii, jj);
     std::thread::id myid = std::this_thread::get_id();
     (void)myid;
 
@@ -299,7 +302,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               }
           }
           else{
-              multi_pop = scheduler->txns_queue_->MultiPop(multi_txn, MULTI_POP_NUM);
+              //multi_pop = scheduler->txns_queue_->MultiPop(multi_txn, MULTI_POP_NUM);
+              //remain = multi_pop;
+              scheduler->client_->GetTxn(&txn, 0, GetUTime());
+              multi_pop = 1;
               remain = multi_pop;
           }
 
@@ -310,7 +316,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   txn = NULL;
               }
               else{
-                  txn = multi_txn[multi_pop-remain];
+                  //txn = multi_txn[multi_pop-remain];
                   if(txn->seed() % SAMPLE_RATE == 0)
                       txn->set_start_time(GetUTime());
                   LOG(txn->txn_id(), " starting, local "<<txn->local_txn_id());
@@ -324,7 +330,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                       manager = new StorageManager(scheduler->configuration_,
                                        scheduler->thread_connections_[thread],
                                        scheduler->storage_, &abort_queue, &waiting_queue, txn, thread);
-                      active_g_tids[txn->txn_id()] = manager;
+                      if((txn->txn_type()&READONLY_MASK) == 0)
+                          active_g_tids[txn->txn_id()] = manager;
                   }
                   else{
                       manager = active_g_tids[txn->txn_id()];
@@ -335,8 +342,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                       AGGRLOG(txn->txn_id(), " got aborted, pushing "<<manager->abort_bit_);
                       retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->abort_bit_, manager));
                   }
-                  --remain;
-                  txn = NULL;
+                  //--remain;
+                  //txn = NULL;
+                  scheduler->client_->GetTxn(&txn, 0, GetUTime());
+                  remain = 1;
               }
           }
 	  }

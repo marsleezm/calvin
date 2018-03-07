@@ -1,0 +1,16 @@
++ cxx backend/locked_versioned_storage.cc
++ cxx backend/storage_manager.cc
++ cxx applications/tpcc.cc
++ cxx scheduler/deterministic_scheduler.cc
++ cxx sequencer/sequencer.cc
++ cxx applications/microbenchmark.cc
++ cxx deployment/main.cc
++ cxx tests/locked_versioned_storage_test.cc
+Makefile.template:32: recipe for target '../obj/deployment/main.o' failed
+Makefile.template:32: recipe for target '../obj/backend/locked_versioned_storage.o' failed
+Makefile.template:32: recipe for target '../obj/backend/storage_manager.o' failed
+Makefile.template:32: recipe for target '../obj/applications/microbenchmark.o' failed
+Makefile.template:32: recipe for target '../obj/applications/tpcc.o' failed
+Makefile.template:32: recipe for target '../obj/scheduler/deterministic_scheduler.o' failed
+Makefile.template:32: recipe for target '../obj/sequencer/sequencer.o' failed
+Makefile.template:32: recipe for target '../obj/tests/locked_versioned_storage_test.o' failed

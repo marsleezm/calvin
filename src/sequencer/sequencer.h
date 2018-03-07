@@ -83,11 +83,11 @@ class Sequencer {
   }
 
  public:
-  static atomic<int64_t> num_committed;
+  static std::atomic<int64_t> num_committed;
   //static int64_t num_c_txns_;
   //static int64_t max_commit_ts;
-  static atomic<int64_t> num_pend_txns_;
-  static atomic<int64_t> num_aborted_;
+  static std::atomic<int64_t> num_pend_txns_;
+  static std::atomic<int64_t> num_aborted_;
 
  private:
   // Sequencer's main loops:

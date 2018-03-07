@@ -30,7 +30,7 @@
 
 #define LATENCY_SIZE 2000
 #define SAMPLE_RATE 100
-#define MULTI_POP_NUM 5
+#define MULTI_POP_NUM 20 
 //#define NUM_SC_TXNS 1000
 // Checking the number of pending txns to decide if start a new txn is not totally synchronized, so we allocate a little bit more space
 //#define SC_ARRAY_SIZE (NUM_SC_TXNS+NUM_THREADS*2)
@@ -69,10 +69,10 @@ class DeterministicScheduler : public Scheduler {
   void static terminate() { terminated_ = true; }
 
  public:
-  static atomic<int64_t> num_lc_txns_;
+  static std::atomic<int64_t> num_lc_txns_;
   static int64_t comm_g_id_;
   static int64_t can_gc_txns_;
-  static atomic<int64_t> latest_started_tx;
+  static std::atomic<int64_t> latest_started_tx;
 
  protected:
   static bool terminated_;

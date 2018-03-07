@@ -13,7 +13,10 @@
 #include "common/utils.h"
 #include "common/logging.h"
 #include "sequencer/sequencer.h"
+#include <atomic>
 
+#include "tbb/concurrent_hash_map.h"
+#include "tbb/blocked_range.h"
 #include "backend/versioned_storage.h"
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -22,15 +25,17 @@
 #define NUM_NEW_TAB 16 
 #define BIT_MASK (NUM_NEW_TAB-1)
 
-using std::tr1::unordered_map;
 using namespace std;
+using namespace tbb;
+
+typedef concurrent_hash_map<Key, KeyEntry*> Table;
 
 class LockedVersionedStorage {
  public:
   LockedVersionedStorage() {
     stable_ = 0;
-    for(int i = 0; i< NUM_NEW_TAB; ++i)
-    	pthread_mutex_init(&new_obj_mutex_[i], NULL);
+    //for(int i = 0; i< NUM_NEW_TAB; ++i)
+    //	pthread_mutex_init(&new_obj_mutex_[i], NULL);
   }
   virtual ~LockedVersionedStorage() {}
 
@@ -41,17 +46,15 @@ class LockedVersionedStorage {
 
   // Standard operators in the DB
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
-  virtual ValuePair ReadObject(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
+  virtual ValuePair ReadObject(const Key& key, int64 txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
 
   inline Value* SafeRead(const Key& key, bool new_object, bool first_reader){//, int64 txn_id){
         KeyEntry* entry;
-        if(new_object){
-            int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
-            entry = new_objects_[new_tab_num][key];
-        }
-        else
-            entry = objects_[key];
+        Table::const_accessor result;
+        table.find(result, key);
+        entry = result->second;
+        result.release();
 
         if (first_reader and entry->head->next){
             entry->oldest = entry->head;
@@ -70,24 +73,16 @@ class LockedVersionedStorage {
   }
 
   virtual ValuePair SafeRead(const Key& key, int64 txn_id, bool new_object);
-  virtual ValuePair ReadLock(const Key& key, int64 txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
+  virtual ValuePair ReadLock(const Key& key, int64 txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted,
     			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object, vector<int64>* aborted_txs);
-  virtual bool LockObject(const Key& key, int64_t txn_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
+  virtual bool LockObject(const Key& key, int64_t txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted,
 			AtomicQueue<pair<int64_t, int>>* abort_queue, vector<int64_t>* aborted_txs);
   virtual bool PutObject(const Key& key, Value* value, int64 txn_id, bool is_committing, bool new_object);
   virtual void PutObject(const Key& key, Value* value);
   virtual void Unlock(const Key& key, int64 txn_id, bool new_object);
   virtual void RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64>* aborted_txs);
-  inline bool DeleteObject(const Key& key) {
-	  int new_tab_num = key[key.length()-1] % NUM_NEW_TAB;
-	  pthread_mutex_lock(&new_obj_mutex_[new_tab_num]);
-	  delete objects_[key];
-	  pthread_mutex_unlock(&new_obj_mutex_[new_tab_num]);
-	  return true;
-  }
+  inline bool DeleteObject(const Key& key) { return table.erase(key); }
   bool DeleteObject(const Key& key, int64 txn_id);
-
-  inline Value* StableRead(const Key& key) {return objects_[key]->head->value;}
 
   // TODO: It's just a dirty/unsafe hack to do GC to avoid having too many versions
   void inline DirtyGC(DataNode* list, int from_version, KeyEntry* entry){//, int64 txn_id, Key key){
@@ -105,14 +100,6 @@ class LockedVersionedStorage {
 	  }
   }
 
-  bool FetchEntry(const Key& key, KeyEntry*& entry) {
-	  if (objects_.count(key) == 0)
-		  return false;
-	  else{
-		  entry = objects_[key];
-		  return true;
-	  }
-  }
   // At a new versioned state, the version system is notified that the
   // previously stable values are no longer necessary.  At this point in time,
   // the database can switch the labels as to what is stable (the previously
@@ -128,10 +115,11 @@ class LockedVersionedStorage {
   // We make a simple mapping of keys to a map of "versions" of our value.
   // The int64 represents a simple transaction id and the Value associated with
   // it is whatever value was written out at that time.
-  std::tr1::unordered_map<Key, KeyEntry*> objects_;
+  //std::tr1::unordered_map<Key, KeyEntry*> objects_;
 
-  std::tr1::unordered_map<Key, KeyEntry*> new_objects_[NUM_NEW_TAB];
-  pthread_mutex_t new_obj_mutex_[NUM_NEW_TAB];
+  //std::tr1::unordered_map<Key, KeyEntry*> new_objects_[NUM_NEW_TAB];
+  //pthread_mutex_t new_obj_mutex_[NUM_NEW_TAB];
+  Table table;
 
   // The stable and frozen int64 represent which transaction ID's are stable
   // to write out to storage, and which should be the latest to be overwritten

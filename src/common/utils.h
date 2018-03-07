@@ -456,7 +456,7 @@ class TxnQueue {
     size_mask_ = size_ - 1;
     front_ = 0;
     back_ = 0;
-    //ptread_spin_init(&front_mutex_, PTHREAD_PROCESS_SHARED);
+    //pthread_spin_init(&front_mutex_, PTHREAD_PROCESS_SHARED);
     pthread_mutex_init(&front_mutex_, NULL);
   }
 
@@ -475,6 +475,7 @@ class TxnQueue {
     // Check if the buffer has filled up. Acquire all locks and resize if so.
     if (front_ == ((back_+1) & size_mask_)) {
       pthread_mutex_lock(&front_mutex_);
+      //pthread_spin_lock(&front_mutex_);
       uint32 count = (back_ + size_ - front_) & size_mask_;
       queue_.resize(size_ * 2);
       for (uint32 i = 0; i < count; i++) {
@@ -484,6 +485,7 @@ class TxnQueue {
       back_ = size_ + count;
       size_ *= 2;
       size_mask_ = size_-1;
+      //pthread_spin_unlock(&front_mutex_);
       pthread_mutex_unlock(&front_mutex_);
     }
     // Push item to back of queue.
@@ -496,18 +498,22 @@ class TxnQueue {
   // otherwise returns false.
   inline bool Pop(TxnProto** result) {
     pthread_mutex_lock(&front_mutex_);
+    //pthread_spin_lock(&front_mutex_);
     if (front_ != back_) {
       *result = queue_[front_];
       front_ = (front_ + 1) & size_mask_;
       pthread_mutex_unlock(&front_mutex_);
+      //pthread_spin_unlock(&front_mutex_);
       return true;
     }
     pthread_mutex_unlock(&front_mutex_);
+    //pthread_spin_unlock(&front_mutex_);
     return false;
   }
 
   inline int MultiPop(TxnProto** result, int num) {
     pthread_mutex_lock(&front_mutex_);
+    //pthread_spin_lock(&front_mutex_);
      int cnt = 0;
      while (front_ != back_ and cnt!=num) {
         result[cnt] = queue_[front_];
@@ -515,6 +521,7 @@ class TxnQueue {
         ++cnt;
       }
      pthread_mutex_unlock(&front_mutex_);
+     //pthread_spin_unlock(&front_mutex_);
      return cnt;
   }
 
@@ -527,6 +534,7 @@ class TxnQueue {
 
   // Mutexes for synchronization.
   pthread_mutex_t front_mutex_;
+  //pthread_spinlock_t front_mutex_;
 
   // DISALLOW_COPY_AND_ASSIGN
   TxnQueue(const TxnQueue&);
