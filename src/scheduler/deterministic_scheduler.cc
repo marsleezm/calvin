@@ -342,10 +342,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                       AGGRLOG(txn->txn_id(), " got aborted, pushing "<<manager->abort_bit_);
                       retry_txns.push(MyTuple<int64, int, StorageManager*>(txn->local_txn_id(), manager->abort_bit_, manager));
                   }
-                  //--remain;
-                  //txn = NULL;
-                  scheduler->client_->GetTxn(&txn, 0, GetUTime());
-                  remain = 1;
+                  --remain;
+                  txn = NULL;
               }
           }
 	  }
