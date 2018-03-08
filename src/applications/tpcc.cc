@@ -1189,7 +1189,8 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const {
   // We create and write out all of the warehouses
 	std::cout<<"Start populating TPC-C data"<<std::endl;
-  for (int i = 0; i < (int)(WAREHOUSES_PER_NODE * conf->all_nodes.size()); i++) {
+  //for (int i = 0; i < (int)(WAREHOUSES_PER_NODE * conf->all_nodes.size()); i++) {
+  for (int i = 0; i < (int)(atoi(ConfigReader::Value("num_threads").c_str())* conf->all_nodes.size()); i++) {
     // First, we create a key for the warehouse
     char warehouse_key[128], warehouse_key_ytd[128];
     Value* warehouse_value = new Value();

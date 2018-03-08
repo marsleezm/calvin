@@ -22,7 +22,7 @@
 #include <inttypes.h>
 
 #define CHKPNTDIR "../db/checkpoints"
-#define NUM_NEW_TAB 50 
+#define NUM_NEW_TAB 8 
 #define BIT_MASK (NUM_NEW_TAB-1)
 
 using namespace std;
@@ -51,20 +51,20 @@ class LockedVersionedStorage {
 
   inline Value* SafeRead(const Key& key, bool new_object, bool first_reader){//, int64 txn_id){
         KeyEntry* entry;
+        /*
         if(key[0] == 'w')
             entry = table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
         else
             entry = table[0][key];
-        /*
+        */
         Table::const_accessor result;
-        //table.find(result, key);
-        if(key[0] == 'w')
-            table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
-        else
-            table[0].find(result, key);
+        table.find(result, key);
+        //if(key[0] == 'w')
+        //    table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
+        //else
+        //    table[0].find(result, key);
         entry = result->second;
         result.release();
-        */ 
 
         if (first_reader and entry->head->next){
             entry->oldest = entry->head;
@@ -92,17 +92,21 @@ class LockedVersionedStorage {
   virtual void Unlock(const Key& key, int64 txn_id, bool new_object);
   virtual void RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64>* aborted_txs);
   inline bool DeleteObject(const Key& key) { 
+    /*
         if(key[0] == 'w')
             delete table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
         else
             delete table[0][key];
         return true;
-     /*
+    */
+    /*
     if(key[0] == 'w')
         return table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].erase(key);
     else
         return table[0].erase(key); 
-    */ }
+    */
+    return table.erase(key);
+     }
   bool DeleteObject(const Key& key, int64 txn_id);
 
   // TODO: It's just a dirty/unsafe hack to do GC to avoid having too many versions
@@ -138,9 +142,9 @@ class LockedVersionedStorage {
   // it is whatever value was written out at that time.
   //std::tr1::unordered_map<Key, KeyEntry*> objects_;
 
-  std::tr1::unordered_map<Key, KeyEntry*> table[NUM_NEW_TAB];
+  //std::tr1::unordered_map<Key, KeyEntry*> table[NUM_NEW_TAB];
   //pthread_mutex_t new_obj_mutex_[NUM_NEW_TAB];
-  //Table table;
+  Table table;
   //Table table[NUM_NEW_TAB];
 
   // The stable and frozen int64 represent which transaction ID's are stable

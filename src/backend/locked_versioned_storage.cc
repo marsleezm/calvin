@@ -21,18 +21,20 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, std::
 	// 2. To avoid another concurrent transaction to insert an element that I am just going to read as well as inserting an empty entry,
 	// which causes data races.
 	KeyEntry* entry;
+    /*
     if(key[0] == 'w')
         entry = table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
     else
         entry = table[0][key];
-    /*
-    Table::accessor result;
-    if(key[0] == 'w')
-        table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
-    else
-        table[0].find(result, key);
-    entry = result->second;
     */
+    Table::accessor result;
+    //if(key[0] == 'w')
+    //    table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
+    //else
+    //    table[0].find(result, key);
+    table.find(result, key);
+    entry = result->second;
+
     ValuePair value_pair;
     DirtyGC(entry->head, DeterministicScheduler::num_lc_txns_-GC_THRESHOLD, entry);//, txn_id, key);
     value_pair.assign_first(NOT_COPY);
@@ -95,19 +97,19 @@ ValuePair LockedVersionedStorage::ReadObject(const Key& key, int64 txn_id, std::
 ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object, vector<int64_t>* aborted_txs){
 	//ASSERT(objects_.count(key) != 0);
     KeyEntry* entry;
+    /*
     if(key[0] == 'w')
         entry = table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
     else
         entry = table[0][key];
-    /*
-    Table::accessor result;
-    //table.find(result, key);
-    if(key[0] == 'w')
-        table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
-    else
-        table[0].find(result, key);
-    entry = result->second;
     */
+    Table::accessor result;
+    table.find(result, key);
+    //if(key[0] == 'w')
+    //    table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
+    //else
+    //    table[0].find(result, key);
+    entry = result->second;
     ValuePair value_pair;
     entry->lock = LockEntry(txn_id, abort_bit, local_aborted, num_aborted, abort_queue);
     DirtyGC(entry->head, DeterministicScheduler::num_lc_txns_-GC_THRESHOLD, entry);//, txn_id, key);
@@ -225,19 +227,17 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, std::ato
 
 	// Locking is only called for objects that were never read before, i.e. new objects in this case.
     KeyEntry* entry;
-    /*
     Table::accessor result;
-    if(key[0] == 'w')
-        table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].insert(result, key);
-    else
-        table[0].insert(result, key);
-    if(result->second == NULL){
+    //if(key[0] == 'w')
+    //    table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].insert(result, key);
+    //else
+    //    table[0].insert(result, key);
+    table.insert(result, key);
+    if(result->second == NULL)
         result->second = new KeyEntry();
-        result->second->lock = LockEntry(txn_id, abort_bit, local_aborted, num_aborted, abort_queue);
-        return true;
-    }
-    entry = result->second;
-    */
+    result->second->lock = LockEntry(txn_id, abort_bit, local_aborted, num_aborted, abort_queue);
+    return true;
+    /*
     std::tr1::unordered_map<Key, KeyEntry*>* tab;
     if(key[0] == 'w')
         tab = &table[OffsetStringToInt(key, 1)%NUM_NEW_TAB];
@@ -253,6 +253,7 @@ bool LockedVersionedStorage::LockObject(const Key& key, int64_t txn_id, std::ato
         entry->lock = LockEntry(txn_id, abort_bit, local_aborted, num_aborted, abort_queue);
         return true;
     }
+    */
 
 	if (entry->lock.tx_id_ < txn_id){
 		LOG(txn_id, " locking directly aborted for ["<<key<<"] by "<<entry->lock.tx_id_);
@@ -325,28 +326,27 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 	//ASSERT(objects_.count(key) != 0);
 	LOG(txn_id, " putting data for "<<key<<", value is "<<value<<", addr is "<<reinterpret_cast<int64>(value));
     KeyEntry* entry;
-    /*
     Table::accessor result;
-    //table.insert(result, key);
+    table.insert(result, key);
+    /*
     if(key[0] == 'w')
         table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].insert(result, key);
     else
         table[0].insert(result, key);
-    entry = result->second;
     */
+    entry = result->second;
+    /*
     if(key[0] == 'w')
         entry = table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
     else
         entry = table[0][key];
+    */
     entry->lock.tx_id_ = NO_LOCK;
     DataNode* current = entry->head;
     if(current){
-        DataNode* node = new DataNode();
-        node->value = value;
-        node->txn_id = txn_id;
-        node->next = current;
-        current->prev = node;
-        entry->head = node;
+        delete current->value;
+        current->value = value;
+        current->txn_id = txn_id;
     }
     else{
         DataNode* node = new DataNode();
@@ -474,44 +474,46 @@ bool LockedVersionedStorage::PutObject(const Key& key, Value* value,
 
 void LockedVersionedStorage::PutObject(const Key& key, Value* value) {
     KeyEntry* entry;
-    /*
     Table::accessor result;
-    //table.insert(result, key);
+    table.insert(result, key);
+    /*
     if(key[0] == 'w')
         table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].insert(result, key);
     else
         table[0].insert(result, key);
+    */
     result->second = new KeyEntry();
     entry = result->second;
-    */
-    entry = new KeyEntry();
+    //entry = new KeyEntry();
     DataNode* head = new DataNode();
     head->txn_id = -1;
     head->value = value;
     entry->head = head;
+    /*
     if(key[0] == 'w')
         table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key] = entry;
     else
         table[0][key] = entry;
+    */
 }
 
 void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_object) {
     ASSERT(1 == 2);
 	LOG(txn_id, " unlock "<<key);
     KeyEntry* entry;
-    /*
     Table::accessor result;
-    //table.find(result, key);
-    if(key[0] == 'w')
-        table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
-    else
-        table[0].find(result, key);
+    table.find(result, key);
+    //if(key[0] == 'w')
+    //    table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
+    //else
+    //    table[0].find(result, key);
     entry = result->second;
-    */
+    /*
     if(key[0] == 'w')
         entry = table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
     else
         entry = table[0][key];
+    */
 
 	if (entry->lock.tx_id_ == txn_id) {
 		if (entry->lock.tx_id_ == txn_id){
@@ -616,19 +618,20 @@ ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool ne
     // 2. To avoid another concurrent transaction to insert an element that I am just going to read as well as inserting an empty entry,
     // which causes data races.
     KeyEntry* entry;
-    /*
     Table::accessor result;
-    //table.find(result, key);
-    if(key[0] == 'w')
-        table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
-    else
-        table[0].find(result, key);
+    table.find(result, key);
+    //if(key[0] == 'w')
+    //    table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
+    //else
+    //    table[0].find(result, key);
     entry = result->second;
-    */
+    /*
     if(key[0] == 'w')
         entry = table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
     else
         entry = table[0][key];
+    */
+
 
     // If the transaction that requested the lock is ordered before me, I have to wait for him
     //pthread_mutex_lock(&(entry->mutex_));
@@ -651,19 +654,20 @@ ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool ne
 void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64_t>* aborted_txs) {
 	LOG(txn_id, " unlock "<<key);
     KeyEntry* entry;
-    /*
     Table::accessor result;
     //table.find(result, key);
-    if(key[0] == 'w')
-        table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
-    else
-        table[0].find(result, key);
+    //if(key[0] == 'w')
+    //    table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
+    //else
+    //    table[0].find(result, key);
+    table.find(result, key);
     entry = result->second;
-    */
+    /*
     if(key[0] == 'w')
         entry = table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
     else
         entry = table[0][key];
+    */
 
 	DataNode* list = entry->head;
 	while (list) {
