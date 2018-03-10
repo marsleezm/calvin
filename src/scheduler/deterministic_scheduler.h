@@ -70,7 +70,6 @@ class DeterministicScheduler : public Scheduler {
 
  public:
   static std::atomic<int64_t> num_lc_txns_;
-  static int64_t comm_g_id_;
   static int64_t can_gc_txns_;
   static std::atomic<int64_t> latest_started_tx;
 
@@ -104,7 +103,8 @@ class DeterministicScheduler : public Scheduler {
       }
   }
 
-  bool ExecuteTxn(StorageManager* manager, int thread, std::tr1::unordered_map<int64_t, StorageManager*>& active_txns);
+  bool ExecuteTxn(StorageManager* manager, int thread);
+  bool ExecuteCommitTxn(StorageManager* manager, int thread);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
   void SendTxnPtr(socket_t* socket, TxnProto* txn);

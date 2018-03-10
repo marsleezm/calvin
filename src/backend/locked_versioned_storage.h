@@ -22,8 +22,6 @@
 #include <inttypes.h>
 
 #define CHKPNTDIR "../db/checkpoints"
-#define NUM_NEW_TAB 8 
-#define BIT_MASK (NUM_NEW_TAB-1)
 
 using namespace std;
 using namespace tbb;
@@ -146,6 +144,7 @@ class LockedVersionedStorage {
   //pthread_mutex_t new_obj_mutex_[NUM_NEW_TAB];
   Table table;
   //Table table[NUM_NEW_TAB];
+  bool track_read_dep = atoi(ConfigReader::Value("track_read_dep").c_str());
 
   // The stable and frozen int64 represent which transaction ID's are stable
   // to write out to storage, and which should be the latest to be overwritten
