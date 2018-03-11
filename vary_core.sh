@@ -1,18 +1,27 @@
 #!/bin/bash
 
-max_scs="1 10 50 100 200"
-cores="1 2 4 8 12 16 20 24"
-for max_sc in $max_scs
+cores="10 20 30 40 50"
+read_deps="0 1"
+total_orders="1"
+update_percent="10 50 90"
+rp=0
+for up in $update_percent
 do
-sed -i "s/max_sc =.*/max_sc = ${max_sc}/g" myconfig.conf
-for C in $cores
+for rd in $read_deps
 do
-	sed -i "s/num_threads =.*/num_threads = $C/g" myconfig.conf
-	#sleep 65 && pkill -f deployment &
-	./bin/deployment/db 0 mn 0
-	sed -e '/LATENCY/,$d' 0output.txt  > haha
-	tail -n +2 haha > haha2
-	throughput=`awk -F ',' '{sum+=$1;line+=1}END{print sum/line}' haha2` 
-	echo $C , $throughput >> result_${max_sc}
+    for to in $total_orders
+    do
+        sed -i "s/total_order =.*/total_order = ${to}/g" myconfig.conf
+        sed -i "s/track_read_dep =.*/track_read_dep = ${rd}/g" myconfig.conf
+        for C in $cores
+        do
+            sed -i "s/num_threads =.*/num_threads = $C/g" myconfig.conf
+            ./bin/deployment/db 0 tn 0
+            sed -e '/LATENCY/,$d' 0output.txt  > haha
+            tail -n +2 haha > haha2
+            throughput=`awk -F ',' '{sum+=$1;line+=1}END{print sum/line}' haha2` 
+            echo $C , $throughput >> bench_test/${up}/result_rd${rd}_to${to}_rp${rp}
+        done
+    done
 done
 done
