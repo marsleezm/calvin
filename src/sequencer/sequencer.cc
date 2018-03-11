@@ -96,9 +96,6 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 		pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 			  reinterpret_cast<void*>(this));
 
-		pthread_create(&paxos_thread_, &attr_writer, RunSequencerPaxos,
-              reinterpret_cast<void*>(this));
-
 		CPU_ZERO(&cpuset);
 		CPU_SET(2, &cpuset);
 		std::cout << "Sequencer reader starts at core 2"<<std::endl;
@@ -106,7 +103,9 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 		pthread_attr_init(&attr_reader);
 		pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
 
-		  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
+		//pthread_create(&paxos_thread_, &attr_reader, RunSequencerPaxos,
+        //      reinterpret_cast<void*>(this));
+		pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		      reinterpret_cast<void*>(this));
   }
 }
@@ -121,7 +120,7 @@ Sequencer::~Sequencer() {
 	//else{
 	//	  pthread_join(reader_thread_, NULL);
 	//  }
-	//delete txns_queue_;
+	delete txns_queue_;
 	delete paxos_queues;
 	std::cout<<" Sequencer done"<<std::endl;
 }
@@ -215,8 +214,8 @@ void Sequencer::RunWriter() {
     batch.clear_data();
 
     // Collect txn requests for this epoch.
-    tr1::unordered_map<int64, vector<TxnProto*>> txn_map;
-    int txn_id_offset = 0;
+    vector<TxnProto*> read_only_txns;
+    int txn_id_offset = 0, num_txns = 0;
     string txn_string;
 	int64 involved_nodes = 0;
 	bool uncertain;
@@ -224,7 +223,7 @@ void Sequencer::RunWriter() {
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
-      if (txn_id_offset < max_batch_size) {
+      if (num_txns < max_batch_size) {
         TxnProto* txn;
         client_->GetTxn(&txn, 0, GetUTime());
 		txn->set_batch_number(batch_number);
@@ -233,74 +232,33 @@ void Sequencer::RunWriter() {
           continue;
         }
 
-       	if (txn->multipartition() == false){
-			txn->set_involved_nodes(0);
-            if(txn->txn_type() & READONLY_MASK)
-           	    txn_map[0].push_back(txn);
-            else
-           	    txn_map[-1].push_back(txn);
-		}
-       	else{
-			txn->set_involved_nodes(involved_nodes);
-			txn->set_uncertain(uncertain);
-		   	txn_map[involved_nodes].push_back(txn);
-		}
-        txn_id_offset++;
+       	ASSERT(txn->multipartition() == false);
+        txn->set_involved_nodes(0);
+        if(txn->txn_type() & READONLY_MASK)
+            read_only_txns.push_back(txn);
+        else{
+            txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
+            batch.add_data(txn->SerializeAsString());
+            delete txn;
+        }
+        ++num_txns;
         ++generated_txn;
       }
     }
-    txn_id_offset = 0;
 
-	set<int> prev_node_set, after_node_set;
-	for(const auto inv: txn_map){
-		if(inv.first&prev_node)
-			prev_node_set.insert(inv.first);
-		else if (inv.first&after_node)
-			after_node_set.insert(inv.first);
-	} 
+	for(const auto txn: read_only_txns){
+       txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
+       txn->SerializeToString(&txn_string);
+       batch.add_data(txn_string);
+       delete txn;
+    }
 
-	for(const auto prev_node: prev_node_set){
-       for(auto txn: txn_map[prev_node]) {
-		   //LOG(batch_number, " adding "<<txn->txn_id()<<" for prev node"<<prev_node<<", inv "<<txn->involved_nodes());
-           txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
-           txn->SerializeToString(&txn_string);
-           batch.add_data(txn_string);
-           delete txn;
-       }
-   }
-
-   for (auto it = txn_map.begin(); it != txn_map.end(); ++it){
-       if(prev_node_set.count(it->first) == 0 and after_node_set.count(it->first) == 0){
-          for(auto txn: it->second) {
-		   	   //LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<it->first<<", multi "<<txn->involved_nodes());
-               txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
-               txn->SerializeToString(&txn_string);
-               batch.add_data(txn_string);
-               delete txn;
-           }
-       }
-   }
-
-	// Create a map iterator and point to the end of map
-	std::set<int>::reverse_iterator it = after_node_set.rbegin();
- 
-	// Iterate over the map using Iterator till beginning.
-	while (it != after_node_set.rend()) {
-       	for(auto txn: txn_map[*it]) {
-		   	LOG(batch_number, " adding "<<txn->txn_id()<<" for after node "<<after_node<<", multi "<<txn->involved_nodes());
-            txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
-          	txn->SerializeToString(&txn_string);
-           	batch.add_data(txn_string);
-           	delete txn;
-       	}
-		it++;
-	}
 	//std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * max_batch_size <<
 	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
-    //batch_queue_.push(batch_string);
-	paxos_queues->Push(batch_string);
+    batch_queue_.push(batch_string);
+	//paxos_queues->Push(batch_string);
   }
 
   Spin(1);
@@ -354,12 +312,9 @@ void Sequencer::RunReader() {
     batches[it->first].set_type(MessageProto::TXN_BATCH);
   }
 
-  int last_fetched = 0;
-  int txn_count = 0;
-  int batch_count = 0;
+  int last_fetched = 0, batch_number = 0;
   int last_aborted = 0;
   int last_generated = 0;
-  int batch_number = configuration_->this_node_id;
   int second = 0;
 
   while (!deconstructor_invoked_) {
@@ -368,7 +323,6 @@ void Sequencer::RunReader() {
 
     bool got_batch = false;
     do {
-    	FetchMessage();
     	pthread_mutex_lock(&mutex_);
     	if (batch_queue_.size()) {
     		batch_string = batch_queue_.front();
@@ -379,62 +333,16 @@ void Sequencer::RunReader() {
     	if (!got_batch)
     		Spin(0.001);
     } while (!deconstructor_invoked_ && !got_batch);
+
     MessageProto* batch_message = new MessageProto();
     batch_message->ParseFromString(batch_string);
-    for (int i = 0; i < batch_message->data_size(); i++) {
-      TxnProto txn;
-      txn.ParseFromString(batch_message->data(i));
-
-      // Compute readers & writers; store in txn proto.
-      set<int> to_send;
-      google::protobuf::RepeatedField<int>::const_iterator  it;
-
-	  if(txn.uncertain() == false){
-		  for (it = txn.readers().begin(); it != txn.readers().end(); ++it)
-			  to_send.insert(*it);
-		  for (it = txn.writers().begin(); it != txn.writers().end(); ++it)
-			  to_send.insert(*it);
-
-			  // Insert txn into appropriate batches.
-		  for (set<int>::iterator it = to_send.begin(); it != to_send.end(); ++it){
-				  batches[*it].add_data(batch_message->data(i));
-		  }
-	  }
-	  else{
-		  for (uint32 j = 0; j < configuration_->all_nodes.size(); j++) {
-			  to_send.insert(j);
-			  batches[j].add_data(batch_message->data(i));
-		  }
-	  }
-
-      txn_count++;
-    }
-
-    // Send this epoch's requests to all schedulers.
-    for (map<int, MessageProto>::iterator it = batches.begin();
-         it != batches.end(); ++it) {
-    	if(it->first != configuration_->this_node_id){
-    		it->second.set_batch_number(batch_number);
-    		connection_->Send(it->second);
-    	}
-    	else
-  		  batches_[batch_number] = batch_message;
-
-    	it->second.clear_data();
-    }
+    batches_[batch_number] = batch_message;
     batch_number += configuration_->all_nodes.size();
-    batch_count++;
-
     FetchMessage();
 
     // Report output.
     now_time = GetTime();
     if (now_time > time + 1) {
-#ifdef VERBOSE_SEQUENCER
-      std::cout << "Submitted " << txn_count << " txns in "
-                << batch_count << " batches, fetched"<< num_fetched_this_round
-				<< "txns \n" << std::flush;
-#endif
       std::cout << " Completed " <<
       		  (static_cast<double>(Sequencer::num_committed-last_committed) / (now_time- time))
       			<< " txns/sec, "
@@ -452,8 +360,6 @@ void Sequencer::RunReader() {
       time = now_time;
 	  last_aborted = Sequencer::num_aborted_;
 
-      txn_count = 0;
-      batch_count = 0;
       last_fetched = fetched_txn_num_;
       last_generated = generated_txn;
       last_committed = Sequencer::num_committed;

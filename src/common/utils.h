@@ -511,6 +511,22 @@ class TxnQueue {
     return false;
   }
 
+  /*
+  inline bool FakePop() {
+    pthread_mutex_lock(&front_mutex_);
+    if(front_ != back_){
+        delete queue_[front_];
+        front_ = (front_ + 1) & size_mask_;   
+        pthread_mutex_unlock(&front_mutex_);
+        return true;
+    }
+    else{
+        pthread_mutex_unlock(&front_mutex_);
+        return false;
+    }
+  }
+  */
+
   inline int MultiPop(TxnProto** result, int num) {
     pthread_mutex_lock(&front_mutex_);
     //pthread_spin_lock(&front_mutex_);

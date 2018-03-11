@@ -171,7 +171,7 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
 			//tpcc_args->add_items(item);
 			tpcc_args->add_quantities(thread % 10 + 1);
       }
-        LOG(txn->txn_id(), " setting order line count to "<<order_line_count);
+        //LOG(txn->txn_id(), " setting order line count to "<<order_line_count);
         tpcc_args->add_order_line_count(order_line_count);
 
       // Set the order line count in the args
@@ -194,7 +194,7 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
 		snprintf(district_key, sizeof(district_key), "w%dd%dy",
                warehouse_id, district_id);
 		txn->add_read_write_set(district_key);
-        LOG(-1, " warehouse_id "<<warehouse_id<<" district "<<district_id);
+        //LOG(-1, " warehouse_id "<<warehouse_id<<" district "<<district_id);
 
 		// Add history key to write set
 		char history_key[128];
@@ -312,9 +312,9 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
 // on what the type of the transaction is.
 int TPCC::Execute(StorageManager* storage) const {
     //return SUCCESS;
-    LOG(storage->get_txn()->txn_id(), " rs size is "<<storage->get_txn()->read_set_size());
+    //LOG(storage->get_txn()->txn_id(), " rs size is "<<storage->get_txn()->read_set_size());
     if(storage->get_txn()->read_set_size() == 0){
-        LOG(storage->get_txn()->txn_id(), " initing");
+        //LOG(storage->get_txn()->txn_id(), " initing");
         NewTxnWorker(config_, storage, storage->thread, storage->get_txn());
     }
   switch (storage->get_txn()->txn_type()) {
@@ -420,7 +420,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
 	storage->Init();
-	LOG(txn->txn_id(), "Executing NEWORDER, is multipart? "<<(txn->multipartition()));
+	//LOG(txn->txn_id(), "Executing NEWORDER, is multipart? "<<(txn->multipartition()));
 
 	Key warehouse_key = txn->read_set(0);
 	int read_state;
@@ -595,7 +595,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs tpcc_args;
 	tpcc_args.ParseFromString(txn->arg());
-	LOG(txn->txn_id(), "Executing PAYMENT, is multipart? "<<(txn->multipartition()));
+	//LOG(txn->txn_id(), "Executing PAYMENT, is multipart? "<<(txn->multipartition()));
 	storage->Init();
 	int amount = tpcc_args.amount();
 

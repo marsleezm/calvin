@@ -30,7 +30,7 @@
 
 #define LATENCY_SIZE 2000
 #define SAMPLE_RATE 100
-#define MULTI_POP_NUM 20 
+#define MULTI_POP_NUM 1 
 //#define NUM_SC_TXNS 1000
 // Checking the number of pending txns to decide if start a new txn is not totally synchronized, so we allocate a little bit more space
 //#define SC_ARRAY_SIZE (NUM_SC_TXNS+NUM_THREADS*2)
@@ -77,7 +77,7 @@ class DeterministicScheduler : public Scheduler {
   static bool terminated_;
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
-  static void* RunDedicateWorkerThread(void* arg);
+  static void* RunDedicateThread(void* arg);
 
   inline static void AddLatency(MyTuple<int64, int64, int64>* array, int64 sc_time, TxnProto* txn){
       if (txn->seed() % SAMPLE_RATE == 0)
