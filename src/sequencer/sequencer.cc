@@ -194,6 +194,7 @@ void Sequencer::RunWriter() {
    LOG(-1, " after synchronizing");
   started = true;
 
+  int64 paxos_delay = atoi(ConfigReader::Value("paxos_delay").c_str())*1000;
   // Set up batch messages for each system node.
   MessageProto batch;
   batch.set_destination_channel("sequencer");
@@ -258,7 +259,12 @@ void Sequencer::RunWriter() {
 	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);
-    batch_queue_.push(batch_string);
+    int64 time = GetUTime();
+    buffer_queue_.push(make_pair(time, batch_string));
+    if(buffer_queue_.front().first + paxos_delay < time){
+        batch_queue_.push(buffer_queue_.front().second);
+        buffer_queue_.pop();
+    }
 	//paxos_queues->Push(batch_string);
   }
 

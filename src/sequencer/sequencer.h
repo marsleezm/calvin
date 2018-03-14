@@ -151,6 +151,7 @@ class Sequencer {
 
   // Queue for sending batches from writer to reader if not in paxos mode.
   queue<string> batch_queue_;
+  queue<pair<int64, string>> buffer_queue_;
   pthread_mutex_t mutex_;
 
   // The number of fetched batches
