@@ -311,7 +311,7 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int TPCC::Execute(StorageManager* storage) const {
-    //return SUCCESS;
+    return SUCCESS;
     //LOG(storage->get_txn()->txn_id(), " rs size is "<<storage->get_txn()->read_set_size());
     if(storage->get_txn()->read_set_size() == 0){
         //LOG(storage->get_txn()->txn_id(), " initing");
@@ -362,7 +362,7 @@ int TPCC::Execute(StorageManager* storage) const {
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int TPCC::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, int thread, bool first_read_txn) const {
-    //return SUCCESS;
+    return SUCCESS;
     if(txn->read_set_size() == 0)
         NewTxnWorker(config_, NULL, thread, txn);
   switch (txn->txn_type()) {
@@ -388,7 +388,7 @@ int TPCC::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, int th
 
 
 int TPCC::ExecuteReadOnly(StorageManager* storage) const {
-    //return SUCCESS;
+    return SUCCESS;
   TxnProto* txn = storage->get_txn();
     if(storage->get_txn()->read_set_size() == 0)
         NewTxnWorker(config_, storage, storage->thread, storage->get_txn());

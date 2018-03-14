@@ -498,16 +498,13 @@ class TxnQueue {
   // otherwise returns false.
   inline bool Pop(TxnProto** result) {
     pthread_mutex_lock(&front_mutex_);
-    //pthread_spin_lock(&front_mutex_);
     if (front_ != back_) {
       *result = queue_[front_];
       front_ = (front_ + 1) & size_mask_;
       pthread_mutex_unlock(&front_mutex_);
-      //pthread_spin_unlock(&front_mutex_);
       return true;
     }
     pthread_mutex_unlock(&front_mutex_);
-    //pthread_spin_unlock(&front_mutex_);
     return false;
   }
 
@@ -529,7 +526,6 @@ class TxnQueue {
 
   inline int MultiPop(TxnProto** result, int num) {
     pthread_mutex_lock(&front_mutex_);
-    //pthread_spin_lock(&front_mutex_);
      int cnt = 0;
      while (front_ != back_ and cnt!=num) {
         result[cnt] = queue_[front_];
@@ -537,7 +533,6 @@ class TxnQueue {
         ++cnt;
       }
      pthread_mutex_unlock(&front_mutex_);
-     //pthread_spin_unlock(&front_mutex_);
      return cnt;
   }
 

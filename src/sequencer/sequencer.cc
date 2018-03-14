@@ -200,6 +200,7 @@ void Sequencer::RunWriter() {
   batch.set_destination_node(-1);
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
+  //int64 txn_count=0;
   int prev_node = (configuration_->this_node_id-1 + configuration_->all_nodes.size())%configuration_->all_nodes.size(),
        after_node = (configuration_->this_node_id+1)%configuration_->all_nodes.size();
   prev_node = 0 | (1 << prev_node);
@@ -237,17 +238,17 @@ void Sequencer::RunWriter() {
         if(txn->txn_type() & READONLY_MASK)
             read_only_txns.push_back(txn);
         else{
-            txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
+            txn->set_txn_id(generated_txn++);
             batch.add_data(txn->SerializeAsString());
             delete txn;
         }
         ++num_txns;
-        ++generated_txn;
+        ++txn_id_offset;
       }
     }
 
 	for(const auto txn: read_only_txns){
-       txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
+       txn->set_txn_id(generated_txn++);
        txn->SerializeToString(&txn_string);
        batch.add_data(txn_string);
        delete txn;
@@ -386,6 +387,7 @@ void* Sequencer::FetchMessage() {
               }
               txn->set_txn_bound(txn_bound);
 			  txn->set_local_txn_id(fetched_txn_num_++);
+              //LOG(txn->txn_id(), " adding, local is "<<txn->local_txn_id());
               txns_queue_->Push(txn);
 		  }
 		  delete batch_message;
