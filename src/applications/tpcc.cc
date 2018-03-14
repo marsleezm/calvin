@@ -19,7 +19,7 @@ using std::string;
 // ---- THIS IS A HACK TO MAKE ITEMS WORK ON LOCAL MACHINE ---- //
 std::tr1::unordered_map<Key, Value*> ItemList;
 Value* TPCC::GetItem(Key key) const             { return ItemList[key]; }
-void TPCC::SetItem(Key key, Value* value) const { ItemList[key] = value; }
+void TPCC::SetItem(Key key, Value* value) { ItemList[key] = value; }
 
 // The load generator can be called externally to return a
 // transaction proto containing a new type of transaction.
@@ -1183,9 +1183,6 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
   return SUCCESS;
 }
 
-
-// The initialize function is executed when an initialize transaction comes
-// through, indicating we should populate the database with fake data
 void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const {
   // We create and write out all of the warehouses
   //for (int i = 0; i < (int)(WAREHOUSES_PER_NODE * conf->all_nodes.size()); i++) {
@@ -1193,7 +1190,38 @@ void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* con
   if(num_warehouses == 0)
       num_warehouses = atoi(ConfigReader::Value("num_threads").c_str());
   std::cout<<"Start populating TPC-C data, populating warehouses "<<num_warehouses<<std::endl;
-  for (int i = 0; i < (int)(num_warehouses* conf->all_nodes.size()); i++) {
+  int start_time = GetTime();
+  int load_threads = min(num_warehouses, atoi(ConfigReader::Value("num_threads").c_str()));
+  pthread_t threads[load_threads];
+  
+  int total_warehouse = (int)(num_warehouses* conf->all_nodes.size()), avg_warehouse = total_warehouse/num_warehouses;
+  for(int i = 0; i < load_threads; ++i){
+      cpu_set_t cpuset;
+      pthread_attr_t attr;
+      pthread_attr_init(&attr);
+      CPU_ZERO(&cpuset);
+      CPU_SET(i+3, &cpuset);
+      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
+
+      pthread_create(&(threads[i]), &attr, Load,
+         reinterpret_cast<void*>(
+         new MyFour<LockedVersionedStorage*, Configuration*, int, int>(storage, conf, i*avg_warehouse, 
+            max((i+1)*avg_warehouse, total_warehouse))));
+  }
+  for(int i = 0; i<load_threads; ++i)
+      pthread_join(threads[i], NULL);
+  std::cout<<"Finish populating TPC-C data, took "<<GetTime()-start_time<<std::endl;
+}
+
+// The initialize function is executed when an initialize transaction comes
+// through, indicating we should populate the database with fake data
+void* TPCC::Load(void* arg) {
+  MyFour<LockedVersionedStorage*, Configuration*, int, int>* cast_arg 
+        = reinterpret_cast<MyFour<LockedVersionedStorage*, Configuration*, int, int>*>(arg);
+  LockedVersionedStorage* storage = cast_arg->first;
+  Configuration* conf = cast_arg->second;
+  int start = cast_arg->third, end = cast_arg->fourth;
+  for (int i = start; i < end; i++) {
     // First, we create a key for the warehouse
     char warehouse_key[128], warehouse_key_ytd[128];
     Value* warehouse_value = new Value();
@@ -1292,11 +1320,12 @@ void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* con
     SetItem(string(item_key), item_value);
     delete item;
   }
-  std::cout<<"Finish populating TPC-C data"<<std::endl;
+  delete cast_arg;
+  return NULL;
 }
 
 // The following method is a dumb constructor for the warehouse protobuffer
-Warehouse* TPCC::CreateWarehouse(Key warehouse_key) const {
+Warehouse* TPCC::CreateWarehouse(Key warehouse_key)  {
   Warehouse* warehouse = new Warehouse();
 
   // We initialize the id and the name fields
@@ -1317,7 +1346,7 @@ Warehouse* TPCC::CreateWarehouse(Key warehouse_key) const {
   return warehouse;
 }
 
-District* TPCC::CreateDistrict(Key district_key, Key warehouse_key) const {
+District* TPCC::CreateDistrict(Key district_key, Key warehouse_key) {
   District* district = new District();
 
   // We initialize the id and the name fields
@@ -1342,7 +1371,7 @@ District* TPCC::CreateDistrict(Key district_key, Key warehouse_key) const {
 }
 
 Customer* TPCC::CreateCustomer(Key customer_key, Key district_key,
-                               Key warehouse_key) const {
+                               Key warehouse_key) {
   Customer* customer = new Customer();
 
   // We initialize the various keys
@@ -1378,7 +1407,7 @@ Customer* TPCC::CreateCustomer(Key customer_key, Key district_key,
   return customer;
 }
 
-Stock* TPCC::CreateStock(Key item_key, Key warehouse_key) const {
+Stock* TPCC::CreateStock(Key item_key, Key warehouse_key) {
   Stock* stock = new Stock();
 
   // We initialize the various keys
@@ -1403,7 +1432,7 @@ Stock* TPCC::CreateStock(Key item_key, Key warehouse_key) const {
   return stock;
 }
 
-Item* TPCC::CreateItem(Key item_key) const {
+Item* TPCC::CreateItem(Key item_key) {
   Item* item = new Item();
 
   // We initialize the item's key

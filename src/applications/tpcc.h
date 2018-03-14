@@ -105,14 +105,15 @@ class TPCC : public Application {
   // When the first transaction is called, the following function initializes
   // a set of fake data for use in the application
   virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
+  static void* Load(void* arg);
 
   // The following methods are simple randomized initializers that provide us
   // fake data for our TPC-C function
-  Warehouse* CreateWarehouse(Key id) const;
-  District* CreateDistrict(Key id, Key warehouse_id) const;
-  Customer* CreateCustomer(Key id, Key district_id, Key warehouse_id) const;
-  Item* CreateItem(Key id) const;
-  Stock* CreateStock(Key id, Key warehouse_id) const;
+  static Warehouse* CreateWarehouse(Key id);
+  static District* CreateDistrict(Key id, Key warehouse_id);
+  static Customer* CreateCustomer(Key id, Key district_id, Key warehouse_id);
+  static Item* CreateItem(Key id);
+  static Stock* CreateStock(Key id, Key warehouse_id);
 
   // A NewOrder call takes a set of args and a transaction id and performs
   // the new order transaction as specified by TPC-C.  The return is 1 for
@@ -135,7 +136,7 @@ class TPCC : public Application {
 
   // The following are implementations of retrieval and writing for local items
   Value* GetItem(Key key) const;
-  void SetItem(Key key, Value* value) const;
+  static void SetItem(Key key, Value* value);
   
   Configuration* config_;
 };
