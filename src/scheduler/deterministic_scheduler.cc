@@ -436,7 +436,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
       // Fast way to process bunches of read-only txns
       if(current_tx == NULL)
           scheduler->txns_queue_->Pop(&current_tx);
-      if(enable_batch){
+      // Read batch only makes sense if total order is enabled
+      if(total_order and enable_batch){
           while (current_tx and (current_tx->txn_type() & READONLY_MASK)) {
               if(num_lc_txns_ <= current_tx->txn_bound()) {
                   LOG(current_tx->txn_id(), " being buffered, bound is "<<current_tx->txn_bound());
@@ -466,7 +467,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
           }
           else{
               multi_pop = scheduler->txns_queue_->MultiPop(multi_txns, MULTI_POP_NUM);
-              std::cout<<"Done multi pop"<<std::endl;
               multi_remain = multi_pop;
           }
       }
