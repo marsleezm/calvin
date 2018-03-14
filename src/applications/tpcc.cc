@@ -32,7 +32,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* t
   int remote_warehouse_id = -1;
   if (mp) {
      do {
- 		remote_warehouse_id = rand() % (WAREHOUSES_PER_NODE *
+ 		remote_warehouse_id = rand() % (num_warehouses *
  										config->all_nodes.size());
      } while (config->all_nodes.size() > 1 &&
  		   config->LookupPartition(remote_warehouse_id) !=
@@ -52,7 +52,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* t
 		txn->add_readers(config->this_node_id);
 		txn->add_writers(config->this_node_id);
 
-		if (WAREHOUSES_PER_NODE * config->all_nodes.size() > 1 and mp) {
+		if (num_warehouses * config->all_nodes.size() > 1 and mp) {
      	     txn->add_readers(remote_node);
      	     txn->add_writers(remote_node);
         }
@@ -63,7 +63,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* t
     case PAYMENT:
 		txn->add_readers(config->this_node_id);
 		txn->add_writers(config->this_node_id);
-		if (WAREHOUSES_PER_NODE * config->all_nodes.size() > 1 and mp) {
+		if (num_warehouses * config->all_nodes.size() > 1 and mp) {
 			 txn->add_readers(remote_node);
 			 txn->add_writers(remote_node);
 		}
@@ -121,9 +121,9 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
 
       // First, we pick a local warehouse
         if (deterministic_)
-            warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+            warehouse_id = (thread % num_warehouses) * config->all_nodes.size() + config->this_node_id;
         else
-            warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+            warehouse_id = (rand.next() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
         snprintf(warehouse_key, sizeof(warehouse_key), "w%d",
                  warehouse_id);
 
@@ -190,9 +190,9 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
 
 		// First, we pick a local warehouse
         if(deterministic_)
-		    warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+		    warehouse_id = (thread % num_warehouses) * config->all_nodes.size() + config->this_node_id;
         else
-		    warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+		    warehouse_id = (rand.next() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
 		snprintf(warehouse_key, sizeof(warehouse_key), "w%dy", warehouse_id);
 		txn->add_read_write_set(warehouse_key);
 
@@ -242,9 +242,9 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
      case DELIVERY :
      {
          if(deterministic_)
-            warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+            warehouse_id = (thread % num_warehouses) * config->all_nodes.size() + config->this_node_id;
          else
-            warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+            warehouse_id = (rand.next() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
          snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
          txn->add_read_set(warehouse_key);
          //char order_line_key[128];
@@ -267,9 +267,9 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
         //int customer_order_line_number;
 
         if(deterministic_)
-            warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+            warehouse_id = (thread % num_warehouses) * config->all_nodes.size() + config->this_node_id;
         else
-            warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+            warehouse_id = (rand.next() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
         snprintf(warehouse_key, sizeof(warehouse_key), "w%dy",
     		   warehouse_id);
         district_id = rand.next() % DISTRICTS_PER_WAREHOUSE;
@@ -290,9 +290,9 @@ void TPCC::NewTxnWorker(Configuration* config, StorageManager* storage, int thre
      case STOCK_LEVEL:
      {
          if(deterministic_)
-    	    warehouse_id = (thread % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+    	    warehouse_id = (thread % num_warehouses) * config->all_nodes.size() + config->this_node_id;
          else
-    	    warehouse_id = (rand.next() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+    	    warehouse_id = (rand.next() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
             
     	 // Next, we pick a random district
@@ -1201,10 +1201,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 
 void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const {
   // We create and write out all of the warehouses
-  //for (int i = 0; i < (int)(WAREHOUSES_PER_NODE * conf->all_nodes.size()); i++) {
-  int num_warehouses = atoi(ConfigReader::Value("num_warehouses").c_str());
-  if(num_warehouses == 0)
-      num_warehouses = atoi(ConfigReader::Value("num_threads").c_str());
+  //for (int i = 0; i < (int)(num_warehouses * conf->all_nodes.size()); i++) {
   std::cout<<"Start populating TPC-C data, populating warehouses "<<num_warehouses<<std::endl;
   int start_time = GetTime();
   //int load_threads = min(num_warehouses, atoi(ConfigReader::Value("num_threads").c_str()));

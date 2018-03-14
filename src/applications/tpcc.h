@@ -51,8 +51,11 @@ class TPCC : public Application {
 	};
 
   TPCC(Configuration* config):  config_(config) {
-      if(atoi(ConfigReader::Value("num_warehouses").c_str()) == 0)
+      num_warehouses = atoi(ConfigReader::Value("num_warehouses").c_str());
+      if(num_warehouses == 0){
+          num_warehouses = atoi(ConfigReader::Value("num_threads").c_str());
           deterministic_ = true;
+      }
       else
           deterministic_ = false;
   }
@@ -144,6 +147,7 @@ class TPCC : public Application {
   Value* GetItem(Key key) const;
   static void SetItem(Key key, Value* value);
   bool deterministic_;
+  int num_warehouses;
   
   Configuration* config_;
 };

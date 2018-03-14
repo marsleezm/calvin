@@ -90,7 +90,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, std::at
 	//ASSERT(objects_.count(key) != 0);
     KeyEntry* entry;
     Table::accessor result;
-    table.find(result, key);
+    ASSERT(true == table.find(result, key));
     entry = result->second;
     if(!track_read_dep){
         ValuePair value_pair;
@@ -441,7 +441,6 @@ void LockedVersionedStorage::PutObject(const Key& key, Value* value) {
 }
 
 void LockedVersionedStorage::Unlock(const Key& key, int64 txn_id, bool new_object) {
-    ASSERT(1 == 2);
 	//LOG(txn_id, " unlock "<<key);
     KeyEntry* entry;
     Table::accessor result;
@@ -576,7 +575,6 @@ ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool ne
 }
 
 void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64_t>* aborted_txs) {
-    ASSERT(1 == 2);
 	//LOG(txn_id, " unlock "<<key);
     KeyEntry* entry;
     Table::accessor result;

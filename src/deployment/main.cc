@@ -263,6 +263,7 @@ int main(int argc, char** argv) {
 	std::cout<<"	Dependent txn percent: "<<ConfigReader::Value("dependent_percent")<<std::endl;
 	std::cout<<"	Max batch size: "<<ConfigReader::Value("max_batch_size")<<std::endl;
 	std::cout<<"	Num of threads: "<<ConfigReader::Value("num_threads")<<std::endl;
+    Application* app;
 
 	if (argv[2][0] == 'm') {
 		std::cout<<"Micro benchmark. Parameters: "<<std::endl;
@@ -273,10 +274,12 @@ int main(int argc, char** argv) {
 		<<", index num: "<<ConfigReader::Value("index_num")
 		<<std::endl;
 
-		Microbenchmark(config.all_nodes.size(), config.this_node_id).InitializeStorage(storage, &config);
+        app = new Microbenchmark(config.all_nodes.size(), config.this_node_id);
+		app->InitializeStorage(storage, &config);
 	} else {
 		std::cout<<"TPC-C benchmark. No extra parameters."<<std::endl;
-		TPCC().InitializeStorage(storage, &config);
+        app = new TPCC(&config);
+		app->InitializeStorage(storage, &config);
 	}
 
 	Connection* batch_connection = multiplexer.NewConnection("scheduler_"),
@@ -290,19 +293,11 @@ int main(int argc, char** argv) {
 		  	  client, storage, queue_mode);
 
 	DeterministicScheduler* scheduler;
-	if (argv[2][0] == 'm')
-		scheduler = new DeterministicScheduler(&config,
-	    								 batch_connection,
-	                                     storage,
-	  									 sequencer.GetTxnsQueue(), client,
-	                                     new Microbenchmark(config.all_nodes.size(), config.this_node_id));
-
-	else
-		scheduler = new DeterministicScheduler(&config,
-    								 batch_connection,
+    scheduler = new DeterministicScheduler(&config,
+                                     batch_connection,
                                      storage,
-									 sequencer.GetTxnsQueue(), client,
-                                     new TPCC(&config));
+                                     sequencer.GetTxnsQueue(), client,
+                                     app);
 
 	sequencer.SetScheduler(scheduler);
 
