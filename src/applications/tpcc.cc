@@ -1188,11 +1188,11 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 // through, indicating we should populate the database with fake data
 void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const {
   // We create and write out all of the warehouses
-	std::cout<<"Start populating TPC-C data"<<std::endl;
   //for (int i = 0; i < (int)(WAREHOUSES_PER_NODE * conf->all_nodes.size()); i++) {
   int num_warehouses = atoi(ConfigReader::Value("num_warehouses").c_str());
   if(num_warehouses == 0)
       num_warehouses = atoi(ConfigReader::Value("num_threads").c_str());
+  std::cout<<"Start populating TPC-C data, populating warehouses "<<num_warehouses<<std::endl;
   for (int i = 0; i < (int)(num_warehouses* conf->all_nodes.size()); i++) {
     // First, we create a key for the warehouse
     char warehouse_key[128], warehouse_key_ytd[128];
