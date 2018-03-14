@@ -115,7 +115,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	suspend_block = new int[num_threads];
 	message_queues = new AtomicQueue<MessageProto>*[num_threads+1];
 	//abort_queues = new AtomicQueue<pair<int64_t, int>>*[num_threads];
-	//waiting_queues = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>*[num_threads];
 
 	latency = new MyTuple<int64, int64, int64>*[num_threads];
 
@@ -129,7 +128,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 		latency[i] = new MyTuple<int64, int64, int64>[LATENCY_SIZE];
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		//abort_queues[i] = new AtomicQueue<pair<int64_t, int>>();
-		//waiting_queues[i] = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>();
         to_sc_txns_[i] = new pair<int64, StorageManager*>[sc_array_size];
         for(int j = 0; j<sc_array_size; ++j)
             to_sc_txns_[i][j] = pair<int64, StorageManager*>(NO_TXN, NULL);
@@ -374,7 +372,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
     pair<int64, StorageManager*>* local_sc_txns= scheduler->to_sc_txns_[thread];
     AtomicQueue<pair<int64_t, int>> abort_queue;// = scheduler->abort_queues[thread];
-    AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;// = scheduler->waiting_queues[thread];
+    AtomicQueue<MyTuple<int64_t, int, Value>> waiting_queue;// = scheduler->waiting_queues[thread];
 
     // Begin main loop.
     MessageProto message;
@@ -434,7 +432,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
       if(!waiting_queue.Empty()){
           //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-          MyTuple<int64_t, int, ValuePair> to_wait_txn;
+          MyTuple<int64_t, int, Value> to_wait_txn;
           waiting_queue.Pop(&to_wait_txn);
           AGGRLOG(to_wait_txn.first, " is the first one in suspend");
           if(to_wait_txn.first >= num_lc_txns_){
@@ -450,8 +448,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               else{
                   // The txn is aborted, delete copied value! TODO: Maybe we can keep the value in case we need it
                   // again
-                  if(to_wait_txn.third.first == IS_COPY)
-                      delete to_wait_txn.third.second;
                   AGGRLOG(-1, to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second);
               }
           }

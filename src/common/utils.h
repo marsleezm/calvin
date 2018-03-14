@@ -104,11 +104,9 @@ else if(read_state == NORMAL) assert(object.ParseFromString(*val));
 
 #define PART_READ(storage, type, key, read_state, val) \
 if(storage->ShouldRead()){	\
-	val = storage->ReadValue(key, read_state, false);	\
-	if (read_state == SPECIAL) return reinterpret_cast<int64>(val);	\
-	else {	\
-		type obj;	\
-		assert(obj.ParseFromString(*val));	}}\
+	val = storage->ReadValue(key, false);	\
+    type obj;	\
+    assert(obj.ParseFromString(val));	}
 
 
 // Status code for return values.
@@ -896,6 +894,7 @@ class AtomicMap {
 };
 
 
+/*
 struct ValuePair{
 	int first;
 	Value* second = NULL;
@@ -931,6 +930,7 @@ struct ValuePair{
 		}
 	}
 };
+*/
 
 class ReadFromEntry{
 public:
@@ -978,11 +978,11 @@ class PendingReadEntry{
 		atomic<int>* local_aborted_;
 		int num_aborted_;
 		bool request_lock_;
-		AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue_;
+		AtomicQueue<MyTuple<int64_t, int, Value>>* pend_queue_;
 		AtomicQueue<pair<int64_t, int>>* abort_queue_;
 
 		PendingReadEntry(int64_t my_tx_id, atomic<int>* abort_bit, atomic<int>* local_aborted, int num_aborted,
-				AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue, bool request_lock){
+				AtomicQueue<MyTuple<int64_t, int, Value>>* pend_queue, AtomicQueue<pair<int64_t, int>>* abort_queue, bool request_lock){
 			my_tx_id_ = my_tx_id;
 			abort_bit_ = abort_bit;
 			local_aborted_ = local_aborted;

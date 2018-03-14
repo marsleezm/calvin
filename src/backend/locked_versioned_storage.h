@@ -44,48 +44,25 @@ class LockedVersionedStorage {
 
   // Standard operators in the DB
   //virtual Value* ReadObject(const Key& key, int64 txn_id = LLONG_MAX);
-  virtual ValuePair ReadObject(const Key& key, int64 txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted,
-  			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
+  virtual Value ReadObject(const Key& key, int64 txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted, AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, Value>>* pend_queue, bool new_object);
+  virtual Value ReadValue(const Key& key,  bool new_object);
 
-  inline Value* SafeRead(const Key& key, bool new_object, bool first_reader){//, int64 txn_id){
+  inline Value SafeRead(const Key& key, bool new_object, bool first_reader){//, int64 txn_id){
         KeyEntry* entry;
-        /*
-        if(key[0] == 'w')
-            entry = table[OffsetStringToInt(key, 1)%NUM_NEW_TAB][key];
-        else
-            entry = table[0][key];
-        */
         Table::const_accessor result;
         table.find(result, key);
-        //if(key[0] == 'w')
-        //    table[OffsetStringToInt(key, 1)%NUM_NEW_TAB].find(result, key);
-        //else
-        //    table[0].find(result, key);
         entry = result->second;
         result.release();
 
-        if (first_reader and entry->head->next){
-            entry->oldest = entry->head;
-            DataNode* current = entry->head->next, *next;
-            entry->head->next = NULL;
-            //LOG(txn_id, " deleting "<<key);
-            while(current){
-                next = current->next;
-                delete current;
-                current = next;
-            }
-            return entry->head->value;
-        }
-        else
-            return entry->head->value;
+        return *entry->head->value;
   }
 
-  virtual ValuePair SafeRead(const Key& key, int64 txn_id, bool new_object);
-  virtual ValuePair ReadLock(const Key& key, int64 txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted,
-    			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object, vector<int64>* aborted_txs);
+  virtual Value SafeRead(const Key& key, int64 txn_id, bool new_object);
+  virtual Value ReadLock(const Key& key, int64 txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted,
+    			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, Value>>* pend_queue, bool new_object, vector<int64>* aborted_txs);
   virtual bool LockObject(const Key& key, int64_t txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted,
 			AtomicQueue<pair<int64_t, int>>* abort_queue, vector<int64_t>* aborted_txs);
-  virtual bool PutObject(const Key& key, Value* value, int64 txn_id, bool is_committing, bool new_object);
+  virtual bool PutObject(const Key& key, Value& value);
   virtual void PutObject(const Key& key, Value* value);
   virtual void Unlock(const Key& key, int64 txn_id, bool new_object);
   virtual void RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64>* aborted_txs);

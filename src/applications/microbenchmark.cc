@@ -282,12 +282,12 @@ int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* t
     GetKeys(txn, &rand, 0);
 
 	if(txn->txn_type() & DEPENDENT_MASK){
-        Value* val;
+        Value val;
 		for (int i = 0; i < indexAccessNum; i++) {
             LOG(txn->txn_id(), " reading index");
 			Key indexed_key;
             val = storage->SafeRead(txn->read_write_set(i), false, first);
-            val = storage->SafeRead(*val, false, first);
+            val = storage->SafeRead(val, false, first);
 		}
 		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++)
             val = storage->SafeRead(txn->read_write_set(i+indexAccessNum), false, first);
@@ -318,17 +318,14 @@ int Microbenchmark::Execute(StorageManager* storage) const {
             GetKeys(txn, &rand, storage->thread);
         }
 		for (int i = 0; i < indexAccessNum; i++) {
-			Value* index_val, *next_val;
+			Value index_val, next_val;
 			Key indexed_key;
 			if(storage->ShouldRead()){
 				index_val = storage->ReadLock(txn->read_write_set(i), read_state, false);
-				if(read_state == NORMAL){
-					indexed_key = *index_val;
-					tpcc_args->add_indexed_keys(indexed_key);
-					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
-				}
-				else
-					return reinterpret_cast<int64>(index_val);
+                indexed_key = index_val;
+                tpcc_args->add_indexed_keys(indexed_key);
+                Value v = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
+                storage->PutObject(txn->read_write_set(i), v); 
 			}
 			else{
 				indexed_key = tpcc_args->indexed_keys(i);
@@ -336,20 +333,15 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 
 			if(storage->ShouldRead()){
 				next_val = storage->ReadLock(indexed_key, read_state, false);
-				if(read_state == NORMAL){
-					*next_val = IntToString(StringToInt(*next_val) +  txn->seed()% 100 -50);
-				}
-				else
-					return reinterpret_cast<int64>(next_val);
+                Value v = IntToString(StringToInt(next_val) +  txn->seed()% 100 -50);
+                storage->PutObject(next_val, v); 
 			}
 		}
 		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++) {
 			if(storage->ShouldRead()){
-				Value* index_val = storage->ReadLock(txn->read_write_set(i+indexAccessNum), read_state, false);
-				if(read_state == NORMAL)
-					*index_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
-				else
-					return reinterpret_cast<int64>(index_val);
+				Value index_val = storage->ReadLock(txn->read_write_set(i+indexAccessNum), read_state, false);
+                Value new_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
+                storage->PutObject(txn->read_write_set(i), new_val);
 			}
 		}
 		return SUCCESS;
@@ -366,11 +358,9 @@ int Microbenchmark::Execute(StorageManager* storage) const {
 		for (int i = 0; i < txn->read_write_set_size(); i++) {
 			if(storage->ShouldRead()){
 				LOG(txn->txn_id(), " trying to read "<<txn->read_write_set(i));
-				Value* val = storage->ReadLock(txn->read_write_set(i), read_state, false);
-				if(read_state == NORMAL)
-					*val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
-				else
-					return reinterpret_cast<int64>(val);
+				Value val = storage->ReadLock(txn->read_write_set(i), read_state, false);
+                Value new_val = IntToString(NotSoRandomLocalKey(txn->seed(), nparts*index_records, nparts*kDBSize, this_node_id));
+                storage->PutObject(txn->read_write_set(i), new_val);
 			}
 		}
         LOG(txn->txn_id(), " done "<<GetUTime()/1000);

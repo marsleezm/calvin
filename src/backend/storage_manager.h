@@ -53,11 +53,11 @@ class StorageManager {
   // TODO(alex): Document this class correctly.
   StorageManager(Configuration* config, Connection* connection,
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-				 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn, int thread);
+				 AtomicQueue<MyTuple<int64_t, int, Value>>* pend_queue, TxnProto* txn, int thread);
 
   StorageManager(Configuration* config, Connection* connection,
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-		  	  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, int thread);
+		  	  AtomicQueue<MyTuple<int64_t, int, Value>>* pend_queue, int thread);
 
     inline void InitUnconfirmMsg(MessageProto* msg){
         msg->clear_received_num_aborted();
@@ -126,10 +126,10 @@ class StorageManager {
   //Value* ReadObject(const Key& key);
   //Value* SkipOrRead(const Key& key, int& read_state);
 
-  Value* ReadValue(const Key& key, int& read_state, bool new_object);
-  Value* ReadLock(const Key& key, int& read_state, bool new_object);
-  inline Value* SafeRead(const Key& key, bool new_object){
-      return actual_storage_->SafeRead(key, txn_->local_txn_id(), new_object).second;
+  Value ReadValue(const Key& key, bool new_object);
+  Value ReadLock(const Key& key, int& read_state, bool new_object);
+  inline Value SafeRead(const Key& key, bool new_object){
+      return actual_storage_->SafeRead(key, txn_->local_txn_id(), new_object);
   }
 
   bool ReadOnly(){ return txn_->txn_type()&READONLY_MASK; };
@@ -138,28 +138,8 @@ class StorageManager {
   // value, then do something. If this transaction was suspended, when restarting due to the value has been modified,
   // previous operations will not be triggered again and such the exec_counter will be wrong.
 
-  inline int LockObject(const Key& key, Value*& new_pointer) {
-    // Write object to storage if applicable.
-    if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-		if(abort_bit_ == num_aborted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, &local_aborted_, num_aborted_, abort_queue_, aborted_txs)){
-			// It should always be a new object
-			ASSERT(read_set_.count(key) == 0);
-			read_set_[key] = ValuePair(NEW_MASK | WRITE, new Value);
-			//if(read_set_[key].first & NOT_COPY){
-			read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
-			//LOG(txn_->txn_id(), " trying to create a copy for key "<<key);//reinterpret_cast<int64>(read_set_[key].second));
-			//}
-			new_pointer = read_set_[key].second;
-			return LOCKED;
-		}
-		else{
-			++abort_bit_;
-			LOG(txn_->txn_id(), " lock failed, abort bit is "<<abort_bit_);
-			return LOCK_FAILED;
-		}
-    }
-    else
-  	  return NO_NEED;  // The key will be locked by another partition.
+  inline int PutObject(const Key& key, Value& value) {
+      return actual_storage_->PutObject(key, value);
   }
 
   int HandleReadResult(const MessageProto& message);
@@ -170,9 +150,8 @@ class StorageManager {
 	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
 	  return num_aborted > num_aborted_ && num_aborted == abort_bit_;}
 
-  inline bool TryToResume(int num_aborted, ValuePair v) {
+  inline bool TryToResume(int num_aborted, Value v) {
 	  if(num_aborted == num_aborted_&& num_aborted == abort_bit_){
-		  v.first = v.first | read_set_[suspended_key].first;
 		  read_set_[suspended_key] = v;
 		  return true;
 	  }
@@ -241,7 +220,7 @@ class StorageManager {
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
-  		  message_->add_values(*read_set_[suspended_key].second);
+  		  message_->add_values(read_set_[suspended_key]);
   		  suspended_key = "";
   	  }
   }
@@ -353,7 +332,7 @@ class StorageManager {
 
   // Local copy of all data objects read/written by 'txn_', populated at
   // TxnManager construction time.
-  tr1::unordered_map<Key, ValuePair> read_set_;
+  tr1::unordered_map<Key, Value> read_set_;
   tr1::unordered_map<Key, Value> remote_objects_;
 
   // The message containing read results that should be sent to remote nodes
@@ -366,7 +345,7 @@ class StorageManager {
   int max_counter_;
 
   AtomicQueue<pair<int64_t, int>>* abort_queue_;
-  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue_;
+  AtomicQueue<MyTuple<int64_t, int, Value>>* pend_queue_;
 
   TPCCArgs* tpcc_args = NULL;
 
