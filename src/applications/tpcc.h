@@ -13,6 +13,7 @@
 #include "common/configuration.h"
 #include "proto/tpcc.pb.h"
 #include "proto/tpcc_args.pb.h"
+#include "common/config_reader.h"
 
 // High conflict
 //#define WAREHOUSES_PER_NODE 4
@@ -49,8 +50,13 @@ class TPCC : public Application {
 	STOCK_LEVEL = 17,
 	};
 
-  TPCC(Configuration* config):  config_(config) {}
-  TPCC()  {}
+  TPCC(Configuration* config):  config_(config) {
+      if(atoi(ConfigReader::Value("num_warehouses").c_str()) == 0)
+          deterministic_ = true;
+      else
+          deterministic_ = false;
+  }
+  TPCC(){}
   virtual ~TPCC() {}
 
   // Load generator for a new transaction
@@ -137,6 +143,7 @@ class TPCC : public Application {
   // The following are implementations of retrieval and writing for local items
   Value* GetItem(Key key) const;
   static void SetItem(Key key, Value* value);
+  bool deterministic_;
   
   Configuration* config_;
 };
