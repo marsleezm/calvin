@@ -1208,7 +1208,7 @@ void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* con
   //pthread_t threads[load_threads];
   
   int total_warehouse = (int)(num_warehouses* conf->all_nodes.size());//, avg_warehouse = total_warehouse/num_warehouses;
-   /*
+    /*
   for(int i = 0; i < load_threads; ++i){
       cpu_set_t cpuset;
       pthread_attr_t attr;
