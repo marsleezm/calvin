@@ -1191,10 +1191,11 @@ void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* con
       num_warehouses = atoi(ConfigReader::Value("num_threads").c_str());
   std::cout<<"Start populating TPC-C data, populating warehouses "<<num_warehouses<<std::endl;
   int start_time = GetTime();
-  int load_threads = min(num_warehouses, atoi(ConfigReader::Value("num_threads").c_str()));
-  pthread_t threads[load_threads];
+  //int load_threads = min(num_warehouses, atoi(ConfigReader::Value("num_threads").c_str()));
+  //pthread_t threads[load_threads];
   
-  int total_warehouse = (int)(num_warehouses* conf->all_nodes.size()), avg_warehouse = total_warehouse/num_warehouses;
+  int total_warehouse = (int)(num_warehouses* conf->all_nodes.size());//, avg_warehouse = total_warehouse/num_warehouses;
+  /*
   for(int i = 0; i < load_threads; ++i){
       cpu_set_t cpuset;
       pthread_attr_t attr;
@@ -1210,6 +1211,9 @@ void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* con
   }
   for(int i = 0; i<load_threads; ++i)
       pthread_join(threads[i], NULL);
+  */
+  Load(new MyFour<LockedVersionedStorage*, Configuration*, int, int>(storage, conf, 0, 
+            total_warehouse));
   std::cout<<"Finish populating TPC-C data, took "<<GetTime()-start_time<<std::endl;
 }
 
