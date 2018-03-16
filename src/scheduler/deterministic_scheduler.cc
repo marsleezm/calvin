@@ -117,7 +117,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	//abort_queues = new AtomicQueue<pair<int64_t, int>>*[num_threads];
 	//waiting_queues = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>*[num_threads];
 
-	latency = new MyTuple<int64, int64, int64>*[num_threads];
+	latency = new MyFour<int64, int64, int64, int64>*[num_threads];
 
 	threads_ = new pthread_t[num_threads];
 	thread_connections_ = new Connection*[num_threads+1];
@@ -126,7 +126,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	to_sc_txns_ = new pair<int64, StorageManager*>*[num_threads];
 
 	for (int i = 0; i < num_threads; i++) {
-		latency[i] = new MyTuple<int64, int64, int64>[LATENCY_SIZE];
+		latency[i] = new MyFour<int64, int64, int64, int64>[LATENCY_SIZE];
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		//abort_queues[i] = new AtomicQueue<pair<int64_t, int>>();
 		//waiting_queues[i] = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>();
@@ -157,7 +157,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	    thread_connections_[i] = batch_connection_->multiplexer()->NewConnection(channel, &message_queues[i]);
 
 	    for (int j = 0; j<LATENCY_SIZE; ++j)
-	    	latency[i][j] = MyTuple<int64, int64, int64>(0, 0, 0);
+	    	latency[i][j] = MyFour<int64, int64, int64, int64>(0, 0, 0, 0);
 
 	    cpu_set_t cpuset;
 	    pthread_attr_t attr;
@@ -389,7 +389,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     bool enable_batch = atoi(ConfigReader::Value("read_batch").c_str());
     bool total_order = atoi(ConfigReader::Value("total_order").c_str());
     bool multi_queue = atoi(ConfigReader::Value("multi_queue").c_str());
-    MyTuple<int64, int64, int64>* latency_array = scheduler->latency[thread];
+    MyFour<int64, int64, int64, int64>* latency_array = scheduler->latency[thread];
 	vector<MessageProto> buffered_msgs;
 	set<int64> finalized_uncertain;
 
@@ -512,10 +512,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   break;
               }
               LOG(current_tx->txn_id(), " RO  is taken, bound "<<current_tx->txn_bound());
+              if(current_tx->seed() % SAMPLE_RATE == 0)
+                  current_tx->set_start_time(GetUTime());
               if (current_tx->local_txn_id() == current_tx->txn_bound()+1)
                   scheduler->application_->ExecuteReadOnly(scheduler->storage_, current_tx, thread, true);
               else
                   scheduler->application_->ExecuteReadOnly(scheduler->storage_, current_tx, thread, false);
+              AddLatency(latency_array, 0, current_tx); 
               ++num_lc_txns_;
               ++Sequencer::num_committed;
               //AddLatency(latency_count, scheduler->latency[thread], manager->spec_commit_time, txn);
@@ -617,7 +620,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
                 ++Sequencer::num_committed;
                 //std::cout<<"Committing read-only txn "<<txn->txn_id()<<", num committed is "<<Sequencer::num_committed<<std::endl;
                 application_->ExecuteReadOnly(manager);
-                //AddLatency(latency_count, latency[thread], txn);
+                AddLatency(latency[thread], 0, manager->get_txn());
                 delete manager;
             }
             return true;
@@ -627,6 +630,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
             //AGGRLOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
             to_sc_txns_[thread][txn->local_txn_id()%sc_array_size] = make_pair(txn->local_txn_id(), manager);
             manager->put_inlist();
+            manager->spec_commit();
             sc_txn_list[txn->local_txn_id()%sc_array_size].first = txn->local_txn_id();
             return true;
         }

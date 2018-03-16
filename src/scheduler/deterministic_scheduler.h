@@ -29,7 +29,7 @@
 #include "common/config_reader.h"
 
 #define LATENCY_SIZE 2000
-#define SAMPLE_RATE 100
+#define SAMPLE_RATE 8 
 #define MULTI_POP_NUM 1 
 //#define NUM_SC_TXNS 1000
 // Checking the number of pending txns to decide if start a new txn is not totally synchronized, so we allocate a little bit more space
@@ -79,27 +79,26 @@ class DeterministicScheduler : public Scheduler {
   static void* RunWorkerThread(void* arg);
   static void* RunDedicateThread(void* arg);
 
-  inline static void AddLatency(MyTuple<int64, int64, int64>* array, int64 sc_time, TxnProto* txn){
+  inline static void AddLatency(MyFour<int64, int64, int64, int64>* array, int64 sc_time, TxnProto* txn){
       if (txn->seed() % SAMPLE_RATE == 0)
       {
-          /*
-          if(latency_count == LATENCY_SIZE)
-              latency_count = 0;
           int64 now_time = GetUTime();
-          if(sc_time == 0)
-              array[latency_count] = make_pair(0, now_time - txn->seed());
-          else
-              array[latency_count] = make_pair(now_time-sc_time, now_time - txn->seed());
-          ++latency_count;
-          */
-          int64 now_time = GetUTime();
-          if(sc_time != 0){
-              //if(now_time -sc_time > 10000)
-              //   std::cout<<" Now "<<now_time<<", sc "<<sc_time<<", start "<<txn->start_time()<<std::endl;
-              array[0].first += now_time-sc_time;
+          if(txn->txn_type() & READONLY_MASK){
+              if(sc_time != 0){
+                  array[1].first += now_time-sc_time;
+                  array[1].second += 1;
+              }
+              array[1].third += now_time - txn->start_time();
+              array[1].fourth += 1;
           }
-          array[0].second += now_time - txn->start_time();
-          array[0].third += 1;
+          else{
+              if(sc_time != 0){
+                  array[0].first += now_time-sc_time;
+                  array[0].second += 1;
+              }
+              array[0].third += now_time - txn->start_time();
+              array[0].fourth += 1;
+          }
       }
   }
 
@@ -161,7 +160,7 @@ class DeterministicScheduler : public Scheduler {
   int sc_array_size;
   priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
 
-  MyTuple<int64, int64, int64>** latency;
+  MyFour<int64, int64, int64, int64>** latency;
   MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;
   pthread_mutex_t commit_tx_mutex;
 };
