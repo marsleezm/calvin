@@ -452,24 +452,21 @@ void Sequencer::output(){
     }
     myfile << "LATENCY" << '\n';
 
-    int64 rocnt1 = 0, rocnt2= 0, roexec_lat = 0, rototal_lat = 0, cnt1 = 0, cnt2=0, exec_lat = 0, total_lat = 0;
-    for(int i = 0; i<num_threads; ++i){
-        exec_lat += scheduler_->latency[i][0].first;
-        cnt1 += scheduler_->latency[i][0].second;
-        total_lat += scheduler_->latency[i][0].third;
-        cnt2 += scheduler_->latency[i][0].fourth;
-
-        roexec_lat += scheduler_->latency[i][1].first;
-        rocnt1 += scheduler_->latency[i][1].second;
-        rototal_lat += scheduler_->latency[i][1].third;
-        rocnt2 += scheduler_->latency[i][1].fourth;
+    int64 lat, cnt;
+    for(int i = 0; i <6; ++i){
+        lat = 0;
+        cnt = 0;
+        for(int j = 0; j < num_threads; ++j){
+            lat += scheduler_->latency[j][i].first;
+            cnt += scheduler_->latency[j][i].second;
+        }
+        if(i == 0)
+            myfile<<"Update\n";
+        else if (i == 2)
+            myfile <<"Read\n";
+        if(cnt == 0)
+            cnt = 1;
+        myfile << lat/cnt<< '\n';
     }
-    if(cnt1 == 0)
-        cnt1 = 1;
-    if(rocnt1 == 0)
-        rocnt1 = 1;
-    myfile << exec_lat/cnt1<<", "<<total_lat/cnt2 << '\n';
-    myfile << roexec_lat/rocnt1<<", "<<rototal_lat/rocnt2 << '\n';
-    myfile << roexec_lat<<", "<<rocnt1<<", "<<rototal_lat<<", "<<rocnt2 << '\n';
     myfile.close();
 }

@@ -79,27 +79,9 @@ class DeterministicScheduler : public Scheduler {
   static void* RunWorkerThread(void* arg);
   static void* RunDedicateThread(void* arg);
 
-  inline static void AddLatency(MyFour<int64, int64, int64, int64>* array, int64 sc_time, TxnProto* txn){
-      if (txn->seed() % SAMPLE_RATE == 0)
-      {
-          int64 now_time = GetUTime();
-          if(txn->txn_type() & READONLY_MASK){
-              if(sc_time != 0){
-                  array[1].first += now_time-sc_time;
-                  array[1].second += 1;
-              }
-              array[1].third += now_time - txn->start_time();
-              array[1].fourth += 1;
-          }
-          else{
-              if(sc_time != 0){
-                  array[0].first += now_time-sc_time;
-                  array[0].second += 1;
-              }
-              array[0].third += now_time - txn->start_time();
-              array[0].fourth += 1;
-          }
-      }
+  inline static void AddLatency(pair<int64, int64>* array, int idx, int start, int end){
+      array[idx].first += end-start;
+      array[idx].second += 1;
   }
 
   bool ExecuteTxn(StorageManager* manager, int thread);
@@ -160,7 +142,7 @@ class DeterministicScheduler : public Scheduler {
   int sc_array_size;
   priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
 
-  MyFour<int64, int64, int64, int64>** latency;
+  pair<int64, int64>** latency;
   MyFour<int64, int64, int64, StorageManager*>* sc_txn_list;
   pthread_mutex_t commit_tx_mutex;
 };

@@ -52,12 +52,7 @@ class TPCC : public Application {
 
   TPCC(Configuration* config):  config_(config) {
       num_warehouses = atoi(ConfigReader::Value("num_warehouses").c_str());
-      if(num_warehouses == 0){
-          num_warehouses = atoi(ConfigReader::Value("num_threads").c_str());
-          deterministic_ = true;
-      }
-      else
-          deterministic_ = false;
+      deterministic_ = atoi(ConfigReader::Value("deterministic").c_str());
   }
   TPCC(){}
   virtual ~TPCC() {}
