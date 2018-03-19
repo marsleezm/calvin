@@ -166,7 +166,7 @@ void Sequencer::RunWriter() {
 #endif
 
   int batch_number = configuration_->this_node_id;
-  unordered_map<int, MessageProto> recon_msgs;
+  std::tr1::unordered_map<int, MessageProto> recon_msgs;
   for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
        it != configuration_->all_nodes.end(); ++it) {
 	  recon_msgs[it->first].set_destination_channel("recon");
@@ -198,7 +198,7 @@ void Sequencer::RunWriter() {
   started = true;
   //std::cout << "Synchronization finished.\n" << std::flush;
 
-  //unordered_map<string, TxnProto*> pending_txns;
+  //std::tr1::unordered_map<string, TxnProto*> pending_txns;
 
   // Set up batch messages for each system node.
 

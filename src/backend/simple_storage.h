@@ -7,14 +7,14 @@
 #define _DB_BACKEND_SIMPLE_STORAGE_H_
 
 #include <tr1/unordered_map>
-//#include <unordered_map>
+//#include <std::tr1::unordered_map>
 
 #include "backend/storage.h"
 #include "common/types.h"
 #include <pthread.h>
 
 using std::tr1::unordered_map;
-//using std::unordered_map;
+//using std::std::tr1::unordered_map;
 
 class SimpleStorage : public Storage {
  public:
@@ -32,7 +32,7 @@ class SimpleStorage : public Storage {
   virtual void Initmutex();
 
  private:
-  unordered_map<Key, Value*> objects_;
+  std::tr1::unordered_map<Key, Value*> objects_;
   pthread_mutex_t mutex_;
 
 };

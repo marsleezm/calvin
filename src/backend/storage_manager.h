@@ -23,7 +23,7 @@
 #include <ucontext.h>
 
 #include <tr1/unordered_map>
-//#include <unordered_map>
+//#include <std::tr1::unordered_map>
 #include <vector>
 
 #include "common/types.h"
@@ -31,7 +31,7 @@
 using std::vector;
 using std::pair;
 using std::tr1::unordered_map;
-//using std::unordered_map;
+//using std::std::tr1::unordered_map;
 
 class Configuration;
 class Connection;
@@ -99,8 +99,8 @@ class StorageManager {
   // StorageManager construction time.
   //
   // TODO(alex): Should these be pointers to reduce object copying overhead?
-  unordered_map<Key, Value*> objects_;
-  unordered_map<Key, Value> write_set_;
+  std::tr1::unordered_map<Key, Value*> objects_;
+  std::tr1::unordered_map<Key, Value> write_set_;
 
   vector<Value*> remote_reads_;
   vector<pair<Value*, Value>> buffered_modification;

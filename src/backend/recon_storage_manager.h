@@ -140,9 +140,9 @@ class ReconStorageManager {
 
   // Local copy of all data objects read/written by 'txn_', populated at
   // TxnManager construction time.
-  //unordered_map<Key, ValuePair> write_set_;
-  unordered_map<Key, Value*> read_set_;
-  unordered_map<Key, Value*> remote_objects_;
+  //std::tr1::unordered_map<Key, ValuePair> write_set_;
+  std::tr1::unordered_map<Key, Value*> read_set_;
+  std::tr1::unordered_map<Key, Value*> remote_objects_;
 
   // Transaction that corresponds to this instance of a TxnManager.
   TxnProto* txn_;

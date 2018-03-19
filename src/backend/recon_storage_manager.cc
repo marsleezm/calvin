@@ -78,7 +78,7 @@ ReconStorageManager::~ReconStorageManager() {
 
 	read_set_.clear();
 
-	for (unordered_map<Key, Value*>::iterator it = remote_objects_.begin();
+	for (std::tr1::unordered_map<Key, Value*>::iterator it = remote_objects_.begin();
        it != remote_objects_.end(); ++it)
 	{
 		delete it->second;

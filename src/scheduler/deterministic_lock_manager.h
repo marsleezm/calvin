@@ -8,14 +8,14 @@
 #define _DB_SCHEDULER_DETERMINISTIC_LOCK_MANAGER_H_
 
 #include <deque>
-//#include <unordered_map>
+//#include <std::tr1::unordered_map>
 #include <tr1/unordered_map>
 
 #include "common/configuration.h"
 #include "scheduler/lock_manager.h"
 #include "common/utils.h"
 
-//using std::unordered_map;
+//using std::std::tr1::unordered_map;
 using std::tr1::unordered_map;
 using std::deque;
 
@@ -82,6 +82,6 @@ class DeterministicLockManager {
   // Tracks all txns still waiting on acquiring at least one lock. Entries in
   // 'txn_waits_' are invalided by any call to Release() with the entry's
   // txn.
-  unordered_map<TxnProto*, int> txn_waits_;
+  std::tr1::unordered_map<TxnProto*, int> txn_waits_;
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_LOCK_MANAGER_H_

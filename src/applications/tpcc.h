@@ -15,11 +15,11 @@
 #include "proto/tpcc_args.pb.h"
 #include "common/config_reader.h"
 
-#define WAREHOUSES_PER_NODE 12
+//#define WAREHOUSES_PER_NODE 12
 #define DISTRICTS_PER_WAREHOUSE 10
-#define DISTRICTS_PER_NODE (WAREHOUSES_PER_NODE * DISTRICTS_PER_WAREHOUSE)
+//#define DISTRICTS_PER_NODE (WAREHOUSES_PER_NODE * DISTRICTS_PER_WAREHOUSE)
 #define CUSTOMERS_PER_DISTRICT 3000
-#define CUSTOMERS_PER_NODE (DISTRICTS_PER_NODE * CUSTOMERS_PER_DISTRICT)
+//#define CUSTOMERS_PER_NODE (DISTRICTS_PER_NODE * CUSTOMERS_PER_DISTRICT)
 #define NUMBER_OF_ITEMS 100000
 
 using std::string;
@@ -61,6 +61,7 @@ class TPCC : public Application {
   // for the checkpoint to use
   static int CheckpointID(Key key) {
     // Initial dissection of the key
+    /*
     size_t id_idx;
 
     // Switch based on key type
@@ -88,6 +89,7 @@ class TPCC : public Application {
     } else if ((id_idx = key.find("ln")) != bad) {
       return 8000000 + atoi(&key[id_idx + 2]);
     }
+    */
 
     // Invalid key
     return -1;
@@ -140,6 +142,7 @@ class TPCC : public Application {
   Value* GetItem(Key key) const;
   void SetItem(Key key, Value* value) const;
   int recon_mask;
+  int num_warehouses = atoi(ConfigReader::Value("num_warehouses").c_str());
 };
 
 #endif  // _DB_APPLICATIONS_TPCC_H_

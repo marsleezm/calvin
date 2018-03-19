@@ -115,7 +115,7 @@ void StorageManager::Setup(TxnProto* txn){
 }
 
 void StorageManager::ApplyChange(){
-	for (unordered_map<Key, Value>::iterator it = write_set_.begin();
+	for (std::tr1::unordered_map<Key, Value>::iterator it = write_set_.begin();
 	       it != write_set_.end(); ++it) {
 		if(objects_.count(it->first) == 0)
 			PutObject(it->first, new Value(it->second));
@@ -141,7 +141,7 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
 }
 
 void StorageManager::PrintObjects(){
-	for (unordered_map<Key, Value*>::iterator it = objects_.begin();
+	for (std::tr1::unordered_map<Key, Value*>::iterator it = objects_.begin();
 	       it != objects_.end(); ++it) {
 		LOG(txn_->txn_id(), " has key "<<it->first<<", value is "<<it->second);
 	 }
@@ -161,7 +161,7 @@ bool StorageManager::ReadyToExecute() {
 //	else{
 //		LOG(txn_->txn_id(), " txn type is "<<txn_->txn_type());
 //		vector<string> objects;
-//		for (unordered_map<Key, Value*>::iterator it = objects_.begin();
+//		for (std::tr1::unordered_map<Key, Value*>::iterator it = objects_.begin();
 //			       it != objects_.end(); ++it)
 //			objects.push_back(it->first);
 //		sort(objects.begin(), objects.end());
@@ -209,7 +209,7 @@ StorageManager::~StorageManager() {
 Value* StorageManager::ReadObject(const Key& key) {
 //	if(objects_.count(key) == 0){
 //		LOG(txn_->txn_id(), " WTF, we do not have "<<key<<", but we have ");
-//		for (unordered_map<Key, Value*>::iterator it = objects_.begin();
+//		for (std::tr1::unordered_map<Key, Value*>::iterator it = objects_.begin();
 //		       it != objects_.end(); ++it) {
 //		    	LOG(txn_->txn_id(), " Key: "<<it->first<<", Value: "<<it->second);
 //		  }

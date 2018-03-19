@@ -152,8 +152,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   DeterministicScheduler* scheduler =
       reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->second;
 
-  unordered_map<string, StorageManager*> active_txns;
-  unordered_map<string, ReconStorageManager*> recon_pending_txns;
+  std::tr1::unordered_map<string, StorageManager*> active_txns;
+  std::tr1::unordered_map<string, ReconStorageManager*> recon_pending_txns;
   std::queue<TxnProto*> recon_txns;
 
   //bool is_recon = false;
@@ -396,7 +396,7 @@ DeterministicScheduler::~DeterministicScheduler() {
 }
 
 // Returns ptr to heap-allocated
-unordered_map<int, MessageProto*> batches;
+std::tr1::unordered_map<int, MessageProto*> batches;
 MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicScheduler* scheduler) {
   if (batches.count(batch_id) > 0) {
     // Requested batch has already been received.
