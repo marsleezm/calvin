@@ -453,6 +453,7 @@ void Sequencer::output(){
     myfile << "LATENCY" << '\n';
 
     int64 lat, cnt;
+    vector<int64> cnts;
     for(int i = 0; i <6; ++i){
         lat = 0;
         cnt = 0;
@@ -466,7 +467,11 @@ void Sequencer::output(){
             myfile <<"Read\n";
         if(cnt == 0)
             cnt = 1;
+        cnts.push_back(cnt);
         myfile << lat/cnt<< '\n';
     }
+    for(const auto c : cnts)
+        myfile << c<<",";
+    myfile<<'\n';
     myfile.close();
 }

@@ -229,6 +229,7 @@ bool DeterministicScheduler::TryToFindId(MessageProto& msg, int& i, int64& base_
 }
 
 void* DeterministicScheduler::RunDedicateThread(void* arg) {
+/*
     int thread =
         reinterpret_cast<pair<int, DeterministicScheduler*>*>(arg)->first;
     string thread_name = "worker"+std::to_string(thread);
@@ -362,7 +363,7 @@ void* DeterministicScheduler::RunDedicateThread(void* arg) {
               scheduler->txns_queue_->Pop(&current_tx);
           // Read batch only makes sense if total order is enabled
           if(total_order and enable_batch){
-              while (current_tx and (current_tx->txn_type() & READONLY_MASK)) {
+              while (current_tx and (current_tx->txn_type() & READONLY_MASK) and !terminated_) {
                   if(num_lc_txns_ <= current_tx->txn_bound()) {
                       LOG(current_tx->txn_id(), " being buffered, bound is "<<current_tx->txn_bound());
                       break;
@@ -413,7 +414,7 @@ void* DeterministicScheduler::RunDedicateThread(void* arg) {
                   LOG(current_tx->txn_id(), " starting, is ro "<<(current_tx->txn_type()&READONLY_MASK)<<", bound "<<current_tx->txn_bound());
                   latest_started_tx = current_tx->local_txn_id();
                   while (local_sc_txns[current_tx->local_txn_id()%sc_array_size].first != NO_TXN){
-                      LOG(local_sc_txns[current_tx->local_txn_id()%sc_array_size].first, " is not no txn, cleaning!");
+                      LOG(local_sc_txns[current_tx->local_txn_id()%sc_array_size].first, " is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<", type "<<current_tx->txn_type());
                       CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
                   }
                   StorageManager* manager = new StorageManager(scheduler->configuration_, scheduler->thread_connections_[thread],
@@ -440,6 +441,7 @@ void* DeterministicScheduler::RunDedicateThread(void* arg) {
      }
   }
   usleep(1000000);
+*/
   return NULL;
 }
 
@@ -461,9 +463,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     queue<MyTuple<int64, int, StorageManager*>> retry_txns;
 
     int max_sc = scheduler->max_sc, sc_array_size=scheduler->sc_array_size; 
-    int multi_remain = 0, multi_pop = 0;
     int64 local_gc= 0, this_node = scheduler->configuration_->this_node_id; //prevtx=0; 
-    TxnProto** multi_txns = new TxnProto*[MULTI_POP_NUM];
+    //TxnProto** multi_txns = new TxnProto*[MULTI_POP_NUM];
     TxnProto* current_tx = NULL;
     bool enable_batch = atoi(ConfigReader::Value("read_batch").c_str());
     bool total_order = atoi(ConfigReader::Value("total_order").c_str());
@@ -587,9 +588,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
           scheduler->txns_queue_->Pop(&current_tx);
       // Read batch only makes sense if total order is enabled
       if(total_order and enable_batch){
-          while (current_tx and (current_tx->txn_type() & READONLY_MASK)) {
+          while (current_tx and (current_tx->txn_type() & READONLY_MASK) and !terminated_) {
               if(num_lc_txns_ <= current_tx->txn_bound()) {
                   LOG(current_tx->txn_id(), " being buffered, bound is "<<current_tx->txn_bound());
+                  //std::cout<<current_tx->txn_id()<<" being buffered, bound is "<<current_tx->txn_bound()<<std::endl;
                   break;
               }
               LOG(current_tx->txn_id(), " RO  is taken, bound "<<current_tx->txn_bound());
@@ -610,35 +612,42 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               current_tx = NULL;
               scheduler->txns_queue_->Pop(&current_tx);
           }
-          if(current_tx and (current_tx->txn_type() & READONLY_MASK))
+          if(terminated_ or (current_tx and (current_tx->txn_type() & READONLY_MASK))){
+              //std::cout<<"Get out, bound is "<<current_tx->txn_bound()<<std::endl;
               continue;
+          }
       }
-      if(current_tx == NULL and multi_remain == 0){
+      if(current_tx == NULL){
           if(multi_queue){
               scheduler->client_->GetTxn(&current_tx, 0, GetUTime());
-              multi_pop = 1;
-              multi_remain = multi_pop;
           }
           else{
-              multi_pop = scheduler->txns_queue_->MultiPop(multi_txns, MULTI_POP_NUM);
-              multi_remain = multi_pop;
+              scheduler->txns_queue_->Pop(&current_tx);
+              //multi_pop = scheduler->txns_queue_->MultiPop(multi_txns, MULTI_POP_NUM);
+              //multi_remain = multi_pop;
+              //if(multi_pop!=0)
+              //    std::cout<<"Get txn from queue, multi pop "<<multi_pop<<std::endl; 
           }
       }
 
-      while(current_tx or multi_remain){
-          if(current_tx== NULL and !multi_queue and multi_remain)
-              current_tx = multi_txns[multi_pop-multi_remain];
-          if((enable_batch and num_lc_txns_ <= current_tx->txn_bound()) or current_tx->local_txn_id() >= num_lc_txns_ + max_sc){
+      while(current_tx and !terminated_){
+          //if(current_tx== NULL and !multi_queue and multi_remain)
+          //    current_tx = multi_txns[multi_pop-multi_remain];
+          if((enable_batch and (current_tx->txn_type()&READONLY_MASK or num_lc_txns_ <= current_tx->txn_bound())) or current_tx->local_txn_id() >= num_lc_txns_ + max_sc){
+              //std::cout<<"buffering txn"<<std::endl; 
               LOG(current_tx->txn_id(), " buffered, num lc txns is "<<num_lc_txns_<<", bound "<<current_tx->txn_bound());
               break;
           }
           else{
+              //std::cout<<"Going to execute txn, type is "<<current_tx->txn_type()<<std::endl; 
               if(current_tx->seed() % SAMPLE_RATE == 0)
                   current_tx->set_start_time(GetUTime());
               LOG(current_tx->txn_id(), " starting, is ro "<<(current_tx->txn_type()&READONLY_MASK)<<", bound "<<current_tx->txn_bound());
               latest_started_tx = current_tx->local_txn_id();
-              while (local_sc_txns[current_tx->local_txn_id()%sc_array_size].first != NO_TXN)
+              while (local_sc_txns[current_tx->local_txn_id()%sc_array_size].first != NO_TXN){
+                  //std::cout<<local_sc_txns[current_tx->local_txn_id()%sc_array_size].first<<" is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<", type "<<current_tx->txn_type()<<std::endl;
                   CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
+              }
               StorageManager* manager = new StorageManager(scheduler->configuration_, scheduler->thread_connections_[thread],
                     scheduler->storage_, &abort_queue, &waiting_queue, current_tx, thread);
               scheduler->sc_txn_list[current_tx->local_txn_id()%sc_array_size] = MyFour<int64, int64, int64, StorageManager*>(NO_TXN, current_tx->local_txn_id(), current_tx->txn_id(), manager);
@@ -655,9 +664,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                       retry_txns.push(MyTuple<int64, int, StorageManager*>(current_tx->local_txn_id(), manager->abort_bit_, manager));
                   }
               }
-              if(multi_remain > 0)
-                  --multi_remain;
+              //if(multi_remain > 0)
+              //    --multi_remain;
               current_tx = NULL;
+              scheduler->txns_queue_->Pop(&current_tx);
           }
 	  }
   }

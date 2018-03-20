@@ -272,13 +272,39 @@ void Microbenchmark::GetKeys(TxnProto* txn, Rand* rand, int thread) const {
 void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* txn, int remote_node) {
 }
 
+int Microbenchmark::ExecuteReadOnly(StorageManager* storage) const {
+
+    TxnProto* txn = storage->get_txn();
+    Rand rand;
+    rand.seed(txn->seed());
+    GetKeys(txn, &rand, 0);
+
+	if(txn->txn_type() & DEPENDENT_MASK){
+        Value* val;
+		for (int i = 0; i < indexAccessNum; i++) {
+            LOG(txn->txn_id(), " reading index");
+			Key indexed_key;
+            val = storage->SafeRead(txn->read_write_set(i), false);
+            val = storage->SafeRead(*val, false);
+		}
+		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++)
+            val = storage->SafeRead(txn->read_write_set(i+indexAccessNum), false);
+        LOG(txn->txn_id(), " done");
+		return SUCCESS;
+	}
+	else{
+		for (int i = 0; i < txn->read_write_set_size(); i++)
+            storage->SafeRead(txn->read_write_set(i), false);
+		return SUCCESS;
+	}
+}
+
 int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* txn, int thread, bool first) const{
     LOG(txn->txn_id(), " executing read-only");
     //return SUCCESS;
 
     Rand rand;
     rand.seed(txn->seed());
-    ASSERT(1 == 2);
     GetKeys(txn, &rand, 0);
 
 	if(txn->txn_type() & DEPENDENT_MASK){
@@ -295,8 +321,10 @@ int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* t
 		return SUCCESS;
 	}
 	else{
-		for (int i = 0; i < txn->read_write_set_size(); i++)
+		for (int i = 0; i < txn->read_write_set_size(); i++){
+            LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
             storage->SafeRead(txn->read_write_set(i), false, first);
+        }
 		return SUCCESS;
 	}
 }

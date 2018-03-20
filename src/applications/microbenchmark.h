@@ -36,7 +36,7 @@ class Microbenchmark : public Application {
   virtual void NewTxn(int64 txn_id, int txn_type, Configuration* config = NULL, TxnProto* txn = NULL, int remote_node=0);
   virtual int Execute(StorageManager* storage) const;
   virtual int ExecuteReadOnly(LockedVersionedStorage* actual_storage, TxnProto* txn, int thread, bool first) const;
-  virtual int ExecuteReadOnly(StorageManager* actual_storage) const {return 1;};
+  virtual int ExecuteReadOnly(StorageManager* actual_storage) const;
 
   TxnProto* InitializeTxn();
   TxnProto* MicroTxnSP(int64 txn_id, int part, int readonly_mask);
