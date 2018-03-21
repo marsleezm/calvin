@@ -44,6 +44,7 @@
 #define END_BLOCK(if_blocked, stat, last_time)
 #endif
 
+      //std::cout<<" trying to clean up "<<local_gc%sc_array_size<<std::endl; 
 #define CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, sc_txn_list) \
   while(local_gc < can_gc_txns_){ \
       if (local_sc_txns[local_gc%sc_array_size].first == local_gc){ \
@@ -468,7 +469,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     TxnProto* current_tx = NULL;
     bool enable_batch = atoi(ConfigReader::Value("read_batch").c_str());
     bool total_order = atoi(ConfigReader::Value("total_order").c_str());
-    bool multi_queue = atoi(ConfigReader::Value("multi_queue").c_str());
     pair<int64, int64>* latency_array = scheduler->latency[thread];
 	vector<MessageProto> buffered_msgs;
 	set<int64> finalized_uncertain;
@@ -495,44 +495,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
             can_gc_txns_ = num_lc_txns_;
             pthread_mutex_unlock(&scheduler->commit_tx_mutex);
       }
-    /*
-            if (total_order and scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ and pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-            int tx_index=num_lc_txns_%sc_array_size;
-            //int record_abort_bit;
-            MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
-            StorageManager* mgr=NULL;
-
-            while(true){
-                bool did_something = false;
-                mgr = first_tx.fourth;
-                // If can send confirm/pending confirm
-                if(first_tx.first >= num_lc_txns_){
-                    //LOG(first_tx.first, " first transaction, bit is "<<record_abort_bit);
-                    //int result = mgr->CanAddC(record_abort_bit);
-                    //if(result == CAN_ADD or result == ADDED){
-                        did_something = true;
-                        if(first_tx.first == num_lc_txns_ and mgr->CanSCToCommit() == SUCCESS){
-                            LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
-                            if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
-                                ++Sequencer::num_committed;
-                            scheduler->sc_txn_list[tx_index].third = NO_TXN;
-                            ++num_lc_txns_;
-                        }
-                    //}
-                }
-
-                if (!did_something){
-                    can_gc_txns_ = num_lc_txns_;
-                    break;
-                }
-                else{
-                    tx_index = (tx_index+1)%sc_array_size; 
-                    first_tx = scheduler->sc_txn_list[tx_index];
-                }
-            }
-            pthread_mutex_unlock(&scheduler->commit_tx_mutex);
-      }
-      */
       //LOG(scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first, " first transaction, num lc "<<num_lc_txns_<<", idx "<<num_lc_txns_%sc_array_size);
       CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
 
@@ -639,27 +601,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               continue;
           }
       }
-      if(current_tx == NULL){
-          if(multi_queue){
-              scheduler->client_->GetTxn(&current_tx, 0, GetUTime());
-          }
-          else{
-              scheduler->txns_queue_->Pop(&current_tx);
-              //multi_pop = scheduler->txns_queue_->MultiPop(multi_txns, MULTI_POP_NUM);
-              //multi_remain = multi_pop;
-              //if(multi_pop!=0)
-              //    std::cout<<"Get txn from queue, multi pop "<<multi_pop<<std::endl; 
-          }
-      }
+      if(current_tx == NULL)
+          scheduler->txns_queue_->Pop(&current_tx);
 
-      while(current_tx and !terminated_){
-          //if(current_tx== NULL and !multi_queue and multi_remain)
-          //    current_tx = multi_txns[multi_pop-multi_remain];
-          if((enable_batch and (current_tx->txn_type()&READONLY_MASK or num_lc_txns_ <= current_tx->txn_bound())) or current_tx->local_txn_id() >= num_lc_txns_ + max_sc){
-              //std::cout<<"buffering txn"<<std::endl; 
-              LOG(current_tx->txn_id(), " buffered, num lc txns is "<<num_lc_txns_<<", bound "<<current_tx->txn_bound());
-              break;
-          }
+      if(current_tx){
+          if((enable_batch and (current_tx->txn_type()&READONLY_MASK or num_lc_txns_ <= current_tx->txn_bound())) or current_tx->local_txn_id() >= num_lc_txns_ + max_sc)
+              continue;
           else{
               //std::cout<<"Going to execute txn, type is "<<current_tx->txn_type()<<std::endl; 
               if(current_tx->seed() % SAMPLE_RATE == 0)
@@ -686,10 +633,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                       retry_txns.push(MyTuple<int64, int, StorageManager*>(current_tx->local_txn_id(), manager->abort_bit_, manager));
                   }
               }
-              //if(multi_remain > 0)
-              //    --multi_remain;
               current_tx = NULL;
-              scheduler->txns_queue_->Pop(&current_tx);
           }
 	  }
   }
