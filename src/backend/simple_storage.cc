@@ -7,8 +7,10 @@
 
 Value* SimpleStorage::ReadObject(const Key& key, int64 txn_id) {
     Table::const_accessor result;
-    table.find(result, key);
-    return result->second;
+    if(table.find(result, key))
+        return result->second;
+    else
+        return NULL;
 }
 
 bool SimpleStorage::PutObject(const Key& key, Value* value, int64 txn_id) {

@@ -15,8 +15,10 @@
 #include "common/types.h"
 #include <pthread.h>
 
-//using std::tr1::unordered_map;
+using namespace tbb;
+
 typedef concurrent_hash_map<Key, Value*> Table;
+
 
 class SimpleStorage : public Storage {
  public:

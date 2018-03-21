@@ -20,6 +20,7 @@ ZEROMQ := $(EXTDIR)/zeromq
 PROTOB := $(EXTDIR)/protobuf
 GTEST  := $(EXTDIR)/googletest
 ZOOKPR := $(EXTDIR)/zookeeper
+TBB := $(EXTDIR)/tbb2018_20171205oss
 
 # Executable for protocol buffers
 PROTOCEXE := $(PROTOB)/src/.libs/protoc
@@ -34,11 +35,11 @@ V = @
 
 # Set the compiler and compile-time loaded libraries
 CXX           := g++
-LDLIBRARYPATH := LD_LIBRARY_PATH=$(ZEROMQ)/src/.libs:$(PROTOB)/src/.libs:$(GTEST)/lib/.libs:$(ZOOKPR)/.libs
+LDLIBRARYPATH := LD_LIBRARY_PATH=$(ZEROMQ)/src/.libs:$(PROTOB)/src/.libs:$(GTEST)/lib/.libs:$(ZOOKPR)/.libs:$(TBB)/lib/intel64/gcc4.7/
 
 # For profiling (with gprof), this line should read 'PG = -pg'
 # For fast execution, this line should read 'PG ='.
-PG = 
+PG =
 
 # Set the flags for C++ to compile with (namely where to look for external
 # libraries) and the linker libraries (again to look in the ext/ library)
@@ -46,13 +47,13 @@ CXXFLAGS := -std=c++11 -g -MD $(PG) -I$(SRCDIR) -I$(OBJDIR) \
             -I$(ZEROMQ)/include \
             -I$(PROTOB)/src \
             -I$(GTEST)/include \
-            -I$(ZOOKPR)/include -I$(ZOOKPR)/generated
+            -I$(ZOOKPR)/include -I$(ZOOKPR)/generated -I$(TBB)/include
 CXXFLAGS += -Wall -Werror
 
 LDFLAGS := -lrt -lpthread $(PG) \
            -lprotobuf -L$(PROTOB)/src/.libs \
            -lgtest -L$(GTEST)/lib/.libs \
-           -lzookeeper_mt -L$(ZOOKPR)/.libs
+           -lzookeeper_mt -L$(ZOOKPR)/.libs -ltbb -L$(TBB)/lib/intel64/gcc4.7/
 ZMQLDFLAGS := -lzmq -L$(ZEROMQ)/src/.libs
 
 # Lists that the */Makefile.inc makefile fragments will add to
