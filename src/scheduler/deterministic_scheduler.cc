@@ -475,7 +475,30 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
     while (!terminated_) {
       if (total_order and scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ and pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-            int tx_index=num_lc_txns_%sc_array_size, record_abort_bit;
+            int tx_index=num_lc_txns_%sc_array_size;
+            MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
+            StorageManager* mgr=NULL;
+
+            while(first_tx.first == num_lc_txns_ and first_tx.fourth->CanSCToCommit() == SUCCESS){
+                LOG(-1, " looping");
+                mgr = first_tx.fourth;
+                LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
+                if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
+                    ++Sequencer::num_committed;
+                scheduler->sc_txn_list[tx_index].third = NO_TXN;
+                if (mgr->get_txn()->seed() % SAMPLE_RATE == 0 and (mgr->get_txn()->txn_type() & READONLY_MASK))
+                   AddLatency(latency_array, 2, mgr->get_txn()->start_time(), GetUTime()); 
+                ++num_lc_txns_;
+                tx_index = (tx_index+1)%sc_array_size; 
+                first_tx = scheduler->sc_txn_list[tx_index];
+            }
+            can_gc_txns_ = num_lc_txns_;
+            pthread_mutex_unlock(&scheduler->commit_tx_mutex);
+      }
+    /*
+            if (total_order and scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ and pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
+            int tx_index=num_lc_txns_%sc_array_size;
+            //int record_abort_bit;
             MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
             StorageManager* mgr=NULL;
 
@@ -485,19 +508,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                 // If can send confirm/pending confirm
                 if(first_tx.first >= num_lc_txns_){
                     //LOG(first_tx.first, " first transaction, bit is "<<record_abort_bit);
-                    int result = mgr->CanAddC(record_abort_bit);
-                    if(result == CAN_ADD or result == ADDED){
+                    //int result = mgr->CanAddC(record_abort_bit);
+                    //if(result == CAN_ADD or result == ADDED){
                         did_something = true;
                         if(first_tx.first == num_lc_txns_ and mgr->CanSCToCommit() == SUCCESS){
                             LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
                             if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
                                 ++Sequencer::num_committed;
                             scheduler->sc_txn_list[tx_index].third = NO_TXN;
-                            if (mgr->get_txn()->seed() % SAMPLE_RATE == 0 and (mgr->get_txn()->txn_type() & READONLY_MASK))
-                               AddLatency(latency_array, 2, mgr->get_txn()->start_time(), GetUTime()); 
                             ++num_lc_txns_;
                         }
-                    }
+                    //}
                 }
 
                 if (!did_something){
@@ -511,6 +532,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
             }
             pthread_mutex_unlock(&scheduler->commit_tx_mutex);
       }
+      */
       //LOG(scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first, " first transaction, num lc "<<num_lc_txns_<<", idx "<<num_lc_txns_%sc_array_size);
       CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
 

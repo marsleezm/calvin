@@ -52,14 +52,15 @@ class Microbenchmark : public Application {
   int kRWSetSize = atoi(ConfigReader::Value("rw_set_size").c_str());
   int indexAccessNum = atoi(ConfigReader::Value("index_num").c_str());
   int kDBSize = atoi(ConfigReader::Value("total_key").c_str());
+  bool deterministic_ = atoi(ConfigReader::Value("deterministic").c_str());
 
   virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
 
  private:
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part, Rand* rand, int thread) const;
-  void AccumulateRandomKeys(set<int>* keys, int num_keys, int key_start,
-                     int key_limit, int part, Rand* rand, int thread) const;
+  void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
+                     int key_limit, int part, Rand* rand) const;
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,
                      int key_limit, int part) const;
   inline int RandomLocalKey(const int key_start, const int key_limit, const int part) const {
@@ -71,7 +72,7 @@ class Microbenchmark : public Application {
   inline int NotSoRandomLocalKey(const int64 rand_num, const int key_start, const int key_limit, const int part) const {
 		return key_start + part + nparts * (abs(rand_num) % ((key_limit - key_start)/nparts));
   }
-  void GetKeys(TxnProto* txn) const;
+  void GetKeys(TxnProto* txn, Rand* rand) const;
   void GetKeys(TxnProto* txn, Rand* rand, int thread) const;
   Microbenchmark() {}
 };
