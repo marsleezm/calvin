@@ -6,15 +6,17 @@
 #ifndef _DB_BACKEND_SIMPLE_STORAGE_H_
 #define _DB_BACKEND_SIMPLE_STORAGE_H_
 
-#include <tr1/unordered_map>
+//#include <tr1/unordered_map>
 //#include <std::tr1::unordered_map>
 
+#include "tbb/concurrent_hash_map.h"
+#include "tbb/blocked_range.h"
 #include "backend/storage.h"
 #include "common/types.h"
 #include <pthread.h>
 
-using std::tr1::unordered_map;
-//using std::std::tr1::unordered_map;
+//using std::tr1::unordered_map;
+typedef concurrent_hash_map<Key, Value*> Table;
 
 class SimpleStorage : public Storage {
  public:
@@ -32,8 +34,8 @@ class SimpleStorage : public Storage {
   virtual void Initmutex();
 
  private:
-  std::tr1::unordered_map<Key, Value*> objects_;
-  pthread_mutex_t mutex_;
+  //std::tr1::unordered_map<Key, Value*> objects_;
+  Table table;
 
 };
 #endif  // _DB_BACKEND_SIMPLE_STORAGE_H_
