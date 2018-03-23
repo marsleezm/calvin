@@ -353,12 +353,14 @@ int TPCC::Execute(StorageManager* storage) const {
     case ORDER_STATUS:
     	LOG(storage->get_txn()->txn_id(), " executing a read-only txn in normal way!!!!!!!");
     	// Force quit, this is a bug!
-    	assert(1==2);
+        return OrderStatusTransaction(storage);
+    	//assert(1==2);
     	break;
 
     case STOCK_LEVEL:
     	// Force quit, this is a bug!
-    	assert(1==2);
+        return StockLevelTransaction(storage);
+    	//assert(1==2);
     	break;
 
     case DELIVERY:
@@ -528,7 +530,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 				else
 					stock.set_quantity(stock.quantity() - quantity + 91);
 				assert(stock.SerializeToString(val));
-
 
 				OrderLine order_line;
 				char order_line_key[128];
@@ -709,11 +710,10 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 }
 
 // Read order and orderline new key.
-/*
 int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
-	LOCKLOG(txn->txn_id(), "Executing ORDERSTATUS, is multipart? "<<txn->multipartition());
+	//LOCKLOG(txn->txn_id(), "Executing ORDERSTATUS, is multipart? "<<txn->multipartition());
 	storage->Init();
 
 	Value* val;
@@ -774,7 +774,6 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 
 	return SUCCESS;
 }
-*/
 
 int TPCC::OrderStatusTransactionFast(StorageManager* storage, TxnProto* txn) const {
 	//LOCKLOG(txn->txn_id(), "Executing ORDERSTATUS Fast, is multipart? "<<txn->multipartition());
@@ -835,18 +834,18 @@ int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* 
 
 	//Warehouse warehouse;
 	Warehouse warehouse;
-	val = storage->SafeRead(txn->read_set(0), false, first_read_txn);
+	val = storage->SafeRead(txn->read_set(0), first_read_txn);
     //val = storage->SafeRead(txn->read_set(0), false, first_read_txn, txn->txn_id());
 	assert(warehouse.ParseFromString(*val));
 
 	//District district;
 	District district;
-	val = storage->SafeRead(txn->read_set(1), false, first_read_txn);
+	val = storage->SafeRead(txn->read_set(1), first_read_txn);
     //val = storage->SafeRead(txn->read_set(1), false, first_read_txn, txn->txn_id());
 	assert(district.ParseFromString(*val));
 
 	Customer customer;
-	val = storage->SafeRead(txn->read_set(2), false, first_read_txn);
+	val = storage->SafeRead(txn->read_set(2), first_read_txn);
     //val = storage->SafeRead(txn->read_set(2), false, first_read_txn, txn->txn_id());
 	assert(customer.ParseFromString(*val));
 
@@ -862,7 +861,7 @@ int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* 
 	int order_line_count;
 
 	//FULL_READ(storage, customer.last_order(), order, read_state, val)
-	val = storage->SafeRead(customer.last_order(), true, first_read_txn);
+	val = storage->SafeRead(customer.last_order(), first_read_txn);
     //val = storage->SafeRead(customer.last_order(), true, first_read_txn, txn->txn_id());
 	Order order;
 	assert(order.ParseFromString(*val));
@@ -871,7 +870,7 @@ int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* 
 	char order_line_key[128];
 	for(int i = 0; i < order_line_count; i++) {
 		snprintf(order_line_key, sizeof(order_line_key), "%sol%d", customer.last_order().c_str(), i);
-		val = storage->SafeRead(order_line_key, true, first_read_txn);
+		val = storage->SafeRead(order_line_key, first_read_txn);
         //val = storage->SafeRead(order_line_key, true, first_read_txn, txn->txn_id());
 		OrderLine order_line;
 		assert(order_line.ParseFromString(*val));
@@ -881,12 +880,11 @@ int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* 
 }
 
 // Read order and orderline new key.
-/*
 int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	//int low_stock = 0;
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
-	LOCKLOG(txn->txn_id(), "Executing STOCKLEVEL, is multipart? "<<txn->multipartition());
+	//LOCKLOG(txn->txn_id(), "Executing STOCKLEVEL, is multipart? "<<txn->multipartition());
 	storage->Init();
 	//int threshold = tpcc_args.threshold();
 
@@ -952,7 +950,6 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 
 	return SUCCESS;
 }
-*/
 
 int TPCC::StockLevelTransactionFast(StorageManager* storage, TxnProto* txn) const {
 	//LOCKLOG(txn->txn_id(), "Executing STOCKLEVEL Fast, is multipart? "<<txn->multipartition());
@@ -1015,7 +1012,7 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 	Key warehouse_key = txn->read_set(0);
 	//PART_READ(storage, Warehouse, warehouse_key, read_state, val)
 	// Read & update the warehouse object
-	val = storage->SafeRead(warehouse_key, false, first_read_txn);
+	val = storage->SafeRead(warehouse_key, first_read_txn);
 	Warehouse warehouse;
 	assert(warehouse.ParseFromString(*val));
 
@@ -1023,7 +1020,7 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 	Key district_key = txn->read_set(1);
 	int latest_order_number;
 	//val = storage->SafeRead(district_key,false);
-	val = storage->SafeRead(district_key, false, first_read_txn);
+	val = storage->SafeRead(district_key, first_read_txn);
 	assert(district.ParseFromString(*val));
 	latest_order_number = district.next_order_id()-1;
 
@@ -1033,7 +1030,7 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 				  "%so%d", district_key.c_str(), i);
 
 		Order order;
-		val = storage->SafeRead(order_key, true, first_read_txn);
+		val = storage->SafeRead(order_key, first_read_txn);
 	    //val = storage->SafeRead(order_key, true, first_read_txn, txn->txn_id());
 		assert(order.ParseFromString(*val));
 
@@ -1044,7 +1041,7 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 			snprintf(order_line_key, sizeof(order_line_key), "%sol%d",
 						order_key, j);
 			OrderLine order_line;
-			val = storage->SafeRead(order_line_key, true, first_read_txn);
+			val = storage->SafeRead(order_line_key, first_read_txn);
 	        //val = storage->SafeRead(order_line_key, true, first_read_txn, txn->txn_id());
 			assert(order_line.ParseFromString(*val));
 
@@ -1054,7 +1051,7 @@ int TPCC::StockLevelTransactionFast(LockedVersionedStorage* storage, TxnProto* t
 						warehouse_key.c_str(), item.c_str());
 
 			Stock stock;
-			val = storage->SafeRead(stock_key, false, first_read_txn);
+			val = storage->SafeRead(stock_key, first_read_txn);
 	        //val = storage->SafeRead(stock_key, false, first_read_txn, txn->txn_id());
 			assert(stock.ParseFromString(*val));
 		 }
@@ -1226,7 +1223,124 @@ void TPCC::InitializeStorage(LockedVersionedStorage* storage, Configuration* con
       pthread_join(threads[i], NULL);
   */
   Load(new MyFour<LockedVersionedStorage*, Configuration*, int, int>(storage, conf, 0,  total_warehouse));
+  if(atoi(ConfigReader::Value("update_percent").c_str()) == 0)
+    Preload(total_warehouse, storage, conf);
   std::cout<<"Finish populating TPC-C data, took "<<GetTime()-start_time<<std::endl;
+}
+
+void TPCC::Preload(int num_warehouses, LockedVersionedStorage* storage, Configuration* config) {
+    std::cout<<"Preloading because update percent is 0%"<<std::endl;
+
+    for(int i = 0; i < num_warehouses; ++i){
+        TxnProto* txn = new TxnProto();
+        char warehouse_key[128], district_key[128], customer_key[128];
+        int warehouse_id = i * config->all_nodes.size() + config->this_node_id;
+        snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
+
+        for(int district_id = 0; district_id < DISTRICTS_PER_WAREHOUSE; ++district_id){
+            snprintf(district_key, sizeof(district_key), "w%dd%d", warehouse_id, district_id);
+            Value* district_val = storage->SafeRead(district_key, false);
+            District district;
+            assert(district.ParseFromString(*district_val));
+            for(int customer_id = 0; customer_id < CUSTOMERS_PER_DISTRICT; ++customer_id){
+                int order_number = district.next_order_id();
+                district.set_next_order_id(order_number + 1);
+
+                double system_time = GetUTime();
+                char order_key[128];
+                snprintf(order_key, sizeof(order_key), "%so%d", district_key, order_number);
+
+                snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d", warehouse_id, district_id, customer_id);
+                int order_line_count = (rand() % 11) + 5;
+
+                char remote_warehouse_key[128];
+                snprintf(remote_warehouse_key, sizeof(remote_warehouse_key), "%s", warehouse_key);
+                Value* val = storage->SafeRead(customer_key, false);
+                Customer customer;
+                assert(customer.ParseFromString(*val));
+                customer.set_last_order(order_key);
+                assert(customer.SerializeToString(val));
+
+                // Iterate through each order line
+                std::set<int> items_used;
+                for (int l = 0; l < order_line_count; l++) {
+                    // Set the item id (Invalid orders have the last item be -1)
+                    int item_idx;
+                    do {
+                        item_idx = rand() % NUMBER_OF_ITEMS;
+                    } while (items_used.count(item_idx) > 0);
+                    items_used.insert(item_idx);
+
+                    char item_key[128];
+                    snprintf(item_key, sizeof(item_key), "i%d", item_idx);
+                    Key stock_key = string(remote_warehouse_key) + "s" + item_key;
+                    string supply_warehouse_key = stock_key.substr(0, stock_key.find("s"));
+                    int quantity = rand() % 10 + 1;
+                    val = storage->SafeRead(stock_key, false);
+                    Stock stock;
+                    assert(stock.ParseFromString(*val));
+                    stock.set_year_to_date(stock.year_to_date() + quantity);
+                    stock.set_order_count(stock.order_count() - 1);
+                    // And we decrease the stock's supply appropriately and rewrite to storage
+                    if (stock.quantity() >= quantity + 10)
+                        stock.set_quantity(stock.quantity() - quantity);
+                    else
+                        stock.set_quantity(stock.quantity() - quantity + 91);
+                    assert(stock.SerializeToString(val));
+
+                    int order_line_amount_total = 0;
+
+                    OrderLine order_line;
+                    char order_line_key[128];
+                    snprintf(order_line_key, sizeof(order_line_key), "%so%dol%d", district_key, order_number, l);
+                    order_line.set_order_id(order_line_key);
+
+                    Item item;
+                    assert(item.ParseFromString(*ItemList[item_key]));
+
+                    // Set the attributes for this order line
+                    order_line.set_district_id(district_key);
+                    order_line.set_warehouse_id(warehouse_key);
+                    order_line.set_number(i);
+                    order_line.set_item_id(item_key);
+                    order_line.set_supply_warehouse_id(supply_warehouse_key);
+                    order_line.set_quantity(quantity);
+                    order_line.set_delivery_date(system_time);
+                    order_line.set_amount(quantity * item.price());
+                    order_line_amount_total += (quantity * item.price());
+                    Value* new_val = new Value();
+                    assert(order_line.SerializeToString(new_val));
+                    storage->PutObject(order_line_key, new_val);
+                    //std::cout<<"Putting "<<order_line_key<<std::endl;
+                }
+                Order order;
+                order.set_id(order_key);
+                order.set_warehouse_id(warehouse_key);
+                order.set_district_id(district_key);
+                order.set_customer_id(customer_key);
+                order.set_entry_date(system_time);
+                order.set_carrier_id(-1);
+                order.set_order_line_count(order_line_count);
+                order.set_all_items_local(!txn->multipartition());
+                Value* new_val = new Value();
+                assert(order.SerializeToString(new_val));
+                storage->PutObject(order_key, new_val);
+
+                char new_order_key[128];
+                snprintf(new_order_key, sizeof(new_order_key), "%sno%d", district_key, order_number);
+                NewOrder new_order;
+                new_order.set_id(new_order_key);
+                new_order.set_warehouse_id(warehouse_key);
+                new_order.set_district_id(district_key);
+                new_val = new Value();
+                assert(new_order.SerializeToString(new_val));
+                storage->PutObject(new_order_key, new_val);
+            }
+            if(district.smallest_order_id() == -1)
+                district.set_smallest_order_id(0);
+            assert(district.SerializeToString(district_val));
+        }
+    }
 }
 
 // The initialize function is executed when an initialize transaction comes

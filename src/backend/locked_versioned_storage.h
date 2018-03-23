@@ -47,7 +47,7 @@ class LockedVersionedStorage {
   virtual ValuePair ReadObject(const Key& key, int64 txn_id, std::atomic<int>* abort_bit, std::atomic<int>* local_aborted, int num_aborted,
   			AtomicQueue<pair<int64_t, int>>* abort_queue, AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, bool new_object);
 
-  inline Value* SafeRead(const Key& key, bool new_object, bool first_reader){//, int64 txn_id){
+  inline Value* SafeRead(const Key& key, bool first_reader){//, int64 txn_id){
         KeyEntry* entry;
         /*
         if(key[0] == 'w')

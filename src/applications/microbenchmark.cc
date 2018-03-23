@@ -415,8 +415,9 @@ int Microbenchmark::ExecuteReadOnly(StorageManager* storage) const {
     rand.seed(txn->seed());
     if(deterministic_)
         GetKeys(txn, &rand, storage->thread);
-    else
+    else{
         GetKeys(txn, &rand);
+    }
 
 	if(txn->txn_type() & DEPENDENT_MASK){
         Value* val;
@@ -446,26 +447,27 @@ int Microbenchmark::ExecuteReadOnly(LockedVersionedStorage* storage, TxnProto* t
     rand.seed(txn->seed());
     if(deterministic_)
         GetKeys(txn, &rand, thread);
-    else
+    else{
         GetKeys(txn, &rand);
+    }
 
 	if(txn->txn_type() & DEPENDENT_MASK){
         Value* val;
 		for (int i = 0; i < indexAccessNum; i++) {
             LOG(txn->txn_id(), " reading index");
 			Key indexed_key;
-            val = storage->SafeRead(txn->read_write_set(i), false, first);
-            val = storage->SafeRead(*val, false, first);
+            val = storage->SafeRead(txn->read_write_set(i), first);
+            val = storage->SafeRead(*val, first);
 		}
 		for (int i = 0; i < kRWSetSize-2*indexAccessNum; i++)
-            val = storage->SafeRead(txn->read_write_set(i+indexAccessNum), false, first);
+            val = storage->SafeRead(txn->read_write_set(i+indexAccessNum), first);
         LOG(txn->txn_id(), " done");
 		return SUCCESS;
 	}
 	else{
 		for (int i = 0; i < txn->read_write_set_size(); i++){
             LOG(txn->txn_id(), " key is "<<txn->read_write_set(i));
-            storage->SafeRead(txn->read_write_set(i), false, first);
+            storage->SafeRead(txn->read_write_set(i), first);
         }
 		return SUCCESS;
 	}

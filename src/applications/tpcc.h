@@ -110,6 +110,7 @@ class TPCC : public Application {
   // a set of fake data for use in the application
   virtual void InitializeStorage(LockedVersionedStorage* storage, Configuration* conf) const;
   static void* Load(void* arg);
+  static void Preload(int num_warehouses, LockedVersionedStorage* storage, Configuration* config);
 
   // The following methods are simple randomized initializers that provide us
   // fake data for our TPC-C function
@@ -128,11 +129,11 @@ class TPCC : public Application {
   // payment transaction, returning a 1 for success or 0 for failure.
   int PaymentTransaction(StorageManager* storage) const;
 
-  //int OrderStatusTransaction(StorageManager* storage) const;
+  int OrderStatusTransaction(StorageManager* storage) const;
   int OrderStatusTransactionFast(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const;
   int OrderStatusTransactionFast(StorageManager* actual_storage, TxnProto* txn) const;
 
-  //int StockLevelTransaction(StorageManager* storage) const;
+  int StockLevelTransaction(StorageManager* storage) const;
   int StockLevelTransactionFast(LockedVersionedStorage* actual_storage, TxnProto* txn, bool first) const;
   int StockLevelTransactionFast(StorageManager* actual_storage, TxnProto* txn) const;
 
