@@ -622,7 +622,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               LOG(current_tx->txn_id(), " starting, is ro "<<(current_tx->txn_type()&READONLY_MASK)<<", bound "<<current_tx->txn_bound());
               latest_started_tx = current_tx->local_txn_id();
               while (local_sc_txns[current_tx->local_txn_id()%sc_array_size].first != NO_TXN){
-                  //std::cout<<local_sc_txns[current_tx->local_txn_id()%sc_array_size].first<<" is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<", type "<<current_tx->txn_type()<<std::endl;
+                  std::cout<<local_sc_txns[current_tx->local_txn_id()%sc_array_size].first<<" is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<std::endl;
                   CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
               }
               StorageManager* manager = new StorageManager(scheduler->configuration_, scheduler->thread_connections_[thread],
@@ -681,7 +681,7 @@ bool DeterministicScheduler::ExecuteCommitTxn(StorageManager* manager, int threa
 bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
     TxnProto* txn = manager->get_txn();
     if(manager->ReadOnly()){
-        LOG(txn->txn_id(), " read-only, num lc "<<num_lc_txns_<<", inlist "<<manager->if_inlist());
+        //LOG(txn->txn_id(), " read-only, num lc "<<num_lc_txns_<<", inlist "<<manager->if_inlist());
         if (num_lc_txns_ == txn->local_txn_id()){
             ASSERT(manager->if_inlist() == false);
             ++num_lc_txns_;
@@ -695,7 +695,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
             return true;
         }
         else{
-            AGGRLOG(txn->txn_id(), " spec-committing"<< txn->local_txn_id()<<", nlc:"<<num_lc_txns_<<", added to list, addr is "<<reinterpret_cast<int64>(manager));
+            AGGRLOG(txn->txn_id(), " sc"<< txn->local_txn_id()<<", nlc:"<<num_lc_txns_<<", put to"<<txn->local_txn_id()%sc_array_size);
             //AGGRLOG(-1, "Before pushing "<<txn->txn_id()<<" to queue, to sc_txns empty? "<<to_sc_txns_[thread]->empty());
             to_sc_txns_[thread][txn->local_txn_id()%sc_array_size] = make_pair(txn->local_txn_id(), manager);
             manager->put_inlist();

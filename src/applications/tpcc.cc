@@ -1065,7 +1065,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
 	//LOG(-1, "Executing DELIVERY "<<txn->txn_id()<<", is multipart? "<<(txn->multipartition()));
-	LOCKLOG(txn->txn_id(), "Executing DELIVERY, is multipart? "<<txn->multipartition());
+	//LOCKLOG(txn->txn_id(), "Executing DELIVERY, is multipart? "<<txn->multipartition());
 	storage->Init();
 
 	Value* val;
