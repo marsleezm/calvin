@@ -59,7 +59,6 @@
       if (local_sc_txns[local_gc%sc_array_size].first == local_gc){ \
           StorageManager* mgr = local_sc_txns[local_gc%sc_array_size].second; \
           if(mgr->ReadOnly()) {\
-              LOG(mgr->get_txn()->txn_id(), " being cleaned up"); \
               if (mgr->get_txn()->seed() % SAMPLE_RATE == 0) \
                 AddLatency(latency_array, 3, mgr->get_txn()->start_time(), GetUTime()); \
              scheduler->application_->ExecuteReadOnly(mgr); \

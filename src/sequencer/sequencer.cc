@@ -115,7 +115,7 @@ Sequencer::~Sequencer() {
 	//if(queue_mode == NORMAL_QUEUE){
 	pthread_join(writer_thread_, NULL);
 	pthread_join(reader_thread_, NULL);
-	pthread_join(paxos_thread_, NULL);
+	//pthread_join(paxos_thread_, NULL);
 	//}
 	//else{
 	//	  pthread_join(reader_thread_, NULL);
