@@ -45,8 +45,8 @@
 #endif
 
       //std::cout<<" trying to clean up "<<local_gc%sc_array_size<<std::endl; 
-#define CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, sc_txn_list) \
-  while(local_gc < can_gc_txns_){ \
+#define CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, sc_txn_list) \
+  while(local_gc < num_lc_txns_){ \
       if (local_sc_txns[local_gc%sc_array_size].first == local_gc){ \
           StorageManager* mgr = local_sc_txns[local_gc%sc_array_size].second; \
           if(mgr->ReadOnly()) {\
@@ -82,7 +82,6 @@ using zmq::socket_t;
 using std::map;
 
 std::atomic<int64_t> DeterministicScheduler::num_lc_txns_(0);
-int64_t DeterministicScheduler::can_gc_txns_(0);
 std::atomic<int64_t> DeterministicScheduler::latest_started_tx(-1);
 bool DeterministicScheduler::terminated_(false);
 
@@ -281,14 +280,13 @@ void* DeterministicScheduler::RunDedicateThread(void* arg) {
                         if (mgr->get_txn()->seed() % SAMPLE_RATE == 0 and (mgr->get_txn()->txn_type() & READONLY_MASK))
                            AddLatency(latency_array, 2, mgr->get_txn()->start_time(), GetUTime()); 
                         ++num_lc_txns_;
-                        can_gc_txns_ = num_lc_txns_;
                     }
                 }
             }
       }
       //LOG(scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first, " first transaction, num lc "<<num_lc_txns_<<", idx "<<num_lc_txns_%sc_array_size);
       else {
-          CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
+          CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
 
           if(!waiting_queue.Empty()){
               //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
@@ -416,7 +414,7 @@ void* DeterministicScheduler::RunDedicateThread(void* arg) {
                   latest_started_tx = current_tx->local_txn_id();
                   while (local_sc_txns[current_tx->local_txn_id()%sc_array_size].first != NO_TXN){
                       LOG(local_sc_txns[current_tx->local_txn_id()%sc_array_size].first, " is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<", type "<<current_tx->txn_type());
-                      CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
+                      CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
                   }
                   StorageManager* manager = new StorageManager(scheduler->configuration_, scheduler->thread_connections_[thread],
                         scheduler->storage_, &abort_queue, &waiting_queue, current_tx, thread);
@@ -492,11 +490,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                 tx_index = (tx_index+1)%sc_array_size; 
                 first_tx = scheduler->sc_txn_list[tx_index];
             }
-            can_gc_txns_ = num_lc_txns_;
             pthread_mutex_unlock(&scheduler->commit_tx_mutex);
       }
       //LOG(scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first, " first transaction, num lc "<<num_lc_txns_<<", idx "<<num_lc_txns_%sc_array_size);
-      CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
+      CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
 
       if(!waiting_queue.Empty()){
           //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
@@ -615,7 +612,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               latest_started_tx = current_tx->local_txn_id();
               while (local_sc_txns[current_tx->local_txn_id()%sc_array_size].first != NO_TXN){
                   //std::cout<<local_sc_txns[current_tx->local_txn_id()%sc_array_size].first<<" is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<", type "<<current_tx->txn_type()<<std::endl;
-                  CLEANUP_TXN(local_gc, can_gc_txns, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
+                  CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
               }
               StorageManager* manager = new StorageManager(scheduler->configuration_, scheduler->thread_connections_[thread],
                     scheduler->storage_, &abort_queue, &waiting_queue, current_tx, thread);

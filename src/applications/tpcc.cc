@@ -353,12 +353,12 @@ int TPCC::Execute(StorageManager* storage) const {
     case ORDER_STATUS:
     	LOG(storage->get_txn()->txn_id(), " executing a read-only txn in normal way!!!!!!!");
     	// Force quit, this is a bug!
-    	assert(1==2);
+        return OrderStatusTransaction(storage);
     	break;
 
     case STOCK_LEVEL:
     	// Force quit, this is a bug!
-    	assert(1==2);
+        return StockLevelTransaction(storage);
     	break;
 
     case DELIVERY:
@@ -709,7 +709,6 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 }
 
 // Read order and orderline new key.
-/*
 int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
@@ -774,7 +773,6 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 
 	return SUCCESS;
 }
-*/
 
 int TPCC::OrderStatusTransactionFast(StorageManager* storage, TxnProto* txn) const {
 	//LOCKLOG(txn->txn_id(), "Executing ORDERSTATUS Fast, is multipart? "<<txn->multipartition());
@@ -881,7 +879,6 @@ int TPCC::OrderStatusTransactionFast(LockedVersionedStorage* storage, TxnProto* 
 }
 
 // Read order and orderline new key.
-/*
 int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	//int low_stock = 0;
 	TxnProto* txn = storage->get_txn();
@@ -952,7 +949,6 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 
 	return SUCCESS;
 }
-*/
 
 int TPCC::StockLevelTransactionFast(StorageManager* storage, TxnProto* txn) const {
 	//LOCKLOG(txn->txn_id(), "Executing STOCKLEVEL Fast, is multipart? "<<txn->multipartition());
