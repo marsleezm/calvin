@@ -44,11 +44,7 @@
 #define END_BLOCK(if_blocked, stat, last_time)
 #endif
 
-      //std::cout<<" trying to clean up "<<local_gc%sc_array_size<<std::endl; 
-#define CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, sc_txn_list) \
-  while(local_gc < num_lc_txns_){ \
-      if (local_sc_txns[local_gc%sc_array_size].first == local_gc){ \
-          StorageManager* mgr = local_sc_txns[local_gc%sc_array_size].second; \
+/*
           if(mgr->ReadOnly()) {\
               if (mgr->get_txn()->seed() % SAMPLE_RATE == 0) \
                 AddLatency(latency_array, 3, mgr->get_txn()->start_time(), GetUTime()); \
@@ -57,6 +53,12 @@
                 AddLatency(latency_array, 4, mgr->get_txn()->start_time(), GetUTime()); \
           }\
           else \
+*/
+      //std::cout<<" trying to clean up "<<local_gc%sc_array_size<<std::endl; 
+#define CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, sc_txn_list) \
+  while(local_gc < num_lc_txns_){ \
+      if (local_sc_txns[local_gc%sc_array_size].first == local_gc){ \
+          StorageManager* mgr = local_sc_txns[local_gc%sc_array_size].second; \
             if (mgr->get_txn()->seed() % SAMPLE_RATE == 0){ \
                 AddLatency(latency_array, 0, mgr->get_txn()->start_time(), mgr->spec_commit_time); \
                 AddLatency(latency_array, 1, mgr->get_txn()->start_time(), GetUTime()); \
@@ -670,6 +672,7 @@ bool DeterministicScheduler::ExecuteCommitTxn(StorageManager* manager, int threa
 
 bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
     TxnProto* txn = manager->get_txn();
+    /*
     if(manager->ReadOnly()){
         LOG(txn->txn_id(), " read-only, num lc "<<num_lc_txns_<<", inlist "<<manager->if_inlist());
         if (num_lc_txns_ == txn->local_txn_id()){
@@ -695,6 +698,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
             return true;
         }
     }
+    */
 
     // No need to resume if the txn is still suspended
     AGGRLOG(txn->txn_id(), " executing, lts: "<<txn->local_txn_id());
