@@ -66,10 +66,10 @@
                 AddLatency(latency_array, 4, mgr->get_txn()->start_time(), GetUTime()); \
           }\
           else \
-            if (mgr->get_txn()->seed() % SAMPLE_RATE == 0){ \
+              if (mgr->get_txn()->seed() % SAMPLE_RATE == 0){ \
                 AddLatency(latency_array, 0, mgr->get_txn()->start_time(), mgr->spec_commit_time); \
                 AddLatency(latency_array, 1, mgr->get_txn()->start_time(), GetUTime()); \
-           }\
+              }\
           local_sc_txns[local_gc%sc_array_size].first = NO_TXN; \
           delete mgr; } \
       ++local_gc; } \
@@ -482,7 +482,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
     while (!terminated_) {
       if (total_order and scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ and pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-            LOG(-1, " Got lock! nlc "<<num_lc_txns_);
+            //LOG(-1, " Got lock! nlc "<<num_lc_txns_);
             int tx_index=num_lc_txns_%sc_array_size;
             MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
             StorageManager* mgr=NULL;
@@ -515,9 +515,9 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               if (manager && manager->TryToResume(to_wait_txn.second, to_wait_txn.third)){
                   if(scheduler->ExecuteTxn(manager, thread) == false){
                       retry_txns.push(MyTuple<int64, int, StorageManager*>(to_wait_txn.first, manager->abort_bit_, manager));
+                      AGGRLOG(to_wait_txn.first, " got aborted, pushing "<<manager->abort_bit_);
                       //--scheduler->num_suspend[thread];
                   }
-                  //AGGRLOG(to_wait_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_restarted_);
               }
               else{
                   // The txn is aborted, delete copied value! TODO: Maybe we can keep the value in case we need it
@@ -536,13 +536,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               AGGRLOG(to_abort_txn.first, " to be aborted"); 
               StorageManager* manager = scheduler->sc_txn_list[to_abort_txn.first%sc_array_size].fourth;
               if (manager && manager->ShouldRestart(to_abort_txn.second)){
-                  AGGRLOG(to_abort_txn.first, " retrying from abort queue"); 
+                  AGGRLOG(to_abort_txn.first, " retrying from abort queue, na"<<manager->num_executed_<<", ab"<<manager->abort_bit_<<", iq "<<to_abort_txn.second); 
                   //scheduler->num_suspend[thread] -= manager->is_suspended_;
                   ++Sequencer::num_aborted_;
                   manager->Abort();
                   if(retry_txns.empty() or retry_txns.front().first != to_abort_txn.first or retry_txns.front().second < to_abort_txn.second){
                       if(scheduler->ExecuteTxn(manager, thread) == false){
-                          AGGRLOG(to_abort_txn.first, " got aborted due to invalid remote read, pushing "<<manager->num_aborted_);
+                          AGGRLOG(to_abort_txn.first, " got aborted due to invalid read, pushing "<<manager->abort_bit_);
                           retry_txns.push(MyTuple<int64, int, StorageManager*>(to_abort_txn.first, manager->abort_bit_, manager));
                       }
                   }
@@ -559,12 +559,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
       if(retry_txns.size()){
           //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
-          if(retry_txns.front().first < num_lc_txns_ || retry_txns.front().second < retry_txns.front().third->abort_bit_){
-              LOG(retry_txns.front().first, " not retrying it, because num lc is "<<num_lc_txns_<<", restart is "<<retry_txns.front().second<<", aborted is"<<retry_txns.front().third->num_aborted_);
+          if(retry_txns.front().first < num_lc_txns_ || retry_txns.front().second <= retry_txns.front().third->num_executed_){
+              LOG(retry_txns.front().first, " not retrying it, because num lc is "<<num_lc_txns_<<", restart is "<<retry_txns.front().second<<", aborted is"<<retry_txns.front().third->num_executed_<<", abort bit is "<<retry_txns.front().third->abort_bit_);
               retry_txns.pop();
           }
           else{
-              LOG(retry_txns.front().first, " being retried, s:"<<retry_txns.front().second<<", na is "<<retry_txns.front().third->num_aborted_);
+              LOG(retry_txns.front().first, " being retried, s:"<<retry_txns.front().second<<", na is "<<retry_txns.front().third->num_executed_);
               if(scheduler->ExecuteTxn(retry_txns.front().third, thread) == true)
                   retry_txns.pop();
               else
@@ -611,7 +611,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
       if(current_tx){
           if((enable_batch and (current_tx->txn_type()&READONLY_MASK or num_lc_txns_ <= current_tx->txn_bound())) or current_tx->local_txn_id() >= num_lc_txns_ + max_sc){
-              LOG(current_tx->local_txn_id(), " too large! num lc "<<num_lc_txns_);
+              //LOG(current_tx->local_txn_id(), " too large! num lc "<<num_lc_txns_);
               continue;
           }
           else{
@@ -621,7 +621,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               LOG(current_tx->txn_id(), " starting, is ro "<<(current_tx->txn_type()&READONLY_MASK)<<", bound "<<current_tx->txn_bound());
               latest_started_tx = current_tx->local_txn_id();
               while (local_sc_txns[current_tx->local_txn_id()%sc_array_size].first != NO_TXN){
-                  std::cout<<local_sc_txns[current_tx->local_txn_id()%sc_array_size].first<<" is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<std::endl;
+                  //std::cout<<local_sc_txns[current_tx->local_txn_id()%sc_array_size].first<<" is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<", type "<<current_tx->txn_type()<<std::endl;
                   CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
               }
               StorageManager* manager = new StorageManager(scheduler->configuration_, scheduler->thread_connections_[thread],
@@ -710,11 +710,12 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
     int result = application_->Execute(manager);
     //AGGRLOG(txn->txn_id(), " result is "<<result);
     if (result == SUSPEND){
-        //AGGRLOG(txn->txn_id(),  " suspended");
+        AGGRLOG(txn->txn_id(),  " suspended");
         return true;
     }
     else if(result == ABORT) {
         manager->Abort();
+        AGGRLOG(txn->txn_id(),  " aborted in execution");
         ++Sequencer::num_aborted_;
         return false;
     }
@@ -723,7 +724,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
         if (num_lc_txns_ == txn->local_txn_id()){
             int can_commit = manager->CanCommit();
             if(can_commit == ABORT){
-                //AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
+                AGGRLOG(txn->txn_id(), " got aborted, trying to unlock then restart! Mgr is "<<manager);
                 manager->Abort();
                 ++Sequencer::num_aborted_;
                 return false;
@@ -750,8 +751,10 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
                     to_sc_txns_[thread][txn->local_txn_id()%sc_array_size] = make_pair(txn->local_txn_id(), manager);
                     return true;
                 }
-                else
+                else{
+                    AGGRLOG(txn->txn_id(), " apply change fail");
                     return false;
+                }
             }
         }
         else{
@@ -762,8 +765,10 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
                 to_sc_txns_[thread][txn->local_txn_id()%sc_array_size] = make_pair(txn->local_txn_id(), manager);
                 return true;
             }
-            else
+            else{
+                AGGRLOG(txn->txn_id(), " apply change fail");
                 return false;
+            }
         }
     }
 }

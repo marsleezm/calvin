@@ -74,21 +74,21 @@ class StorageManager {
 
   inline void SendLocalReads(bool if_to_confirm, MyFour<int64_t, int64_t, int64_t, StorageManager*>* sc_txn_list, int sc_array_size){
 	  LOG(txn_->txn_id(), " trying to send read"); 
-      if (!aborting and num_aborted_ == abort_bit_) {
+      if (!aborting and num_executed_ == abort_bit_) {
           if (if_to_confirm and has_confirmed.exchange(true) == false){ 
-              LOG(txn_->txn_id(), " sending confirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
+              LOG(txn_->txn_id(), " sending confirmed read of an "<<num_executed_<<", lan:"<<local_aborted_);
               if (aborted_txs->size())
                   SendCA(sc_txn_list, sc_array_size);
               else
                   message_->set_confirmed(true);
           }
           else
-              LOG(txn_->txn_id(), " sending unconfirmed read of an "<<num_aborted_<<", lan:"<<local_aborted_);
-          message_->set_num_aborted(num_aborted_);
+              LOG(txn_->txn_id(), " sending unconfirmed read of an "<<num_executed_<<", lan:"<<local_aborted_);
+          message_->set_num_aborted(num_executed_);
           message_->set_local_aborted(local_aborted_);
 		  for (int i = 0; i < txn_->writers().size(); i++) {
 			  if (txn_->writers(i) != configuration_->this_node_id) {
-				  //LOG(txn_->txn_id(), " sending local message of restarted "<<num_aborted_<<" to "<<txn_->writers(i));
+				  //LOG(txn_->txn_id(), " sending local message of restarted "<<num_executed_<<" to "<<txn_->writers(i));
 				  message_->set_destination_node(txn_->writers(i));
 				  connection_->Send1(*message_);
 			  }
@@ -108,7 +108,7 @@ class StorageManager {
             return ADDED;
 		else{
 			return_abort_bit = abort_bit_;
-			if (spec_committed_ and num_aborted_ == abort_bit_ and !aborting){
+			if (spec_committed_ and num_executed_ == abort_bit_ and !aborting){
 				if (txn_->multipartition() == false or last_add_pc == abort_bit_ or has_confirmed)
 					return ADDED;
 				else
@@ -141,9 +141,12 @@ class StorageManager {
   inline int LockObject(const Key& key, Value*& new_pointer) {
     // Write object to storage if applicable.
     if (configuration_->LookupPartition(key) == configuration_->this_node_id){
-		if(abort_bit_ == num_aborted_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, &local_aborted_, num_aborted_, abort_queue_, aborted_txs)){
+		if(abort_bit_ == num_executed_ && actual_storage_->LockObject(key, txn_->local_txn_id(), &abort_bit_, &local_aborted_, num_executed_, abort_queue_, aborted_txs)){
 			// It should always be a new object
-			ASSERT(read_set_.count(key) == 0);
+			if(read_set_.count(key) != 0){
+			    LOG(txn_->txn_id(), " already locked "<<key<<", value second is "<<read_set_[key].second);
+                ASSERT(1== 2);
+            }
 			read_set_[key] = ValuePair(NEW_MASK | WRITE, new Value);
 			//if(read_set_[key].first & NOT_COPY){
 			read_set_[key].second = (read_set_[key].second==NULL?new Value():new Value(*read_set_[key].second));
@@ -166,12 +169,12 @@ class StorageManager {
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
-	  //LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_aborted_<<", ABit "<<abort_bit_<<", lan:"<<local_aborted_);
+	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_executed_<<", ABit "<<abort_bit_<<", lan:"<<local_aborted_);
 	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
-	  return num_aborted > num_aborted_ && num_aborted == abort_bit_;}
+	  return num_aborted > num_executed_ && num_aborted == abort_bit_;}
 
   inline bool TryToResume(int num_aborted, ValuePair v) {
-	  if(num_aborted == num_aborted_&& num_aborted == abort_bit_){
+	  if(num_aborted == num_executed_&& num_aborted == abort_bit_){
 		  v.first = v.first | read_set_[suspended_key].first;
 		  read_set_[suspended_key] = v;
 		  return true;
@@ -187,10 +190,10 @@ class StorageManager {
 	  else if (txn_->uncertain() and writer_id == -1)
 		  return finalized;
 	  else{
-		  if(num_aborted_ != abort_bit_ or !spec_committed_)
+		  if(num_executed_ != abort_bit_ or !spec_committed_)
 			  return ABORT;
           // Don't remove the compare in the last part: this is added for concurrency issue
-		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting and num_aborted_ == abort_bit_){
+		  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and !aborting and num_executed_ == abort_bit_){
 		      //LOG(txn_->txn_id(), " can commit"); 
 			  return SUCCESS;
           }
@@ -224,10 +227,10 @@ class StorageManager {
   }
 
   inline int CanCommit() {
-	  if (num_aborted_ != abort_bit_)
+	  if (num_executed_ != abort_bit_)
 		  return ABORT;
       // Don't remove the compare in the last part: this is added for concurrency issue
-	  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and num_aborted_ == abort_bit_)
+	  else if((num_unconfirmed_read == 0 || GotMatchingPCs()) and num_executed_ == abort_bit_)
 		  return SUCCESS;
 	  else{
 		  LOG(txn_->txn_id(), " not confirmed, uc read is "<<num_unconfirmed_read);
@@ -238,6 +241,8 @@ class StorageManager {
   inline void Init(){
 	  exec_counter_ = 0;
 	  is_suspended_ = false;
+      num_executed_ = abort_bit_;
+      LOG(txn_->txn_id(), " init, num_exec is "<<num_executed_);
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
@@ -391,7 +396,7 @@ class StorageManager {
   int writer_id = -1;
   bool finalized = false;
   std::atomic<int32> abort_bit_;
-  int num_aborted_;
+  int num_executed_;
   std::atomic<int32> local_aborted_;
   pthread_mutex_t lock;
   int64 spec_commit_time = 0;

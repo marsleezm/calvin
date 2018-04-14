@@ -884,7 +884,7 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	//int low_stock = 0;
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
-	//LOCKLOG(txn->txn_id(), "Executing STOCKLEVEL, is multipart? "<<txn->multipartition());
+	LOCKLOG(txn->txn_id(), "Executing STOCKLEVEL, is multipart? "<<txn->multipartition());
 	storage->Init();
 	//int threshold = tpcc_args.threshold();
 
@@ -936,6 +936,7 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 			snprintf(order_line_key, sizeof(order_line_key), "%sol%d",
 						order_key, j);
 			OrderLine order_line;
+            LOCKLOG(txn->txn_id(), " read "<<order_line_key);
 			FULL_READ(storage, order_line_key, order_line, read_state, val, true)
 
 			string item = order_line.item_id();

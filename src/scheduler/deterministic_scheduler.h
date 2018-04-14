@@ -70,7 +70,6 @@ class DeterministicScheduler : public Scheduler {
 
  public:
   static std::atomic<int64_t> num_lc_txns_;
-  static int64_t can_gc_txns_;
   static std::atomic<int64_t> latest_started_tx;
 
  protected:
