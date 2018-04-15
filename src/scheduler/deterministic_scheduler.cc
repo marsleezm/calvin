@@ -508,7 +508,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
           //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
           MyTuple<int64_t, int, ValuePair> to_wait_txn;
           waiting_queue.Pop(&to_wait_txn);
-          AGGRLOG(to_wait_txn.first, " is the first one in suspend");
+          //AGGRLOG(to_wait_txn.first, " is the first one in suspend");
           if(to_wait_txn.first >= num_lc_txns_){
               //AGGRLOG(-1, " To suspending txn is " << to_wait_txn.first);
               StorageManager* manager = scheduler->sc_txn_list[to_wait_txn.first%sc_array_size].fourth;
@@ -524,7 +524,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   // again
                   if(to_wait_txn.third.first == IS_COPY)
                       delete to_wait_txn.third.second;
-                  AGGRLOG(-1, to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second);
+                  //AGGRLOG(-1, to_wait_txn.first<<" should not resume, values are "<< to_wait_txn.second);
               }
           }
       }
@@ -533,7 +533,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
           pair<int64_t, int> to_abort_txn;
           abort_queue.Pop(&to_abort_txn);
           if(to_abort_txn.first >= num_lc_txns_ ){
-              AGGRLOG(to_abort_txn.first, " to be aborted"); 
+              //AGGRLOG(to_abort_txn.first, " to be aborted"); 
               StorageManager* manager = scheduler->sc_txn_list[to_abort_txn.first%sc_array_size].fourth;
               if (manager && manager->ShouldRestart(to_abort_txn.second)){
                   AGGRLOG(to_abort_txn.first, " retrying from abort queue, na"<<manager->num_executed_<<", ab"<<manager->abort_bit_<<", iq "<<to_abort_txn.second); 
@@ -542,17 +542,17 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   manager->Abort();
                   if(retry_txns.empty() or retry_txns.front().first != to_abort_txn.first or retry_txns.front().second < to_abort_txn.second){
                       if(scheduler->ExecuteTxn(manager, thread) == false){
-                          AGGRLOG(to_abort_txn.first, " got aborted due to invalid read, pushing "<<manager->abort_bit_);
+                          AGGRLOG(to_abort_txn.first, " got aborted, pushing "<<manager->abort_bit_);
                           retry_txns.push(MyTuple<int64, int, StorageManager*>(to_abort_txn.first, manager->abort_bit_, manager));
                       }
                   }
               }
           }
           else{
-              if (retry_txns.empty())
+              //if (retry_txns.empty())
                   LOG(to_abort_txn.first, " not being retried, because "<<to_abort_txn.first);
-              else
-                  LOG(to_abort_txn.first, " not being retried, because "<<retry_txns.front().first<<", mine is "<<to_abort_txn.first<<", "<<retry_txns.front().second<<","<<to_abort_txn.second);
+              //else
+              //    LOG(to_abort_txn.first, " not being retried, because "<<retry_txns.front().first<<", mine is "<<to_abort_txn.first<<", "<<retry_txns.front().second<<","<<to_abort_txn.second);
           }
           //Abort this transaction
       }
@@ -560,11 +560,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
       if(retry_txns.size()){
           //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
           if(retry_txns.front().first < num_lc_txns_ || retry_txns.front().second <= retry_txns.front().third->num_executed_){
-              LOG(retry_txns.front().first, " not retrying it, because num lc is "<<num_lc_txns_<<", restart is "<<retry_txns.front().second<<", aborted is"<<retry_txns.front().third->num_executed_<<", abort bit is "<<retry_txns.front().third->abort_bit_);
+              //LOG(retry_txns.front().first, " not retrying it, because num lc is "<<num_lc_txns_<<", restart is "<<retry_txns.front().second<<", aborted is"<<retry_txns.front().third->num_executed_<<", abort bit is "<<retry_txns.front().third->abort_bit_);
+              LOG(retry_txns.front().first, " not retrying it, because num lc is "<<num_lc_txns_);
               retry_txns.pop();
           }
           else{
-              LOG(retry_txns.front().first, " being retried, s:"<<retry_txns.front().second<<", na is "<<retry_txns.front().third->num_executed_);
+              //LOG(retry_txns.front().first, " being retried, s:"<<retry_txns.front().second<<", na is "<<retry_txns.front().third->num_executed_);
+              LOG(retry_txns.front().first, " being retried"); 
               if(scheduler->ExecuteTxn(retry_txns.front().third, thread) == true)
                   retry_txns.pop();
               else
@@ -710,12 +712,10 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
     int result = application_->Execute(manager);
     //AGGRLOG(txn->txn_id(), " result is "<<result);
     if (result == SUSPEND){
-        AGGRLOG(txn->txn_id(),  " suspended");
         return true;
     }
     else if(result == ABORT) {
         manager->Abort();
-        AGGRLOG(txn->txn_id(),  " aborted in execution");
         ++Sequencer::num_aborted_;
         return false;
     }
@@ -752,6 +752,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
                     return true;
                 }
                 else{
+                    manager->Abort();
                     AGGRLOG(txn->txn_id(), " apply change fail");
                     return false;
                 }
@@ -766,6 +767,7 @@ bool DeterministicScheduler::ExecuteTxn(StorageManager* manager, int thread){
                 return true;
             }
             else{
+                manager->Abort();
                 AGGRLOG(txn->txn_id(), " apply change fail");
                 return false;
             }

@@ -438,7 +438,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
 	TPCCArgs* tpcc_args = storage->get_args();
 	storage->Init();
-	//LOG(txn->txn_id(), "Executing NEWORDER, is multipart? "<<(txn->multipartition()));
 
 	Key warehouse_key = txn->read_set(0);
 	int read_state;
@@ -470,6 +469,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	// Next, we get the order line count, system time, and other args from the
 	// transaction proto
 	int order_line_count = tpcc_args->order_line_count(0);
+	//LOG(txn->txn_id(), "Executing NEWORDER, on:"<<order_number<<", ol:"<<order_line_count);
 
 	// We initialize the order line amount total to 0
 	int order_line_amount_total = 0;
@@ -494,7 +494,6 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 			assert(customer.SerializeToString(val));
 		}
     }
-
 
 	for (int i = 0; i < order_line_count; i++) {
 		// For each order line we parse out the three args
@@ -1114,11 +1113,12 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 			}
 		}
 		else{
-			//LOCKLOG(txn->txn_id()<<" before getting order count of "<<i);
-			if(tpcc_args->order_line_count_size()>i)
+			if(tpcc_args->order_line_count_size()>i){
 				order_line_count = tpcc_args->order_line_count(i);
-			else
+            }
+			else{
 				order_line_count = INT_MAX;//Means that I have not managed to know the order count, need to know this now.
+            }
 			// Dirty hack to avoid reading null keys
 			if(order_line_count == 0){
 				//LOCKLOG(txn->txn_id()<<" order line count is 0, jumping! ");

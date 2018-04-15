@@ -395,7 +395,7 @@ bool StorageManager::TryAddSC(MessageProto* msg, int record_abort_bit, int64 num
 // If successfully spec-commit, all data are put into the list and all copied data are deleted
 // If spec-commit fail, all put data are removed, all locked data unlocked and all copied data cleaned
 bool StorageManager::ApplyChange(bool is_committing){
-	AGGRLOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing<<", map size is "<<read_set_.size());
+	//AGGRLOG(txn_->txn_id(), " is applying its change! Committed is "<<is_committing<<", map size is "<<read_set_.size());
 	int applied_counter = 0;
 	bool failed_putting = false;
 	// All copied data before applied count are deleted
@@ -404,7 +404,7 @@ bool StorageManager::ApplyChange(bool is_committing){
 		if(it->second.first & WRITE){
 			//AGGRLOG(txn_->txn_id(), " putting:"<<it->first);
 			if (!actual_storage_->PutObject(it->first, it->second.second, txn_->local_txn_id(), is_committing, it->second.first & NEW_MASK)){
-				//AGGRLOG(txn_->txn_id(), " fail putting:"<<it->first<<", appc:"<<applied_counter);
+				AGGRLOG(txn_->txn_id(), " fail putting:"<<it->first<<", appc:"<<applied_counter);
 				failed_putting = true;
 				break;
 			}
@@ -414,7 +414,7 @@ bool StorageManager::ApplyChange(bool is_committing){
 		++applied_counter;
 	}
 	if(failed_putting){
-        AGGRLOG(txn_->txn_id(), " fail putting");
+        //AGGRLOG(txn_->txn_id(), " fail putting");
 		tr1::unordered_map<Key, ValuePair>::iterator it = read_set_.begin();
 		int counter = 0;
 		while(it != read_set_.end()){
@@ -442,6 +442,7 @@ bool StorageManager::ApplyChange(bool is_committing){
 		return false;
 	}
 	else{
+        //AGGRLOG(txn_->txn_id(), " finish putting.");
         aborting = false;
 		return true;
 	}
@@ -674,7 +675,7 @@ Value* StorageManager::ReadValue(const Key& key, int& read_state, bool new_obj) 
 Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object) {
 	read_state = NORMAL;
 	if(abort_bit_ > num_executed_){
-		LOCKLOG(txn_->txn_id(), " is just aborted!! Num restarted is "<<num_executed_<<", abort bit is "<<abort_bit_);
+		LOCKLOG(txn_->txn_id(), " is just aborted!!");// Num restarted is "<<num_executed_<<", abort bit is "<<abort_bit_);
 		max_counter_ = 0;
 		read_state = SPECIAL;
 		return reinterpret_cast<Value*>(ABORT);
@@ -696,7 +697,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				ValuePair result = actual_storage_->ReadLock(key, txn_->local_txn_id(), &abort_bit_, &local_aborted_,
 									num_executed_, abort_queue_, pend_queue_, new_object, aborted_txs);
 				if(result.first == SUSPEND){
-					LOCKLOG(txn_->txn_id(), " suspend when read&lock "<<key<<", abort bit is"<<abort_bit_<<", num a"<<num_executed_);
+					//LOCKLOG(txn_->txn_id(), " suspend when read&lock "<<key);//<<", abort bit is"<<abort_bit_<<", num a"<<num_executed_);
 					read_state = SPECIAL;
 					suspended_key = key;
 					read_set_[key].first = WRITE | new_object;
@@ -704,7 +705,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 					return reinterpret_cast<Value*>(SUSPEND);
 				}
                 else if(result.first == ABORT){
-					LOCKLOG(txn_->txn_id(), " fail lock"<<key<<", abort bit is"<<abort_bit_<<", num a"<<num_executed_);
+					LOCKLOG(txn_->txn_id(), " fail lock"<<key);//<<", abort bit is"<<abort_bit_<<", num a"<<num_executed_);
                     max_counter_ = 0;
                     read_state = SPECIAL;
                     ++abort_bit_;

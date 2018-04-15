@@ -169,7 +169,7 @@ class StorageManager {
 
   LockedVersionedStorage* GetStorage() { return actual_storage_; }
   inline bool ShouldRestart(int num_aborted) {
-	  LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_executed_<<", ABit "<<abort_bit_<<", lan:"<<local_aborted_);
+	  //LOG(txn_->txn_id(), " should be restarted? NumA "<<num_aborted<<", NumR "<<num_executed_<<", ABit "<<abort_bit_<<", lan:"<<local_aborted_);
 	  //ASSERT(num_aborted == num_restarted_+1 || num_aborted == num_restarted_+2);
 	  return num_aborted > num_executed_ && num_aborted == abort_bit_;}
 
@@ -241,8 +241,9 @@ class StorageManager {
   inline void Init(){
 	  exec_counter_ = 0;
 	  is_suspended_ = false;
-      num_executed_ = abort_bit_;
-      LOG(txn_->txn_id(), " init, num_exec is "<<num_executed_);
+      if(max_counter_ == 0)
+          num_executed_ = abort_bit_;
+      //LOG(txn_->txn_id(), " init, type is "<<txn_->txn_type()<<", max counter:"<<max_counter_);
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
