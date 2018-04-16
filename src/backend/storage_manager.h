@@ -241,14 +241,14 @@ class StorageManager {
   inline void Init(){
 	  exec_counter_ = 0;
 	  is_suspended_ = false;
-      if(max_counter_ == 0)
+      if(max_counter_ == 0 and suspended_key == "")
           num_executed_ = abort_bit_;
-      //LOG(txn_->txn_id(), " init, type is "<<txn_->txn_type()<<", max counter:"<<max_counter_);
+      suspended_key = "";
+      LOG(txn_->txn_id(), " init, type is "<<txn_->txn_type()<<", max counter:"<<max_counter_);
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
   		  message_->add_values(*read_set_[suspended_key].second);
-  		  suspended_key = "";
   	  }
   }
 

@@ -620,7 +620,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
               //std::cout<<"Going to execute txn, type is "<<current_tx->txn_type()<<std::endl; 
               if(current_tx->seed() % SAMPLE_RATE == 0)
                   current_tx->set_start_time(GetUTime());
-              LOG(current_tx->txn_id(), " starting, is ro "<<(current_tx->txn_type()&READONLY_MASK)<<", bound "<<current_tx->txn_bound());
+              //LOG(current_tx->txn_id(), " starting, is ro "<<(current_tx->txn_type()&READONLY_MASK)<<", bound "<<current_tx->txn_bound());
               latest_started_tx = current_tx->local_txn_id();
               while (local_sc_txns[current_tx->local_txn_id()%sc_array_size].first != NO_TXN){
                   //std::cout<<local_sc_txns[current_tx->local_txn_id()%sc_array_size].first<<" is not no txn, cleaning! Mine is "<<current_tx->local_txn_id()<<", type "<<current_tx->txn_type()<<std::endl;
