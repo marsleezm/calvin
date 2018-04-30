@@ -1638,31 +1638,25 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
             value = storage->ReadObject(category_new_items);
             CategoryNewItems cat_new;
             cat_new.ParseFromString(*value);
-            if(cat_new.new_items_size() >= MAX_NEW_ITEMS){
-                //::google::protobuf::RepeatedPtrField<::CategoryNewItems::bytes::>  
-                //const google::protobuf::Descriptor  *descriptor = cat_new.GetDescriptor();
-                //const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("new_items");
-                cat_new.erase_new_items(0);
+            int idx = cat_new.idx();
+            if(cat_new.new_items_size() >= MAX_NEW_ITEMS)
+                cat_new.set_new_items(idx, item_id);
+            else
                 cat_new.add_new_items(item_id);
-            }
-            else{
-                cat_new.add_new_items(item_id);
-            }
+            cat_new.set_idx((idx+1)%MAX_NEW_ITEMS);
             assert(cat_new.SerializeToString(value));
             storage->PutObject(category_new_items, value);
  
             value = storage->ReadObject(region_new_items);
             RegionNewItems reg_new;
             reg_new.ParseFromString(*value);
-            if(reg_new.new_items_size() >= MAX_NEW_ITEMS){
-                const google::protobuf::Descriptor  *descriptor = reg_new.GetDescriptor();
-                const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("new_items");
-                field->erase(field->begin());
+            idx = reg_new.idx();
+            if(reg_new.new_items_size() >= MAX_NEW_ITEMS)
+                reg_new.set_new_items(idx, item_id);
+            else
                 reg_new.add_new_items(item_id);
-            }
-            else{
-                reg_new.add_new_items(item_id);
-            }
+            reg_new.set_idx((idx+1)%MAX_NEW_ITEMS);
+
             assert(reg_new.SerializeToString(value));
             storage->PutObject(region_new_items, value);
         }

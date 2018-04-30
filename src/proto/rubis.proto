@@ -52,10 +52,12 @@ message RItem {
 message CategoryNewItems {
   // The following are informational fields as defined in TPC-C standard
   repeated bytes new_items = 1;
+  required int32 idx = 2;
 }
 
 message RegionNewItems {
   // The following are informational fields as defined in TPC-C standard
   repeated bytes new_items = 1;
+  required int32 idx = 2;
 }
 
