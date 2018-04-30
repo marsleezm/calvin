@@ -1,0 +1,62 @@
+// Author: Thaddeus Diamond (diamond@cs.yale.edu)
+// Author: Kun Ren (kun.ren@yale.edu)
+//
+// The following are abstract representations of the record types available in
+// TPC-C, represented as protocol buffers
+
+message User{
+  // The following are informational fields as defined in TPC-C standard
+  required bytes first_name = 1;
+  required bytes last_name = 2;
+  required bytes nick_name = 3;
+  required bytes email = 4;
+  required bytes password = 5;
+  required bytes region_name = 6;
+}
+
+message Bid{
+  // The following are informational fields as defined in TPC-C standard
+  required bytes user_id = 1;
+  required bytes item_id = 2;
+  required int32 qty = 3;
+  required int32 bid = 4;
+  required int32 max_bid = 5;
+  required int64 date = 6;
+}
+
+message Comment {
+  // The following are informational fields as defined in TPC-C standard
+  required bytes item_id = 1;
+  required bytes from_user = 2;
+  required bytes to_user = 3;
+  required int32 rating = 4;
+  required int64 date = 5;
+  required bytes comment = 6;
+}
+
+message RItem {
+  required bytes name = 1;
+  required bytes description = 2;
+  required int32 qty = 3;
+  required int32 init_price = 4;
+  required int32 reserve_price = 5;
+  required int32 buy_now = 6;
+  required int32 nb_of_bids = 7;
+  required int32 max_bid = 8;
+  required int64 start_date = 9;
+  required int64 end_date = 10;
+  required bytes seller_id = 11;
+  required int32 category = 12;
+}
+
+message CategoryNewItems {
+  // The following are informational fields as defined in TPC-C standard
+  repeated bytes new_items = 1;
+  required int32 idx = 2;
+}
+
+message RegionNewItems {
+  // The following are informational fields as defined in TPC-C standard
+  repeated bytes new_items = 1;
+  required int32 idx = 2;
+}

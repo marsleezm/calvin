@@ -10,6 +10,7 @@
 
 #include "applications/microbenchmark.h"
 #include "applications/tpcc.h"
+#include "applications/rubis.h"
 #include "common/configuration.h"
 #include "common/connection.h"
 #include "backend/simple_storage.h"
@@ -136,6 +137,62 @@ class TClient : public Client {
   int percent_mp_;
 };
 
+class RClient : public Client {
+  int update_rate;
+  int read_rate;
+  int delivery_rate=4;      
+  
+  public:
+  RClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
+      update_rate = ur-delivery_rate;
+      read_rate = 100-ur;
+  }
+  virtual ~RClient() {}
+  virtual void GetTxn(TxnProto** txn, int txn_id) {
+    RUBIS rubis;
+    *txn = new TxnProto();
+
+    if (rand() % 10000 < percent_mp_)
+      (*txn)->set_multipartition(true);
+    else
+        (*txn)->set_multipartition(false);
+
+    // New order txn
+
+//    int random_txn_type = rand() % 100;
+//     // New order txn
+//  if (random_txn_type < 45)  {
+//    tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+//  } else if(random_txn_type < 88) {
+//       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+//  }  else {
+//    *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
+//    args.set_multipartition(false);
+//  }
+
+   int random_txn_type = rand() % 100;
+    // New order txn
+    if (random_txn_type < update_rate/2)  {
+      rubis.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+    } else if(random_txn_type < update_rate) {
+      rubis.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+    } else if(random_txn_type < update_rate+delivery_rate) {
+        (*txn)->set_multipartition(false);
+        rubis.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
+    } else if(random_txn_type < update_rate+delivery_rate+read_rate/2){
+        (*txn)->set_multipartition(false);
+        rubis.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+    } else {
+        (*txn)->set_multipartition(false);
+        rubis.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+    }
+  }
+
+ private:
+  Configuration* config_;
+  int percent_mp_;
+};
+
 void stop(int sig) {
 // #ifdef PAXOS
 //  StopZookeeper(ZOOKEEPER_CONF);
@@ -171,40 +228,47 @@ int main(int argc, char** argv) {
   ConnectionMultiplexer multiplexer(&config);
 
   // Artificial loadgen clients.
-	float distpert = stof(ConfigReader::Value("distribute_percent").c_str()), 
-		  updateperct = stof(ConfigReader::Value("update_percent").c_str());
-  Client* client = (argv[2][0] == 't') ?
-		  reinterpret_cast<Client*>(new TClient(&config, distpert, updateperct)) :
-		  reinterpret_cast<Client*>(new MClient(&config, distpert));
 
+    Client* client;
+    if (argv[2][0] == 't') 
+        client = reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str())));
+    else if(argv[2][0] == 'r')
+        client = reinterpret_cast<Client*>(new RClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str())));
+    else
+        client = reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
 
-  Storage* storage;
-  if (!useFetching) {
-    storage = new SimpleStorage();
-  } else {
-    storage = FetchingStorage::BuildStorage();
-  }
-  storage->Initmutex();
+    Storage* storage;
+    if (!useFetching) {
+        storage = new SimpleStorage();
+    } else {
+        storage = FetchingStorage::BuildStorage();
+    }
+    storage->Initmutex();
 	std::cout<<"General params: "<<std::endl;
 	std::cout<<"	Distribute txn percent: "<<ConfigReader::Value("distribute_percent")<<std::endl;
 	std::cout<<"	Dependent txn percent: "<<ConfigReader::Value("dependent_percent")<<std::endl;
 	std::cout<<"	Max batch size: "<<ConfigReader::Value("max_batch_size")<<std::endl;
 	std::cout<<"	Num of threads: "<<ConfigReader::Value("num_threads")<<std::endl;
 
-
   if (argv[2][0] == 't') {
-	  std::cout<<"TPC-C benchmark. No extra parameters."<<std::endl;
-	  std::cout << "TPC-C benchmark" << std::endl;
-	  TPCC().InitializeStorage(storage, &config);
-  } else if((argv[2][0] == 'm')){
-		std::cout<<"Micro benchmark. Parameters: "<<std::endl;
-		std::cout<<"	Key per txn: "<<ConfigReader::Value("rw_set_size")<<std::endl;
-		std::cout<<"	Per partition #keys: "<<ConfigReader::Value("total_key")
-		<<", index size: "<<ConfigReader::Value("index_size")
-		<<", index num: "<<ConfigReader::Value("index_num")
-		<<std::endl;
-	  Microbenchmark(config.all_nodes.size(), config.this_node_id).InitializeStorage(storage, &config);
+      std::cout<<"TPC-C benchmark. No extra parameters."<<std::endl;
+      std::cout << "TPC-C benchmark" << std::endl;
+      TPCC().InitializeStorage(storage, &config);
   }
+  else if (argv[2][0] == 'r') {
+      std::cout<<"RUBiS benchmark. No extra parameters."<<std::endl;
+      std::cout << "RUBiS benchmark" << std::endl;
+      RUBIS().InitializeStorage(storage, &config);
+  } else if((argv[2][0] == 'm')){
+        std::cout<<"Micro benchmark. Parameters: "<<std::endl;
+        std::cout<<"    Key per txn: "<<ConfigReader::Value("rw_set_size")<<std::endl;
+        std::cout<<"    Per partition #keys: "<<ConfigReader::Value("total_key")
+        <<", index size: "<<ConfigReader::Value("index_size")
+        <<", index num: "<<ConfigReader::Value("index_num")
+        <<std::endl;
+      Microbenchmark(config.all_nodes.size(), config.this_node_id).InitializeStorage(storage, &config);
+  }
+
 
   int queue_mode;
   if (argv[2][1] == 'n') {
@@ -213,7 +277,6 @@ int main(int argc, char** argv) {
   } else if(argv[2][1] == 's'){
 	queue_mode = SELF_QUEUE;
 	std::cout << "Self-generation queue mode" << std::endl;
-
   } else if(argv[2][1] == 'd'){
 	  queue_mode = DIRECT_QUEUE;
 	  std::cout << "Direct queue by sequencer mode" << std::endl;
@@ -226,18 +289,24 @@ int main(int argc, char** argv) {
 
   DeterministicScheduler* scheduler;
   if (argv[2][0] == 't') {
-	  scheduler = new DeterministicScheduler(&config,
-			  	  	  	  	  	  	  	  scheduler_connection,
-	                                       storage,
-	                                       new TPCC(), sequencer.GetTxnsQueue(), client, queue_mode);
+      scheduler = new DeterministicScheduler(&config,
+                                          scheduler_connection,
+                                           storage,
+                                           new TPCC(), sequencer.GetTxnsQueue(), client, queue_mode);
+  }
+  else if (argv[2][0] == 'r') {
+      scheduler = new DeterministicScheduler(&config,
+                                          scheduler_connection,
+                                           storage,
+                                           new RUBIS(), sequencer.GetTxnsQueue(), client, queue_mode);
   }
   else{
-	  scheduler = new DeterministicScheduler(&config,
-			  	  	  	  	  	  	 scheduler_connection,
+      scheduler = new DeterministicScheduler(&config,
+                                     scheduler_connection,
                                      storage,
                                      new Microbenchmark(config.all_nodes.size(), config.this_node_id),
-									 sequencer.GetTxnsQueue(),
-									 client, queue_mode);
+                                     sequencer.GetTxnsQueue(),
+                                     client, queue_mode);
   }
 
   sequencer.WaitForStart();

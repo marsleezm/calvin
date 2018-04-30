@@ -42,7 +42,7 @@ extern map<Key, Key> latest_order_id_for_customer;
 extern map<Key, int> latest_order_id_for_district;
 extern map<Key, int> smallest_order_id_for_district;
 extern map<Key, Key> customer_for_order;
-extern unordered_map<Key, int> next_order_id_for_district;
+extern std::tr1::unordered_map<Key, int> next_order_id_for_district;
 extern map<Key, int> item_for_order_line;
 extern map<Key, int> order_line_number;
 
