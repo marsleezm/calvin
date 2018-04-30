@@ -15,6 +15,24 @@
 //#include "proto/tpcc_args.pb.h"
 #include "common/config_reader.h"
 
+
+#define NUM_USERS 1000000
+
+#define NUM_OLD_ITEMS 1000000
+#define PERCENT_UNIQUE_ITEMS 80
+#define PERCENT_RESERVED_PRICE 40
+#define PERCENT_BUY_NOW 10
+#define MAX_QUANTITY 10
+#define MAX_BID 20
+
+#define MAX_COMMENT 20
+#define MAX_DURATION 10000
+#define REDUCE_FACTOR 10
+#define NUM_REGIONS 61
+#define NUM_CATEGORIES 20
+#define NUM_ACTIVE_ITEMS 32667
+
+#define MAX_NEW_ITEMS 50
 using std::string;
 
 
@@ -39,9 +57,9 @@ class RUBIS : public Application {
 	  }
   }
 
-  void PopulateItems(Storage* storage) const;
-  void PopulateCommons(Storage* storage) const;
-  void PopulateUsers(Storage* storage) const;
+  //void PopulateItems(Storage* storage) const;
+  void PopulateUsers(Storage* storage, int node_id, vector<string> region_names) const;
+  void PopulateItems(Storage* storage, int node_id, vector<int> items_category) const;
 
   virtual ~RUBIS() {}
 

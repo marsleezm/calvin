@@ -8,6 +8,7 @@
 
 #include <set>
 #include <string>
+#include <chrono>
 
 #include "backend/storage.h"
 #include "backend/storage_manager.h"
@@ -16,6 +17,7 @@
 
 using std::string;
 using std::set;
+using namespace std::chrono;
 
 
 // The load generator can be called externally to return a
@@ -1505,41 +1507,60 @@ void RUBIS::InitializeStorage(Storage* storage, Configuration* conf) const {
   // We create and write out all of the warehouses
 	std::cout<<"Start populating RUBiS data"<<std::endl;
 
-    PopulateCommons(storage);
-    PopulateItems(storage);
-    PopulateUsers(storage);
-
-    std::cout<<"Finish populating RUBIS data"<<std::endl;
-}
-
-void RUBIS::PopulateCommons(Storage* storage) const{
+    vector<string> region_names;
+    vector<int> items_category;
     std::ifstream fs("ebay_simple_categories.txt");
     string line;
     int i = 0;
     while(std::getline(fs, line)){
         std::string catname = line.substr(0, line.find('(')-1), num = line.substr(line.find('(')+1, line.size()-2-line.find('('));
         storage->PutObject("category_"+to_string(i++), new Value(num));
-        std::cout<<i-1<<" Putting "<<catname<<", "<<num<<std::endl;
+        //std::cout<<i-1<<" Putting "<<catname<<", "<<num<<std::endl;
+        items_category.push_back(stoi(num));
     }
     fs = std::ifstream("ebay_regions.txt");
     i = 0;
     while(std::getline(fs, line)){
         storage->PutObject("region_"+to_string(i++), new Value(line));
-        std::cout<<i-1<<" Putting "<<line<<std::endl;
+        //std::cout<<i-1<<" Putting "<<line<<std::endl;
+        region_names.push_back(line);
+    }
+
+    PopulateUsers(storage, conf->this_node_id, region_names);
+    PopulateItems(storage, conf->this_node_id, items_category);
+
+    std::cout<<"Finish populating RUBIS data"<<std::endl;
+}
+
+void RUBIS::PopulateUsers(Storage* storage, int node_id, vector<string> region_names) const {
+    int getNbOfUsers = NUM_USERS / REDUCE_FACTOR;
+
+    for (int i = 0 ; i < getNbOfUsers ; i++)
+    {
+        User user;
+        string name = to_string(node_id)+"_user_"+to_string(i);
+        user.set_first_name(name);
+        user.set_last_name(name);
+        user.set_nick_name(name);
+        user.set_email(name);
+        user.set_password(name);
+        user.set_region_name(region_names[i%NUM_REGIONS]);
+        Value* value = new Value();
+        assert(user.SerializeToString(value));
+        storage->PutObject(name, value);
+        //std::cout<<i<<" Putting "<<name<<std::endl;
     }
 }
 
-void RUBIS::PopulateUsers(Storage* storage) const {
-}
-
-void RUBIS::PopulateItems(Storage* storage) const {
-    /*
-    int num_old_items = NUM_OLD_ITEMS/REDUCE, num_active_items = NUM_ACTIVE_ITEMS/REDUCE,
-        duration = DURATION;
+void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_category) const {
+    int num_old_items = NUM_OLD_ITEMS/REDUCE_FACTOR, num_active_items = NUM_ACTIVE_ITEMS/REDUCE_FACTOR;
     int total_items = num_old_items + num_active_items;
 
-    for(int i = 0; i < num_items; ++i){
-        int init_price = rand() % 5000, duration = rand()%7, reserve_price, buy_now;
+    //int last_bid, last_buy_now;
+    for(int i = 0; i < total_items; ++i){
+        string item_id = to_string(node_id)+"_item_"+to_string(i);
+        int64 now = GetUTime();
+        int init_price = rand() % 5000, duration = rand()%7, reserve_price, buy_now, quantity;
         if(i < num_old_items){
             duration = -duration; // give a negative auction duration so that auction will be over
             if (i < PERCENT_RESERVED_PRICE*num_old_items/100)
@@ -1553,7 +1574,7 @@ void RUBIS::PopulateItems(Storage* storage) const {
             if (i < PERCENT_UNIQUE_ITEMS*num_old_items/100)
                 quantity = 1;
             else
-                quantity = rand()%MAX_ITEM_QUANTITY+1;
+                quantity = rand()%MAX_QUANTITY+1;
         }
         else{
             if (i < PERCENT_RESERVED_PRICE*num_active_items/100)
@@ -1567,60 +1588,103 @@ void RUBIS::PopulateItems(Storage* storage) const {
             if (i < PERCENT_UNIQUE_ITEMS*num_active_items/100)
                 quantity = 1;
             else
-                quantity = rand()%MAX_ITEM_QUANTITY+1; 
+                quantity = rand()%MAX_QUANTITY+1; 
         }
 
         int categoryId =  i % NUM_CATEGORIES;
-        while (itemsPerCategory[categoryId] == 0)
-            categoryId = (categoryId + 1) % getNbOfCategories;
-        if (i >= oldItems)
-            itemsPerCategory[categoryId]--;
-        int sellerId = rand.nextInt(getNbOfUsers) + 1;
+        while (items_category[categoryId] == 0)
+            categoryId = (categoryId + 1) % NUM_CATEGORIES;
+        if (i >= num_old_items)
+            items_category[categoryId]--;
+        int sellerId = rand() % (NUM_USERS/REDUCE_FACTOR);
+        string user = to_string(node_id)+"_user_"+to_string(sellerId);
 
-        int nbBids = rand() % MAX_BIDS_PER_ITEM;
-        for (j = 0 ; j < nbBids ; j++)
+        int nbBids = rand() % MAX_BID;
+        for (int j = 0 ; j < nbBids; j++)
         {
-            int addBid = rand.nextInt(10)+1;
-            url = urlGen.storeBid(i+1, rand.nextInt(getNbOfUsers)+1, initialPrice, initialPrice+addBid, initialPrice+addBid*2, rand.nextInt(quantity)+1, quantity);
-            initialPrice += addBid; // We use initialPrice as minimum bid
+            int add_bid = rand()%10+1;
+            Bid bid;
+            string bid_name = to_string(node_id)+"_bid_"+to_string(j);
+            bid.set_user_id(user);
+            bid.set_item_id(item_id);
+            bid.set_qty(rand()%quantity);
+            bid.set_bid(init_price+add_bid);
+            bid.set_max_bid(init_price+add_bid*2);
+            bid.set_date(now);
+            init_price += add_bid; // We use initialPrice as minimum bid
+            
+            Value* value = new Value();
+            assert(bid.SerializeToString(value));
+            storage->PutObject(bid_name, value);
         }
 
         int rating = rand()%5;
-        string comment = "haha";
-            
-        // Call the HTTP server to store this comment
-        url = urlGen.storeComment(i+1, sellerId, rand.nextInt(getNbOfUsers)+1, ratingValue[rating], comment);
+        string from_user = to_string(node_id)+"_user_"+to_string(rand()%NUM_USERS),
+            comment_key = to_string(node_id)+"_comment_"+to_string(sellerId)+"_0";
+        Comment comment;    
+        comment.set_item_id(item_id);
+        comment.set_from_user(from_user);
+        comment.set_to_user(user);
+        comment.set_rating(rating);
+        comment.set_comment("Not bad");
+        comment.set_date(now);
+        value = new Value();
+        assert(comment.SerializeToString(value));
+        storage->PutObject(comment_key, value);
 
-            %%% Populate 5 bids for each item
-            BidSeq = lists:seq((Index-1)*5+1, (Index-1)*5+5),
-            lists:foreach(fun(Int) ->
-                    AddBid = random:uniform(10),
-                    BidKey = rubis_tool:get_key({MyNode, Int}, bid),
-                    %%% May need to change here!!!!
-                    Bid = rubis_tool:create_bid({MyNode, random:uniform(NumUsers)}, ItemId, random:uniform(Qty),
-                            InitialPrice+AddBid, InitialPrice+AddBid*2, Now),
-                    put_to_node(TxServer, MyNode, PartList, BidKey, Bid)
-                    end, BidSeq),
-            case Index =< NumOldItems of
-                true -> {CD, RD};
-                false -> {dict:append(CategoryId, ItemId, CD),
-                    dict:append(random:uniform(NumRegions), ItemId, RD)}
-            end
-            end, {dict:new(), dict:new()}, Seq),
+        if(i>num_old_items){
+            string category_new_items = to_string(this_node)+"_catnew_"+to_string(categoryId),
+                    region_new_items = to_string(this_node)+"_regnew_"+to_string(rand()%NUM_REGIONS);
+            value = storage->ReadObject(category_new_items);
+            CategoryNewItems cat_new;
+            cat_new.ParseFromString(value);
+            if(cat_new.new_items_size() >= MAX_NEW_ITEMS){
+                //::google::protobuf::RepeatedPtrField<::CategoryNewItems::bytes::>  
+                const google::protobuf::Descriptor  *descriptor = cat_new.GetDescriptor();
+                const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("new_items");
+                field->erase(field->begin());
+                cat_new.add_new_items(item_id);
+            }
+            else{
+                cat_new.add_new_items(item_id);
+            }
+            assert(cat_new.SerializeToString(value));
+            storage->PutObject(category_new_items, value);
+ 
+            value = storage->ReadObject(region_new_items);
+            RegionNewItems reg_new;
+            reg_new.ParseFromString(value);
+            if(reg_new.new_items_size() >= MAX_NEW_ITEMS){
+                const google::protobuf::Descriptor  *descriptor = reg_new.GetDescriptor();
+                const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("new_items");
+                field->erase(field->begin());
+                reg_new.add_new_items(item_id);
+            }
+            else{
+                reg_new.add_new_items(item_id);
+            }
+            assert(reg_new.SerializeToString(value));
+            storage->PutObject(region_new_items, value);
+        }
 
-    CD1 = lists:foldl(fun(V, D) ->
-                        case dict:find(V, D) of
-                            error -> dict:store(V, empty, D);
-                            _ -> D
-                        end
-                    end, CD0, lists:seq(1,NumCategories)),
-    RD1 = lists:foldl(fun(V, D) ->
-                    case dict:find(V, D) of
-                        error -> dict:store(V, empty, D);
-                        _ -> D
-                    end
-                    end, RD0, lists:seq(1,NumRegions)),
-    */
+        RItem item;
+        item.set_name(item_id);
+        item.set_description("don't buy it!");
+        item.set_qty(quantity);
+        item.set_init_price(init_price);
+        item.set_reserve_price(reserve_price);
+        item.set_buy_now(buy_now);
+        item.set_nb_of_bids(0);
+        item.set_max_bid(0);
+        item.set_start_date(now);
+        item.set_end_date(now+duration);
+        item.set_seller_id(seller_id);
+        item.set_category(category_id);
+
+        value = new Value();
+        assert(item.SerializeToString(value));
+        storage->PutObject(item_key, item);
+    }
 }
 
 
