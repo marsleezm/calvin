@@ -1555,6 +1555,7 @@ void RUBIS::PopulateUsers(Storage* storage, int node_id, vector<string> region_n
 void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_category) const {
     int num_old_items = NUM_OLD_ITEMS/REDUCE_FACTOR, num_active_items = NUM_ACTIVE_ITEMS/REDUCE_FACTOR;
     int total_items = num_old_items + num_active_items;
+    Value* value;
 
     //int last_bid, last_buy_now;
     for(int i = 0; i < total_items; ++i){
@@ -1613,7 +1614,7 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
             bid.set_date(now);
             init_price += add_bid; // We use initialPrice as minimum bid
             
-            Value* value = new Value();
+            value = new Value();
             assert(bid.SerializeToString(value));
             storage->PutObject(bid_name, value);
         }
@@ -1628,21 +1629,20 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
         comment.set_rating(rating);
         comment.set_comment("Not bad");
         comment.set_date(now);
-        value = new Value();
         assert(comment.SerializeToString(value));
         storage->PutObject(comment_key, value);
 
         if(i>num_old_items){
-            string category_new_items = to_string(this_node)+"_catnew_"+to_string(categoryId),
-                    region_new_items = to_string(this_node)+"_regnew_"+to_string(rand()%NUM_REGIONS);
+            string category_new_items = to_string(node_id)+"_catnew_"+to_string(categoryId),
+                    region_new_items = to_string(node_id)+"_regnew_"+to_string(rand()%NUM_REGIONS);
             value = storage->ReadObject(category_new_items);
             CategoryNewItems cat_new;
-            cat_new.ParseFromString(value);
+            cat_new.ParseFromString(*value);
             if(cat_new.new_items_size() >= MAX_NEW_ITEMS){
                 //::google::protobuf::RepeatedPtrField<::CategoryNewItems::bytes::>  
-                const google::protobuf::Descriptor  *descriptor = cat_new.GetDescriptor();
-                const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("new_items");
-                field->erase(field->begin());
+                //const google::protobuf::Descriptor  *descriptor = cat_new.GetDescriptor();
+                //const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("new_items");
+                cat_new.erase_new_items(0);
                 cat_new.add_new_items(item_id);
             }
             else{
@@ -1653,7 +1653,7 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
  
             value = storage->ReadObject(region_new_items);
             RegionNewItems reg_new;
-            reg_new.ParseFromString(value);
+            reg_new.ParseFromString(*value);
             if(reg_new.new_items_size() >= MAX_NEW_ITEMS){
                 const google::protobuf::Descriptor  *descriptor = reg_new.GetDescriptor();
                 const google::protobuf::FieldDescriptor* field = descriptor->FindFieldByName("new_items");
@@ -1678,12 +1678,12 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
         item.set_max_bid(0);
         item.set_start_date(now);
         item.set_end_date(now+duration);
-        item.set_seller_id(seller_id);
-        item.set_category(category_id);
+        item.set_seller_id(user);
+        item.set_category(categoryId);
 
         value = new Value();
         assert(item.SerializeToString(value));
-        storage->PutObject(item_key, item);
+        storage->PutObject(item_id, value);
     }
 }
 

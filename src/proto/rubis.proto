@@ -27,8 +27,8 @@ message Bid{
 message Comment {
   // The following are informational fields as defined in TPC-C standard
   required bytes item_id = 1;
-  required bytes from_id = 2;
-  required bytes to_id = 3;
+  required bytes from_user = 2;
+  required bytes to_user = 3;
   required int32 rating = 4;
   required int64 date = 5;
   required bytes comment = 6;
