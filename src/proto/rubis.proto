@@ -1,0 +1,6 @@
+// Author: Thaddeus Diamond (diamond@cs.yale.edu)
+// Author: Kun Ren (kun.ren@yale.edu)
+//
+// The following are abstract representations of the record types available in
+// TPC-C, represented as protocol buffers
+

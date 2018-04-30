@@ -17,10 +17,6 @@
 using std::string;
 using std::set;
 
-// ---- THIS IS A HACK TO MAKE ITEMS WORK ON LOCAL MACHINE ---- //
-std::tr1::unordered_map<Key, Value*> ItemList;
-Value* RUBIS::GetItem(Key key) const             { return ItemList[key]; }
-void RUBIS::SetItem(Key key, Value* value) const { ItemList[key] = value; }
 
 // The load generator can be called externally to return a
 // transaction proto containing a new type of transaction.
@@ -34,6 +30,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
   txn->set_isolation_level(TxnProto::SERIALIZABLE);
   txn->set_status(TxnProto::NEW);
 
+    /*
   bool mp = txn->multipartition();
   int remote_node = -1, remote_warehouse_id = -1;
   if (mp) {
@@ -49,11 +46,13 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
            config->LookupPartition(remote_warehouse_id) !=
              remote_node);
   }
+    */
 
   // Create an arg list
-  RUBISArgs* tpcc_args = new TPCCArgs();
+  //RUBISArgs* tpcc_args = new TPCCArgs();
 
   // Because a switch is not scoped we declare our variables outside of it
+    /*
   int warehouse_id, district_id, customer_id;
   char warehouse_key[128], district_key[128], customer_key[128];
   int order_line_count;
@@ -279,14 +278,14 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
     default:
       break;
   }
+    */
 
   // Set the transaction's args field to a serialized version
   Value args_string;
-  assert(tpcc_args->SerializeToString(&args_string));
+  //assert(tpcc_args->SerializeToString(&args_string));
   txn->set_arg(args_string);
 
   // Free memory
-  delete tpcc_args;
   //return txn;
 }
 
@@ -299,19 +298,24 @@ int RUBIS::Execute(TxnProto* txn, StorageManager* storage) const {
 		return SUCCESS;
 	}
 	else if (txn_type == (NEW_ORDER | recon_mask)){
-		return NewOrderTransaction(storage);
+        return SUCCESS;
+		//return NewOrderTransaction(storage);
 	}
 	else if (txn_type == (PAYMENT | recon_mask)){
-		return PaymentTransaction(storage);
+        return SUCCESS;
+		//return PaymentTransaction(storage);
 	}
 	else if (txn_type == (ORDER_STATUS | RECON_MASK)){
-		return OrderStatusTransaction(storage);
+        return SUCCESS;
+		//return OrderStatusTransaction(storage);
 	}
 	else if (txn_type == (STOCK_LEVEL | RECON_MASK)){
-		return StockLevelTransaction(storage);
+        return SUCCESS;
+		//return StockLevelTransaction(storage);
 	}
 	else if (txn_type == (DELIVERY | RECON_MASK)){
-		return DeliveryTransaction(storage);
+        return SUCCESS;
+		//return DeliveryTransaction(storage);
 	}
 	else{
 		std::cout<<"WTF, failure in execute??" << std::endl;
@@ -325,23 +329,26 @@ int RUBIS::ReconExecute(TxnProto* txn, ReconStorageManager* storage) const {
 	int txn_type = txn->txn_type();
 	if (txn_type == (NEW_ORDER | recon_mask)){
 		//std::cout<< "Recon for new order" << std::endl;
-		return NewOrderReconTransaction(storage);
+        return SUCCESS;
 	}
 	else if (txn_type == (PAYMENT | recon_mask)){
 		//std::cout<< "Recon for payment" << std::endl;
-		return PaymentReconTransaction(storage);
+        return SUCCESS;
 	}
 	else if (txn_type == (ORDER_STATUS | RECON_MASK)){
 		//std::cout<< "Recon for order_status" << std::endl;
-		return OrderStatusReconTransaction(storage);
+		//return OrderStatusReconTransaction(storage);
+        return SUCCESS;
 	}
 	else if (txn_type == (STOCK_LEVEL | RECON_MASK)){
 		//std::cout<< "Recon for stock level" << std::endl;
-    	return StockLevelReconTransaction(storage);
+    	//return StockLevelReconTransaction(storage);
+        return SUCCESS;
 	}
 	else if (txn_type == (DELIVERY | RECON_MASK)){
 		//std::cout<< "Recon for delivery" << std::endl;
-    	return DeliveryReconTransaction(storage);
+    	//return DeliveryReconTransaction(storage);
+        return SUCCESS;
 	}
 	else{
 		std::cout<<"WTF, failure in recon exe??" << std::endl;
@@ -514,6 +521,7 @@ int RUBIS::ReconExecute(TxnProto* txn, ReconStorageManager* storage) const {
 //	return SUCCESS;
 //}
 
+/*
 int RUBIS::NewOrderReconTransaction(ReconStorageManager* storage) const {
 	// First, we retrieve the warehouse from storage
 	TxnProto* txn = storage->get_txn();
@@ -1489,6 +1497,7 @@ int RUBIS::DeliveryReconTransaction(ReconStorageManager* storage) const {
 
 	return RECON_SUCCESS;
 }
+*/
 
 // The initialize function is executed when an initialize transaction comes
 // through, indicating we should populate the database with fake data
@@ -1503,22 +1512,27 @@ void RUBIS::InitializeStorage(Storage* storage, Configuration* conf) const {
     std::cout<<"Finish populating RUBIS data"<<std::endl;
 }
 
-void RUBIS::PopulateCommons(){
+void RUBIS::PopulateCommons(Storage* storage) const{
     std::ifstream fs("ebay_simple_categories.txt");
     string line;
     int i = 0;
     while(std::getline(fs, line)){
-        std::vector<std::string> tokens;
-        split(tokens, line, is_any_of(" "));
-        storage->PutObject("category_"+itoa(i++), tokens[1].substr(1, tokens[1] - 2));
+        std::string catname = line.substr(0, line.find('(')-1), num = line.substr(line.find('(')+1, line.size()-2-line.find('('));
+        storage->PutObject("category_"+to_string(i++), new Value(num));
+        std::cout<<i-1<<" Putting "<<catname<<", "<<num<<std::endl;
     }
     fs = std::ifstream("ebay_regions.txt");
     i = 0;
-    while(std::getline(fs, line))
-        storage->PutObject("region_"+itoa(i++), line);
+    while(std::getline(fs, line)){
+        storage->PutObject("region_"+to_string(i++), new Value(line));
+        std::cout<<i-1<<" Putting "<<line<<std::endl;
+    }
 }
 
-void RUBIS::PopulateItems(){
+void RUBIS::PopulateUsers(Storage* storage) const {
+}
+
+void RUBIS::PopulateItems(Storage* storage) const {
     /*
     int num_old_items = NUM_OLD_ITEMS/REDUCE, num_active_items = NUM_ACTIVE_ITEMS/REDUCE,
         duration = DURATION;
@@ -1610,6 +1624,7 @@ void RUBIS::PopulateItems(){
 }
 
 
+/*
 District* RUBIS::CreateDistrict(Key district_key, Key warehouse_key) const {
   District* district = new District();
 
@@ -1710,3 +1725,4 @@ Item* RUBIS::CreateItem(Key item_key) const {
   return item;
 }
 
+*/

@@ -10,6 +10,7 @@
 
 #include "applications/microbenchmark.h"
 #include "applications/tpcc.h"
+#include "applications/rubis.h"
 #include "common/configuration.h"
 #include "common/connection.h"
 #include "backend/simple_storage.h"
@@ -146,6 +147,62 @@ class TClient : public Client {
   int percent_mp_;
 };
 
+class RClient : public Client {
+  int update_rate;
+  int read_rate;
+  int delivery_rate=4;	    
+  
+  public:
+  RClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
+	  update_rate = ur-delivery_rate;
+	  read_rate = 100-ur;
+  }
+  virtual ~RClient() {}
+  virtual void GetTxn(TxnProto** txn, int txn_id) {
+    RUBIS rubis;
+    *txn = new TxnProto();
+
+    if (rand() % 10000 < percent_mp_)
+      (*txn)->set_multipartition(true);
+    else
+    	(*txn)->set_multipartition(false);
+
+    // New order txn
+
+//    int random_txn_type = rand() % 100;
+//     // New order txn
+//	if (random_txn_type < 45)  {
+//	  tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+//	} else if(random_txn_type < 88) {
+//	 	 tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+//	}  else {
+//	  *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
+//	  args.set_multipartition(false);
+//	}
+
+   int random_txn_type = rand() % 100;
+    // New order txn
+    if (random_txn_type < update_rate/2)  {
+      rubis.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
+    } else if(random_txn_type < update_rate) {
+      rubis.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
+    } else if(random_txn_type < update_rate+delivery_rate) {
+    	(*txn)->set_multipartition(false);
+    	rubis.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
+    } else if(random_txn_type < update_rate+delivery_rate+read_rate/2){
+    	(*txn)->set_multipartition(false);
+    	rubis.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
+    } else {
+    	(*txn)->set_multipartition(false);
+    	rubis.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
+    }
+  }
+
+ private:
+  Configuration* config_;
+  int percent_mp_;
+};
+
 void stop(int sig) {
 // #ifdef PAXOS
 //  StopZookeeper(ZOOKEEPER_CONF);
@@ -182,9 +239,13 @@ int main(int argc, char** argv) {
   ConnectionMultiplexer multiplexer(&config);
 
   // Artificial loadgen clients.
-  Client* client = (argv[2][0] == 't') ?
-		  reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str()))):
-		  reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
+  Client* client;
+  if (argv[2][0] == 't') 
+      client = reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str())));
+  else if(argv[2][0] == 'r')
+      client = reinterpret_cast<Client*>(new RClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str())));
+  else
+      client = reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str())));
 
 
   Storage* storage;
@@ -205,6 +266,11 @@ int main(int argc, char** argv) {
 	  std::cout<<"TPC-C benchmark. No extra parameters."<<std::endl;
 	  std::cout << "TPC-C benchmark" << std::endl;
 	  TPCC().InitializeStorage(storage, &config);
+  }
+  else if (argv[2][0] == 'r') {
+	  std::cout<<"RUBiS benchmark. No extra parameters."<<std::endl;
+	  std::cout << "RUBiS benchmark" << std::endl;
+	  RUBIS().InitializeStorage(storage, &config);
   } else if((argv[2][0] == 'm')){
 		std::cout<<"Micro benchmark. Parameters: "<<std::endl;
 		std::cout<<"	Key per txn: "<<ConfigReader::Value("rw_set_size")<<std::endl;
@@ -239,6 +305,12 @@ int main(int argc, char** argv) {
 			  	  	  	  	  	  	  	  scheduler_connection,
 	                                       storage,
 	                                       new TPCC(), sequencer.GetTxnsQueue(), client, queue_mode);
+  }
+  else if (argv[2][0] == 'r') {
+	  scheduler = new DeterministicScheduler(&config,
+			  	  	  	  	  	  	  	  scheduler_connection,
+	                                       storage,
+	                                       new RUBIS(), sequencer.GetTxnsQueue(), client, queue_mode);
   }
   else{
 	  scheduler = new DeterministicScheduler(&config,
