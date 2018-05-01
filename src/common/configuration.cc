@@ -22,12 +22,20 @@ Configuration::Configuration(int node_id, const string& filename)
     exit(0);
 }
 
+Configuration::Configuration(int node_id, const string& filename, char bench_type)
+    : this_node_id(node_id), benchmark_type(bench_type) {
+  if (ReadFromFile(filename))  // Reading from file failed.
+    exit(0);
+}
+
 // TODO(alex): Implement better (application-specific?) partitioning.
 int Configuration::LookupPartition(const Key& key) const {
-  if (key.find("w") == 0)  // TPCC
-    return OffsetStringToInt(key, 1) % static_cast<int>(all_nodes.size());
-  else
-    return StringToInt(key) % static_cast<int>(all_nodes.size());
+    if (benchmark_type == TPCC) // TPCC
+        return OffsetStringToInt(key, 1) % static_cast<int>(all_nodes.size());
+    else if (benchmark_type == RUBIS)
+        return stoi(key.substr(0, key.find('_')));
+    else
+        return StringToInt(key) % static_cast<int>(all_nodes.size());
 }
 
 int Configuration::LookupPartition(const int& key) const {

@@ -70,8 +70,15 @@ struct Node {
   int cores;
 };
 
+
 class Configuration {
+    enum BenchType {
+        TPCC = 't',
+        RUBIS = 'r',
+        MICRO = 'm'
+    };
  public:
+  Configuration(int node_id, const string& filename, char benchmark_type);
   Configuration(int node_id, const string& filename);
 
   // Returns the node_id of the partition at which 'key' is stored.
@@ -88,10 +95,11 @@ class Configuration {
   // Tracks the set of current active nodes in the system.
   map<int, Node*> all_nodes;
 
- private:
+  private:
   // TODO(alex): Comments.
-  void ProcessConfigLine(char key[], char value[]);
-  int ReadFromFile(const string& filename);
+    char benchmark_type;
+    void ProcessConfigLine(char key[], char value[]);
+    int ReadFromFile(const string& filename);
 };
 
 #endif  // _DB_COMMON_CONFIGURATION_H_

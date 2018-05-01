@@ -41,401 +41,282 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
               remote_node == config->this_node_id);
   }
 
+    //LOG(-1, " Trying to get txn");
   // Create an arg list
   //RUBISArgs* tpcc_args = new TPCCArgs();
 
   // Because a switch is not scoped we declare our variables outside of it
   txn->set_seed(GetUTime());
   // We set the read and write set based on type
+  string user_key, item_key, cat_key, reg_key;
   switch (txn_type) {
     // Initialize
-    case INITIALIZE:
-      // Finished with INITIALIZE txn creation
-      break;
-    case H
-    // New Order
-    case NEW_ORDER:{
-        set<int> reader_set;
-        reader_set.insert(config->this_node_id);
+    case HOME:
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
-      // First, we pick a local warehouse
-        warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
-        snprintf(warehouse_key, sizeof(warehouse_key), "w%d",
-                 warehouse_id);
-        // 0th key in read set is warehouse
-        txn->add_read_set(warehouse_key);
-        // Next, we pick a random district
-        district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-        snprintf(district_key, sizeof(district_key), "w%dd%d",
-                warehouse_id, district_id);
-        // 0th key in read-write set is district
-        txn->add_read_write_set(district_key);
-        // Finally, we pick a random customer
-        customer_id = rand() % CUSTOMERS_PER_DISTRICT;
-        snprintf(customer_key, sizeof(customer_key),
-                "w%dd%dc%d",
-                   warehouse_id, district_id, customer_id);
-        // 1st key in read set is customer
-        txn->add_read_write_set(customer_key);
-        // We set the length of the read and write set uniformly between 5 and 15
-        order_line_count = (rand() % 11) + 5;
-        char remote_warehouse_key[128];
-        if(mp){
-            snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
-                     "w%d", remote_warehouse_id);
-            txn->add_readers(remote_node);
-            txn->add_writers(remote_node);
-        }
-        else {
-            snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
-                                    "%s", warehouse_key);
-        }
-        // Iterate through each order line
-        for (int i = 0; i < order_line_count; i++) {
-            // Set the item id (Invalid orders have the last item be -1)
-            int item;
-            do {
-                item = rand() % NUMBER_OF_ITEMS;
-            } while (items_used.count(item) > 0);
-            items_used.insert(item);
-            // Print the item key into a buffer
-            char item_key[128];
-            snprintf(item_key, sizeof(item_key), "i%d", item);
-            // Create an order line warehouse key (default is local)
-            // Finally, we set the stock key to the read and write set
-            Key stock_key = string(remote_warehouse_key) + "s" + item_key;
-            txn->add_read_write_set(stock_key);
-            // Set the quantity randomly within [1..10]
-            //tpcc_args->add_items(item);
-            tpcc_args->add_quantities(rand() % 10 + 1);
-      }
-      // Set the order line count in the args
-      tpcc_args->add_order_line_count(order_line_count);
-      txn->set_txn_type(txn_type);
-    }
-      break;
-    // Payment
-    case PAYMENT:
-        txn->add_readers(config->this_node_id);
-        txn->add_writers(config->this_node_id);
-        // Specify an amount for the payment
-        tpcc_args->set_amount(rand() / (static_cast<double>(RAND_MAX + 1.0)) *
-                            4999.0 + 1);
-        // First, we pick a local warehouse
-        warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
-        snprintf(warehouse_key, sizeof(warehouse_key), "w%dy", warehouse_id);
-        txn->add_read_write_set(warehouse_key);
-        // Next, we pick a district
-        district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-        snprintf(district_key, sizeof(district_key), "w%dd%dy",
-               warehouse_id, district_id);
-        txn->add_read_write_set(district_key);
-        // Add history key to write set
-        char history_key[128];
-        snprintf(history_key, sizeof(history_key), "w%dh%ld",
-               warehouse_id, txn->txn_id());
-        txn->add_write_set(history_key);
-        // Next, we find the customer as a local one
-        if (num_warehouses * config->all_nodes.size() == 1 || !mp) {
-            customer_id = rand() % CUSTOMERS_PER_DISTRICT;
-            snprintf(customer_key, sizeof(customer_key),
-                 "w%dd%dc%d",
-                 warehouse_id, district_id, customer_id);
-        // If the probability is 15%, we make it a remote customer
-        } else {
-            int remote_district_id;
-            int remote_customer_id;
-            char remote_warehouse_key[40];
-            snprintf(remote_warehouse_key, sizeof(remote_warehouse_key), "w%d",
-                    remote_warehouse_id);
-            remote_district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-            remote_customer_id = rand() % CUSTOMERS_PER_DISTRICT;
-            snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d",
-                remote_warehouse_id, remote_district_id, remote_customer_id);
-            txn->add_readers(remote_node);
-            txn->add_writers(remote_node);
-        }
-        // We only do secondary keying ~60% of the time
-        if (rand() / (static_cast<double>(RAND_MAX + 1.0)) < 0.00) {
-            // Now that we have the object, let's create the txn arg
-            tpcc_args->set_last_name(customer_key);
-            txn->add_read_set(customer_key);
-            // Otherwise just give a customer key
-        } else {
-            txn->add_read_write_set(customer_key);
-        }
-        txn->set_txn_type(txn_type);
+        user_key = to_string(config->this_node_id)+"_user_"+to_string(rand()%NUM_USERS);
+        txn->add_read_set(user_key); 
         break;
-     case ORDER_STATUS :
-     {
-         //LOG(txn->txn_id(), " populating order status");
-         string customer_string;
-         string customer_latest_order;
-         string warehouse_string;
-         string district_string;
-         //int customer_order_line_number;
-         warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
-         snprintf(warehouse_key, sizeof(warehouse_key), "w%dy",
-               warehouse_id);
-         district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-         snprintf(district_key, sizeof(district_key), "w%dd%dy",
-              warehouse_id, district_id);
-         customer_id = rand() % CUSTOMERS_PER_DISTRICT;
-         snprintf(customer_key, sizeof(customer_key),
-                "w%dd%dc%d",
-                warehouse_id, district_id, customer_id);
-         txn->add_read_set(warehouse_key);
-         txn->add_read_set(district_key);
-         txn->add_read_set(customer_key);
-         txn->add_readers(config->this_node_id);
-         txn->set_txn_type(txn_type | RECON_MASK);
-         break;
-     }
-     case STOCK_LEVEL:
-     {
-         //LOG(txn->txn_id(), " populating stock level");
-         warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
-         snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
-         // Next, we pick a random district
-         district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-         snprintf(district_key, sizeof(district_key), "w%dd%d",warehouse_id, district_id);
-         txn->add_read_set(warehouse_key);
-         txn->add_read_set(district_key);
-         tpcc_args->set_threshold(rand()%10 + 10);
-         txn->add_readers(config->this_node_id);
-         txn->set_txn_type(txn_type | RECON_MASK);
-         break;
-      }
-     case DELIVERY :
-     {
-         //(txn->txn_id(), " populating delivery");
-         warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
-         snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
-         txn->add_read_set(warehouse_key);
-         //char order_line_key[128];
-         //int oldest_order;
-         for(int i = 0; i < DISTRICTS_PER_WAREHOUSE; i++) {
-             snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key, i);
-             txn->add_read_write_set(district_key);
-         }
-         txn->add_readers(config->this_node_id);
-         txn->add_writers(config->this_node_id);
-         txn->set_txn_type(txn_type | RECON_MASK);
-         break;
-      }
+    case REGISTER_USER:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        user_key = to_string(config->this_node_id)+"_user_"+to_string(rand()%NUM_USERS+NUM_USERS);
+        txn->add_read_write_set(user_key); 
+        break;
+    case BROWSE_CATEGORIES:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        cat_key = to_string(config->this_node_id)+"_category_";
+        for(int i = 0; i < NUM_CATEGORIES; ++i)
+            txn->add_read_set(cat_key+to_string(i)); 
+        break;
+    case SEARCH_ITEMS_IN_CATEGORY:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_write_set(to_string(config->this_node_id)+"_catnew_"+to_string(rand() % NUM_CATEGORIES)); 
+        break;
+    case BROWSE_REGIONS:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        reg_key = to_string(config->this_node_id)+"_region_";
+        for(int i = 0; i < NUM_REGIONS; ++i)
+            txn->add_read_set(reg_key+to_string(i)); 
+        break;
+    case BROWSE_CATEGORIES_IN_REGION:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        cat_key = to_string(config->this_node_id)+"_category_";
+        for(int i = 0; i < NUM_CATEGORIES; ++i)
+            txn->add_read_set(cat_key+to_string(i)); 
+        break;
+    case SEARCH_ITEMS_IN_REGION:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_write_set(to_string(config->this_node_id)+"_regnew_"+to_string(rand() % NUM_REGIONS)); 
+        break;
+    // TODO: not fixed.
+    case VIEW_ITEM:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        item_key = select_item(config->this_node_id);
+        txn->add_read_set(item_key);
+        break;
+    case VIEW_USER_INFO:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        user_key = select_user(config->this_node_id);
+        txn->add_read_set(user_key);
+        break; 
+    // TODO: allow reading from new object.
+    case VIEW_BID_HISTORY:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        item_key = select_item(config->this_node_id);
+        txn->add_read_set(item_key);
+        break;
+    case BUY_NOW:
+        item_key = select_item(config->this_node_id);
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_set(item_key);
+        break;
+    case STORE_BUY_NOW:
+        item_key = select_item(config->this_node_id);
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_write_set(item_key);
+        break;
+    case PUT_BID:
+        item_key = select_item(config->this_node_id);
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_set(item_key);
+        break;
+    case STORE_BID:
+        item_key = select_item(config->this_node_id);
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_write_set(item_key);
+        break;
+    case PUT_COMMENT:
+        item_key = select_item(config->this_node_id), user_key = select_user(config->this_node_id);
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_set(item_key);
+        txn->add_read_set(user_key);
+        break;
+    case STORE_COMMENT:
+        item_key = select_item(config->this_node_id), user_key = select_user(config->this_node_id);
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_write_set(item_key);
+        txn->add_read_write_set(user_key);
+        break;
+    case SELECT_CATEGORY_TO_SELL_ITEM:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        cat_key = to_string(config->this_node_id)+"_category_";
+        for(int i = 0; i < NUM_CATEGORIES; ++i)
+            txn->add_read_set(cat_key+to_string(i)); 
+        break;
+    case REGISTER_ITEM:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        item_key = to_string(config->this_node_id)+"_item_"+to_string(rand()%NUM_ACTIVE_ITEMS);
+        txn->add_read_write_set(item_key); 
+        txn->add_read_write_set(to_string(config->this_node_id)+"_regnew_"+to_string(rand()%NUM_REGIONS)); 
+        txn->add_read_write_set(to_string(config->this_node_id)+"_catnew_"+to_string(rand()%NUM_CATEGORIES)); 
+        break;
+    case ABOUT_ME:
+        txn->add_readers(config->this_node_id);
+        txn->add_writers(config->this_node_id);
+        txn->add_read_set(select_user(config->this_node_id));
+        break;
     // Invalid transaction
     default:
       break;
   }
 
-  // Set the transaction's args field to a serialized version
-  Value args_string;
-  //assert(tpcc_args->SerializeToString(&args_string));
-  txn->set_arg(args_string);
-
-  // Free memory
-  //return txn;
+    //LOG(-1, " got txn");
+    // Set the transaction's args field to a serialized version
+    Value args_string;
+    //assert(tpcc_args->SerializeToString(&args_string));
+    txn->set_arg(args_string);
+    //return txn;
 }
 
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int RUBIS::Execute(TxnProto* txn, StorageManager* storage) const {
-    return SUCCESS;
+    //LOG(-1, " before executing");
+    switch(txn->txn_type()){
+        case HOME:
+            return HomeTransaction(storage);
+        case REGISTER_USER:
+            return RegisterUserTransaction(storage);
+        case BROWSE_CATEGORIES:
+            return BrowseCategoriesTransaction(storage);
+        case SEARCH_ITEMS_IN_CATEGORY:
+            return SearchItemsInCategoryTransaction(storage);
+        case BROWSE_REGIONS:
+            return BrowseRegionsTransaction(storage);
+        case BROWSE_CATEGORIES_IN_REGION:
+            return BrowseCategoriesInRegionTransaction(storage);
+        case SEARCH_ITEMS_IN_REGION:
+            return SearchItemsInRegionTransaction(storage);
+        case VIEW_ITEM:
+            return ViewItemTransaction(storage);
+        case VIEW_USER_INFO:
+            return ViewUserInfoTransaction(storage);
+        case VIEW_BID_HISTORY:
+            return ViewBidHistoryTransaction(storage);
+        case BUY_NOW:
+            return BuyNowTransaction(storage);
+        case STORE_BUY_NOW:
+            return StoreBuyNowTransaction(storage);
+        case PUT_BID:
+            return PutBidTransaction(storage);
+        case STORE_BID:
+            return StoreBidTransaction(storage);
+        case PUT_COMMENT:
+            return PutCommentTransaction(storage);
+        case STORE_COMMENT:
+            return StoreCommentTransaction(storage);
+        case SELECT_CATEGORY_TO_SELL_ITEM:
+            return SelectCategoryToSellItemTransaction(storage);
+        case REGISTER_ITEM:
+            return RegisterItemTransaction(storage);
+        case ABOUT_ME:
+            return AboutMeTransaction(storage);
+        default:
+            return FAILURE;
+    }
+    //LOG(-1, " after executing");
 }
 
 
 int RUBIS::HomeTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    Key key = txn->read_set(0);
+    int read_state;
+    Value* v = storage->ReadObject(key, read_state);
+    User user;
+    ASSERT(user.ParseFromString(*v));
+    return SUCCESS;
 }
 
 int RUBIS::RegisterUserTransaction(StorageManager* storage) const{
+    return SUCCESS;
 }
 
 int RUBIS::BrowseCategoriesTransaction(StorageManager* storage) const{
+    return SUCCESS;
 }
 
-int RUBIS::SearchItemsInCateogryTransaction(StorageManager* storage) const;
-int RUBIS::BrowseRegionsTransaction(StorageManager* storage) const;
-int RUBIS::BrowseCategoriesInRegionTransaction(StorageManager* storage) const;
-int RUBIS::SearchItemsInRegionTransaction(StorageManager* storage) const;
-int RUBIS::ViewItemTransaction(StorageManager* storage) const;
-int RUBIS::ViewUserInfoTransaction(StorageManager* storage) const;
-int RUBIS::ViewBidHistory(StorageManager* storage) const; 
-int RUBIS::BuyNow(StorageManager* storage) const;
-int RUBIS::StoreBuyNow(StorageManager* storage) const;
-int RUBIS::PutBid(StorageManager* storage) const;
-int RUBIS::StoreBid(StorageManager* storage) const;
-int RUBIS::PutComment(StorageManager* storage) const;
-int RUBIS::StoreComment(StorageManager* storage) const;
-int RUBIS::SelectCategoryToSellItem(StorageManager* storage) const;
-int RUBIS::RegisterItem(StorageManager* storage) const;
-int RUBIS::AboutMe(StorageManager* storage) const;
+int RUBIS::SearchItemsInCategoryTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
 
+int RUBIS::BrowseRegionsTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
 
-// The new order function is executed when the application receives a new order
-// transaction.  This follows the TPC-C standard.
-// Insert orderline, new order and order new keys
-//int RUBIS::NewOrderTransaction(StorageManager* storage) const {
-//  // First, we retrieve the warehouse from storage
-//  TxnProto* txn = storage->get_txn();
-//  RUBISArgs tpcc_args;
-//  tpcc_args.ParseFromString(txn->arg());
-//
-//  //LOG(txn->txn_id(), "Executing NEWORDER, is multipart? "<<(txn->multipartition()));
-//
-//  Key warehouse_key = txn->read_set(0);
-//  Value* val;
-//  val = storage->ReadObject(warehouse_key);
-//  Warehouse warehouse;
-//  assert(warehouse.ParseFromString(*val));
-//
-//
-//  int order_number;
-//  Key district_key = txn->read_write_set(0);
-//  val = storage->ReadObject(district_key);
-//  District district;
-//  assert(district.ParseFromString(*val));
-//  order_number = district.next_order_id();
-//  district.set_next_order_id(order_number + 1);
-//
-//  if(district.smallest_order_id() == -1)
-//      district.set_smallest_order_id(order_number);
-//  //assert(district.SerializeToString(val_copy));
-//  storage->WriteToBuffer(district_key, district.SerializeAsString());
-//
-//  // Next, we get the order line count, system time, and other args from the
-//  // transaction proto
-//  int order_line_count = tpcc_args.order_line_count(0);
-//
-//  // We initialize the order line amount total to 0
-//  int order_line_amount_total = 0;
-//  double system_time = txn->seed();
-//  //txn->set_seed(system_time);
-//
-//
-//  for (int i = 0; i < order_line_count; i++) {
-//      // For each order line we parse out the three args
-//      string stock_key = txn->read_write_set(i + 2);
-//      string supply_warehouse_key = stock_key.substr(0, stock_key.find("s"));
-//      int quantity = tpcc_args.quantities(i);
-//
-//      // Find the item key within the stock key
-//      size_t item_idx = stock_key.find("i");
-//      string item_key = stock_key.substr(item_idx, string::npos);
-//
-//      // First, we check if the item number is valid
-//      Item item;
-//      assert(item.ParseFromString(*ItemList[item_key]));
-//
-//      // Next, we get the correct stock from the data store
-//      val = storage->ReadObject(stock_key);
-//      Stock stock;
-//      assert(stock.ParseFromString(*val));
-//      stock.set_year_to_date(stock.year_to_date() + quantity);
-//      stock.set_order_count(stock.order_count() - 1);
-//      if (txn->multipartition())
-//          stock.set_remote_count(stock.remote_count() + 1);
-//
-//      // And we decrease the stock's supply appropriately and rewrite to storage
-//      if (stock.quantity() >= quantity + 10)
-//          stock.set_quantity(stock.quantity() - quantity);
-//      else
-//          stock.set_quantity(stock.quantity() - quantity + 91);
-//      //assert(stock.SerializeToString(val));
-//      storage->WriteToBuffer(stock_key, stock.SerializeAsString());
-//
-//
-//      OrderLine order_line;
-//      char order_line_key[128];
-//      snprintf(order_line_key, sizeof(order_line_key), "%so%dol%d", district_key.c_str(), order_number, i);
-//      if(txn->pred_write_set(i).compare(order_line_key) == 0 ){
-//          order_line.set_order_id(order_line_key);
-//
-//          // Set the attributes for this order line
-//          order_line.set_district_id(district_key);
-//          order_line.set_warehouse_id(warehouse_key);
-//          order_line.set_number(i);
-//          order_line.set_item_id(item_key);
-//          order_line.set_supply_warehouse_id(supply_warehouse_key);
-//          order_line.set_quantity(quantity);
-//          order_line.set_delivery_date(system_time);
-//
-//          // Next, we update the order line's amount and add it to the running sum
-//          order_line.set_amount(quantity * item.price());
-//          order_line_amount_total += (quantity * item.price());
-//
-//          // Finally, we write the order line to storage
-//          //assert(order_line.SerializeToString(val));
-//          //storage->WriteToBuffer(order_line_key, order_line.SerializeAsString());
-//          Value* order_line_val = new Value();
-//          assert(order_line.SerializeToString(order_line_val));
-//          storage->PutObject(order_line_key, order_line_val);
-//      }
-//      else
-//          return FAILURE;
-//
-//  }
-//
-//    char order_key[128];
-//    snprintf(order_key, sizeof(order_key), "%so%d",
-//             district_key.c_str(), order_number);
-//
-//  // Retrieve the customer we are looking for
-//    Key customer_key = txn->read_write_set(1);
-//  val = storage->ReadObject(customer_key);
-//  Customer customer;
-//  assert(customer.ParseFromString(*val));
-//  customer.set_last_order(order_key);
-//  //assert(customer.SerializeToString(val));
-//  storage->WriteToBuffer(customer_key, customer.SerializeAsString());
-//
-//
-//    if(txn->pred_write_set(order_line_count).compare(order_key) == 0){
-//      // We write the order to storage
-//      Order order;
-//      order.set_id(order_key);
-//      order.set_warehouse_id(warehouse_key);
-//      order.set_district_id(district_key);
-//      order.set_customer_id(customer_key);
-//
-//      // Set some of the auxiliary data
-//      order.set_entry_date(system_time);
-//      order.set_carrier_id(-1);
-//      order.set_order_line_count(order_line_count);
-//      order.set_all_items_local(!txn->multipartition());
-//      Value* order_value = new Value();
-//      assert(order.SerializeToString(order_value));
-//      storage->PutObject(order_key, order_value);
-//      //assert(order.SerializeToString(val));
-//      //storage->WriteToBuffer(order_key, order.SerializeAsString());
-//    }
-//    else
-//      return FAILURE;
-//
-//
-//    char new_order_key[128];
-//    snprintf(new_order_key, sizeof(new_order_key),
-//             "%sno%d", district_key.c_str(), order_number);
-//
-//  // Finally, we write the order line to storage
-//    if(txn->pred_write_set(order_line_count+1).compare(new_order_key) == 0){
-//      NewOrder new_order;
-//      new_order.set_id(new_order_key);
-//      new_order.set_warehouse_id(warehouse_key);
-//      new_order.set_district_id(district_key);
-//      //assert(new_order.SerializeToString(val));
-//      //storage->WriteToBuffer(new_order_key, new_order.SerializeAsString());
-//      Value* new_order_value = new Value();
-//      assert(new_order.SerializeToString(new_order_value));
-//      storage->PutObject(new_order_key, new_order_value);
-//    }
-//    else
-//      return FAILURE;
-//
-//
-//    storage->ApplyChange();
-//  return SUCCESS;
-//}
+int RUBIS::BrowseCategoriesInRegionTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::SearchItemsInRegionTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::ViewItemTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::ViewUserInfoTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::ViewBidHistoryTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::BuyNowTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::StoreBuyNowTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::PutBidTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::StoreBidTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::PutCommentTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::StoreCommentTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::SelectCategoryToSellItemTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::RegisterItemTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
+int RUBIS::AboutMeTransaction(StorageManager* storage) const{
+    return SUCCESS;
+}
+
 
 /*
 int RUBIS::NewOrderReconTransaction(ReconStorageManager* storage) const {
@@ -1301,14 +1182,14 @@ void RUBIS::InitializeStorage(Storage* storage, Configuration* conf) const {
     int i = 0;
     while(std::getline(fs, line)){
         std::string catname = line.substr(0, line.find('(')-1), num = line.substr(line.find('(')+1, line.size()-2-line.find('('));
-        storage->PutObject("category_"+to_string(i++), new Value(num));
+        storage->PutObject(to_string(conf->this_node_id)+"_category_"+to_string(i++), new Value(num));
         //std::cout<<i-1<<" Putting "<<catname<<", "<<num<<std::endl;
         items_category.push_back(stoi(num));
     }
     fs = std::ifstream("ebay_regions.txt");
     i = 0;
     while(std::getline(fs, line)){
-        storage->PutObject("region_"+to_string(i++), new Value(line));
+        storage->PutObject(to_string(conf->this_node_id)+"_region_"+to_string(i++), new Value(line));
         //std::cout<<i-1<<" Putting "<<line<<std::endl;
         region_names.push_back(line);
     }
@@ -1337,7 +1218,7 @@ void RUBIS::InitializeStorage(Storage* storage, Configuration* conf) const {
 }
 
 void RUBIS::PopulateUsers(Storage* storage, int node_id, vector<string> region_names) const {
-    int getNbOfUsers = NUM_USERS / REDUCE_FACTOR;
+    int getNbOfUsers = NUM_USERS;
 
     for (int i = 0 ; i < getNbOfUsers ; i++)
     {
@@ -1357,7 +1238,7 @@ void RUBIS::PopulateUsers(Storage* storage, int node_id, vector<string> region_n
 }
 
 void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_category) const {
-    int num_old_items = NUM_OLD_ITEMS/REDUCE_FACTOR, num_active_items = NUM_ACTIVE_ITEMS/REDUCE_FACTOR;
+    int num_old_items = NUM_OLD_ITEMS, num_active_items = NUM_ACTIVE_ITEMS;
     int total_items = num_old_items + num_active_items;
     Value* value;
 
@@ -1401,7 +1282,7 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
             categoryId = (categoryId + 1) % NUM_CATEGORIES;
         if (i >= num_old_items)
             items_category[categoryId]--;
-        int sellerId = rand() % (NUM_USERS/REDUCE_FACTOR);
+        int sellerId = rand() % (NUM_USERS);
         string user = to_string(node_id)+"_user_"+to_string(sellerId);
 
         int nbBids = rand() % MAX_BID;

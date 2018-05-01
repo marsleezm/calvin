@@ -109,7 +109,7 @@ class TClient : public Client {
     *txn = new TxnProto();
 
     if (rand() % 10000 < percent_mp_)
-      (*txn)->set_multipartition(true);
+        (*txn)->set_multipartition(true);
     else
     	(*txn)->set_multipartition(false);
 
@@ -234,7 +234,7 @@ class RClient : public Client {
 
     // TODO: To make it work
     bool CanMP(int i){
-        return true;
+        return false;
     }
   
   public:
@@ -253,6 +253,7 @@ class RClient : public Client {
     // New order txn
     float random_prob = rand() / RAND_MAX;
     
+    uint i = 0;
     while(i < chances.size()){
         if(chances[i] >= random_prob)
         {
@@ -265,6 +266,8 @@ class RClient : public Client {
             rubis.NewTxn(txn_id, i, config_, *txn);
             break;
         }        
+        else
+            ++i;
     }
 //  if (random_txn_type < 45)  {
 //    tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
@@ -313,7 +316,7 @@ int main(int argc, char** argv) {
   signal(SIGTERM, &stop);
 
   // Build this node's configuration object.
-  Configuration config(StringToInt(argv[1]), "deploy-run.conf");
+  Configuration config(StringToInt(argv[1]), "deploy-run.conf", argv[2][0]);
 
   // Build connection context and start multiplexer thread running.
   ConnectionMultiplexer multiplexer(&config);
