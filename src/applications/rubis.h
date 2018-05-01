@@ -39,22 +39,28 @@ using std::string;
 class RUBIS : public Application {
  public:
   enum TxnType {
-    INITIALIZE = 0,
-    PAYMENT = 6,
-    //NEW_ORDER = 7,
-    NEW_ORDER = 9,
-    ORDER_STATUS = 11,
-    DELIVERY = 12,
-    STOCK_LEVEL = 13,
+    Home = 0,
+    RegisterUser = 1,
+    BrowseCategories = 2,
+    SearchItemsInCategory = 3,
+    BrowseRegions = 4,
+    BrowseCategoriesInRegion = 5,
+    SearchItemsInRegion = 6,
+    ViewItem = 7,
+    ViewUserInfo = 8,
+    ViewBidHistory = 9,
+    BuyNow = 10,
+    StoreBuyBow = 11,
+    PutBid = 12,
+    StoreBid = 13,
+    PutComment = 14,
+    StoreComment = 15,
+    SelectCategoryToSellItem = 16,
+    RegisterItem = 17,
+    AboutMe = 18
   };
 
   RUBIS() {
-      if (ConfigReader::Value("all_recon").compare("true") == 0)
-          recon_mask = RECON_MASK;
-      else{
-          assert(ConfigReader::Value("all_recon").compare("false") == 0);
-          recon_mask = 0;
-      }
   }
 
   //void PopulateItems(Storage* storage) const;
@@ -70,14 +76,31 @@ class RUBIS : public Application {
   // Simple execution of a transaction using a given storage
   virtual int Execute(TxnProto* txn, StorageManager* storage) const;
 
+  int HomeTransaction(StorageManager* storage) const;
+  int RegisterUserTransaction(StorageManager* storage) const;
+  int BrowseCategoriesTransaction(StorageManager* storage) const;
+  int SearchItemsInCateogryTransaction(StorageManager* storage) const;
+  int BrowseRegionsTransaction(StorageManager* storage) const;
+  int BrowseCategoriesInRegionTransaction(StorageManager* storage) const;
+  int SearchItemsInRegionTransaction(StorageManager* storage) const;
+  int ViewItemTransaction(StorageManager* storage) const;
+  int ViewUserInfoTransaction(StorageManager* storage) const;
+  int ViewBidHistory(StorageManager* storage) const;
+  int BuyNow(StorageManager* storage) const;
+  int StoreBuyNow(StorageManager* storage) const;
+  int PutBid(StorageManager* storage) const;
+  int StoreBid(StorageManager* storage) const;
+  int PutComment(StorageManager* storage) const;
+  int StoreComment(StorageManager* storage) const;
+  int SelectCategoryToSellItem(StorageManager* storage) const;
+  int RegisterItem(StorageManager* storage) const;
+  int AboutMe(StorageManager* storage) const;
+
 /* TODO(Thad): Uncomment once testing friend class exists
  private: */
   // When the first transaction is called, the following function initializes
   // a set of fake data for use in the application
   virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
-
-
-  int recon_mask;
 };
 
 #endif  // _DB_APPLICATIONS_RUBIS_H_

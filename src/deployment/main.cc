@@ -141,26 +141,131 @@ class RClient : public Client {
   int update_rate;
   int read_rate;
   int delivery_rate=4;      
+  //std::tr1::unordered_map<string, vector<float>> transition_map;
+  vector<int> chances;
+  
+  private:
+    std::vector<std::string> split(const std::string& s, char delimiter)
+    {
+       std::vector<std::string> tokens;
+       std::string token;
+       std::istringstream tokenStream(s);
+       while (std::getline(tokenStream, token, delimiter))
+       {
+          tokens.push_back(token);
+       }
+       return tokens;
+    }
+
+    void LoadTransition(){
+        vector<vector<pair<int, float>>> transition_map;
+        std::ifstream fs("default_transition.txt");
+        string line;
+        std::getline(fs, line);
+        std::getline(fs, line);
+        std::getline(fs, line);
+        std::getline(fs, line);
+        vector<int> tmp_chances;
+        for(int i = 0; i < 27; ++i){
+            transition_map.push_back(vector<pair<int,float>>());
+            tmp_chances.push_back(0);
+        }
+        for(int i = 0; i < 27; ++i){
+            ASSERT(std::getline(fs, line)); 
+            string line1 = line.substr(0, line.size()-1);
+            std::istringstream iss(line1);
+            vector<string> words((std::istream_iterator<std::string>(iss)),
+                                 std::istream_iterator<std::string>());
+            for(uint j = 1; j < words.size()-1; ++j){
+                if(words[j] != "0"){
+                    if(transition_map[j-1].size() == 0)
+                        transition_map[j-1].push_back(make_pair(i, stof(words[j])));
+                    else{
+                        float prev = transition_map[j-1][transition_map[j-1].size()-1].second;
+                        transition_map[j-1].push_back(make_pair(i, prev+stof(words[j])));
+                    }
+                }
+            }
+        }
+        for(int i = 0; i < 27; ++i){
+            float last_one = transition_map[i][transition_map[i].size()-1].second;
+            for(uint j = 0; j < transition_map[i].size(); ++j)
+                transition_map[i][j].second = transition_map[i][j].second/last_one;
+        }
+        tmp_chances[0] = 1;
+        int idx = 0, TIMES = 200000;
+        for(int k = 0; k < TIMES; ++k){
+            float prop = ((float) rand()) / (float) RAND_MAX, accum=0; 
+            uint i = 0;
+            while(i < transition_map[idx].size()){
+                if(prop <= transition_map[idx][i].second)
+                    break;
+                else
+                    ++i;
+            }
+            if (i == 27){
+                std::cout<<"WTF "<<idx<<","<<accum<<std::endl;
+                ASSERT(2== 3);
+            }
+            idx = transition_map[idx][i].first;
+            ++tmp_chances[idx];
+        }
+        for(int i = 0; i < 27; ++i)
+            if(i==2 or i==4 or i==13 or i==16 or i == 19 or i == 22 or i == 24 or i==26)
+                chances[chances.size()-1]+=tmp_chances[i]; 
+            else
+                chances.push_back(tmp_chances[i]);
+        
+        /*
+        for(uint l = 0; l < tmp_chances.size(); ++l)
+            std::cout<<l<<": "<<tmp_chances[l]/(float)TIMES<<std::endl;
+        for(uint l = 0; l < chances.size(); ++l)
+            std::cout<<l<<": "<<chances[l]/(float)TIMES<<std::endl;
+        */
+
+        float accum = 0;
+        for(uint l = 0; l < chances.size(); ++l){
+            chances[l] += accum;
+            accum = chances[l]; 
+        }
+        //for(uint l = 0; l < chances.size(); ++l)
+        //    std::cout<<l<<": "<<chances[l]/(float)TIMES<<std::endl;
+    }
+
+    // TODO: To make it work
+    bool CanMP(int i){
+        return true;
+    }
   
   public:
   RClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
+      LoadTransition();
       update_rate = ur-delivery_rate;
       read_rate = 100-ur;
   }
+
+  
   virtual ~RClient() {}
   virtual void GetTxn(TxnProto** txn, int txn_id) {
     RUBIS rubis;
     *txn = new TxnProto();
 
-    if (rand() % 10000 < percent_mp_)
-      (*txn)->set_multipartition(true);
-    else
-        (*txn)->set_multipartition(false);
-
     // New order txn
-
-//    int random_txn_type = rand() % 100;
-//     // New order txn
+    float random_prob = rand() / RAND_MAX;
+    
+    while(i < chances.size()){
+        if(chances[i] >= random_prob)
+        {
+            if(CanMP(i)){
+                if (rand() % 10000 < percent_mp_)
+                    (*txn)->set_multipartition(true);
+                else
+                    (*txn)->set_multipartition(false);
+            }
+            rubis.NewTxn(txn_id, i, config_, *txn);
+            break;
+        }        
+    }
 //  if (random_txn_type < 45)  {
 //    tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
 //  } else if(random_txn_type < 88) {
@@ -170,22 +275,8 @@ class RClient : public Client {
 //    args.set_multipartition(false);
 //  }
 
-   int random_txn_type = rand() % 100;
     // New order txn
-    if (random_txn_type < update_rate/2)  {
-      rubis.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
-    } else if(random_txn_type < update_rate) {
-      rubis.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
-    } else if(random_txn_type < update_rate+delivery_rate) {
-        (*txn)->set_multipartition(false);
-        rubis.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
-    } else if(random_txn_type < update_rate+delivery_rate+read_rate/2){
-        (*txn)->set_multipartition(false);
-        rubis.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
-    } else {
-        (*txn)->set_multipartition(false);
-        rubis.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
-    }
+     
   }
 
  private:

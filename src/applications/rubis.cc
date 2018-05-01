@@ -32,33 +32,19 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
   txn->set_isolation_level(TxnProto::SERIALIZABLE);
   txn->set_status(TxnProto::NEW);
 
-    /*
   bool mp = txn->multipartition();
-  int remote_node = -1, remote_warehouse_id = -1;
+  int remote_node = -1;
   if (mp) {
      do {
        remote_node = rand() % config->all_nodes.size();
      } while (config->all_nodes.size() > 1 &&
               remote_node == config->this_node_id);
-     do {
-        remote_warehouse_id = rand() % (num_warehouses *
-                                        config->all_nodes.size());
-     } while (config->all_nodes.size() > 1 &&
-           config->LookupPartition(remote_warehouse_id) !=
-             remote_node);
   }
-    */
 
   // Create an arg list
   //RUBISArgs* tpcc_args = new TPCCArgs();
 
   // Because a switch is not scoped we declare our variables outside of it
-    /*
-  int warehouse_id, district_id, customer_id;
-  char warehouse_key[128], district_key[128], customer_key[128];
-  int order_line_count;
-  Value customer_value;
-  std::set<int> items_used;
   txn->set_seed(GetUTime());
   // We set the read and write set based on type
   switch (txn_type) {
@@ -66,6 +52,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
     case INITIALIZE:
       // Finished with INITIALIZE txn creation
       break;
+    case H
     // New Order
     case NEW_ORDER:{
         set<int> reader_set;
@@ -125,7 +112,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
       }
       // Set the order line count in the args
       tpcc_args->add_order_line_count(order_line_count);
-      txn->set_txn_type(txn_type | recon_mask);
+      txn->set_txn_type(txn_type);
     }
       break;
     // Payment
@@ -178,7 +165,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
         } else {
             txn->add_read_write_set(customer_key);
         }
-        txn->set_txn_type(txn_type | recon_mask);
+        txn->set_txn_type(txn_type);
         break;
      case ORDER_STATUS :
      {
@@ -241,7 +228,6 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
     default:
       break;
   }
-    */
 
   // Set the transaction's args field to a serialized version
   Value args_string;
@@ -255,36 +241,35 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int RUBIS::Execute(TxnProto* txn, StorageManager* storage) const {
-    int txn_type = txn->txn_type();
-    if (txn_type == INITIALIZE) {
-        InitializeStorage(storage->GetStorage(), NULL);
-        return SUCCESS;
-    }
-    else if (txn_type == (NEW_ORDER | recon_mask)){
-        return SUCCESS;
-        //return NewOrderTransaction(storage);
-    }
-    else if (txn_type == (PAYMENT | recon_mask)){
-        return SUCCESS;
-        //return PaymentTransaction(storage);
-    }
-    else if (txn_type == (ORDER_STATUS | RECON_MASK)){
-        return SUCCESS;
-        //return OrderStatusTransaction(storage);
-    }
-    else if (txn_type == (STOCK_LEVEL | RECON_MASK)){
-        return SUCCESS;
-        //return StockLevelTransaction(storage);
-    }
-    else if (txn_type == (DELIVERY | RECON_MASK)){
-        return SUCCESS;
-        //return DeliveryTransaction(storage);
-    }
-    else{
-        std::cout<<"WTF, failure in execute??" << std::endl;
-        return FAILURE;
-    }
+    return SUCCESS;
 }
+
+
+int RUBIS::HomeTransaction(StorageManager* storage) const{
+}
+
+int RUBIS::RegisterUserTransaction(StorageManager* storage) const{
+}
+
+int RUBIS::BrowseCategoriesTransaction(StorageManager* storage) const{
+}
+
+int RUBIS::SearchItemsInCateogryTransaction(StorageManager* storage) const;
+int RUBIS::BrowseRegionsTransaction(StorageManager* storage) const;
+int RUBIS::BrowseCategoriesInRegionTransaction(StorageManager* storage) const;
+int RUBIS::SearchItemsInRegionTransaction(StorageManager* storage) const;
+int RUBIS::ViewItemTransaction(StorageManager* storage) const;
+int RUBIS::ViewUserInfoTransaction(StorageManager* storage) const;
+int RUBIS::ViewBidHistory(StorageManager* storage) const; 
+int RUBIS::BuyNow(StorageManager* storage) const;
+int RUBIS::StoreBuyNow(StorageManager* storage) const;
+int RUBIS::PutBid(StorageManager* storage) const;
+int RUBIS::StoreBid(StorageManager* storage) const;
+int RUBIS::PutComment(StorageManager* storage) const;
+int RUBIS::StoreComment(StorageManager* storage) const;
+int RUBIS::SelectCategoryToSellItem(StorageManager* storage) const;
+int RUBIS::RegisterItem(StorageManager* storage) const;
+int RUBIS::AboutMe(StorageManager* storage) const;
 
 
 // The new order function is executed when the application receives a new order
@@ -1326,6 +1311,23 @@ void RUBIS::InitializeStorage(Storage* storage, Configuration* conf) const {
         storage->PutObject("region_"+to_string(i++), new Value(line));
         //std::cout<<i-1<<" Putting "<<line<<std::endl;
         region_names.push_back(line);
+    }
+
+    for(int i = 0; i < NUM_REGIONS; ++i){
+        string key = to_string(conf->this_node_id)+"_regnew_"+to_string(i);
+        RegionNewItems reg;
+        reg.set_idx(0);
+        Value* val = new Value();
+        assert(reg.SerializeToString(val)); 
+        storage->PutObject(key, val);
+    }
+    for(int i = 0; i < NUM_CATEGORIES; ++i){
+        string key = to_string(conf->this_node_id)+"_catnew_"+to_string(i);
+        CategoryNewItems cat;
+        cat.set_idx(0);
+        Value* val = new Value();
+        assert(cat.SerializeToString(val)); 
+        storage->PutObject(key, val);
     }
 
     PopulateUsers(storage, conf->this_node_id, region_names);
