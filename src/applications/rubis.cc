@@ -43,7 +43,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
 
     //LOG(-1, " Trying to get txn");
   // Create an arg list
-  //RUBISArgs* tpcc_args = new TPCCArgs();
+  RUBISArgs* rubis_args = new RUBISArgs();
 
   // Because a switch is not scoped we declare our variables outside of it
   txn->set_seed(GetUTime());
@@ -54,13 +54,16 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
     case HOME:
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
-        user_key = to_string(config->this_node_id)+"_user_"+to_string(rand()%NUM_USERS);
+        user_key = to_string(config->this_node_id)+"_user_"+to_string(rand()%(NUM_USERS+new_user_id));
         txn->add_read_set(user_key); 
         break;
     case REGISTER_USER:
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
-        user_key = to_string(config->this_node_id)+"_user_"+to_string(rand()%NUM_USERS+NUM_USERS);
+        user_key = to_string(config->this_node_id)+"_user_"+to_string(rand()%NUM_USERS+new_user_id);
+        int region_id = rand()%NUM_REGIONS;
+        rubis_args->set_region_id(region_id);
+        ++new_user_id;
         txn->add_read_write_set(user_key); 
         break;
     case BROWSE_CATEGORIES:
@@ -162,7 +165,8 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
     case REGISTER_ITEM:
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
-        item_key = to_string(config->this_node_id)+"_item_"+to_string(rand()%NUM_ACTIVE_ITEMS);
+        item_key = to_string(config->this_node_id)+"_item_"+to_string(rand()%NUM_ACTIVE_ITEMS+new_item_id);
+        ++new_item_id;
         txn->add_read_write_set(item_key); 
         txn->add_read_write_set(to_string(config->this_node_id)+"_regnew_"+to_string(rand()%NUM_REGIONS)); 
         txn->add_read_write_set(to_string(config->this_node_id)+"_catnew_"+to_string(rand()%NUM_CATEGORIES)); 
@@ -180,7 +184,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
     //LOG(-1, " got txn");
     // Set the transaction's args field to a serialized version
     Value args_string;
-    //assert(tpcc_args->SerializeToString(&args_string));
+    assert(rubis_args->SerializeToString(&args_string));
     txn->set_arg(args_string);
     //return txn;
 }
@@ -246,10 +250,29 @@ int RUBIS::HomeTransaction(StorageManager* storage) const{
 }
 
 int RUBIS::RegisterUserTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    User user;
+    RUBISArgs* rubis_args = storage->get_args();
+    string name = txn->read_write_set(0);
+    user.set_first_name(name);
+    user.set_last_name(name);
+    user.set_nick_name(name);
+    user.set_email(name);
+    user.set_password(name);
+    user.set_region_name(region_names[rubis_args->region_id()]);
+    Value* value = new Value();
+    assert(user.SerializeToString(value));
+    storage->PutObject(name, value);
     return SUCCESS;
 }
 
 int RUBIS::BrowseCategoriesTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    for(int i = 0; i <txn->read_set_size(); ++i){
+        Value* value = storage->ReadObject(txn->read_set(i));
+        Category category;
+        ASSERT(category.ParseFromString(*value));
+    }
     return SUCCESS;
 }
 
@@ -258,10 +281,22 @@ int RUBIS::SearchItemsInCategoryTransaction(StorageManager* storage) const{
 }
 
 int RUBIS::BrowseRegionsTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    for(int i = 0; i <txn->read_set_size(); ++i){
+        Value* value = storage->ReadObject(txn->read_set(i));
+        Region region;
+        ASSERT(region.ParseFromString(*value));
+    }
     return SUCCESS;
 }
 
 int RUBIS::BrowseCategoriesInRegionTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    for(int i = 0; i <txn->read_set_size(); ++i){
+        Value* value = storage->ReadObject(txn->read_set(i));
+        Category category;
+        ASSERT(category.ParseFromString(*value));
+    }
     return SUCCESS;
 }
 
@@ -306,6 +341,12 @@ int RUBIS::StoreCommentTransaction(StorageManager* storage) const{
 }
 
 int RUBIS::SelectCategoryToSellItemTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    for(int i = 0; i <txn->read_set_size(); ++i){
+        Value* value = storage->ReadObject(txn->read_set(i));
+        Category category;
+        ASSERT(category.ParseFromString(*value));
+    }
     return SUCCESS;
 }
 

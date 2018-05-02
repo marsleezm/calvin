@@ -64,7 +64,7 @@ class RUBIS : public Application {
     ABOUT_ME = 18
   };
 
-  RUBIS() {
+  RUBIS(): new_user_id(0), new_item_id(0) {
   }
 
   //void PopulateItems(Storage* storage) const;
@@ -107,6 +107,9 @@ class RUBIS : public Application {
   // When the first transaction is called, the following function initializes
   // a set of fake data for use in the application
   virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
+
+  int new_user_id;
+  int new_item_id;
 };
 
 #endif  // _DB_APPLICATIONS_RUBIS_H_

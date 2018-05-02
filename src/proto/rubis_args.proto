@@ -1,0 +1,36 @@
+// Author: Thaddeus Diamond (diamond@cs.yale.edu)
+// Author: Kun Ren (kun.ren@yale.edu)
+//
+// This is a TPC-C specific serializable argset
+
+message RUBISArgs {
+  // This represents the system time for the transaction
+  optional double system_time = 1;
+
+  // Number of warehouses in an initialize txn or load generation
+  optional bool multipartition = 10;
+
+  repeated int32 region_id = 20;
+  repeated int32 category_id = 21;
+
+  // In a payment transaction, this represents the amount of payment
+  optional int32 amount = 31;
+
+  // Also, we need to record the last name and previous last name (which if
+  // it does not match means the last name was recently looked up)
+  optional bytes last_name = 32;
+
+
+  optional int32 order_number = 41;
+
+  optional int32 lastest_order_number  = 42;
+  optional int32 threshold = 51;
+  repeated int32 order_line_count = 52;
+  
+  // Needed for transaction exection;
+  optional bytes warehouse_key = 60;
+  optional bytes district_key = 61;
+  optional bytes customer_key = 62;
+  optional bytes order_key = 63;
+  optional bytes item_id = 64;
+}
