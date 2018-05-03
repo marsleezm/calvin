@@ -26,7 +26,7 @@ SerialScheduler::SerialScheduler(Configuration* conf, Connection* connection,
 
 SerialScheduler::~SerialScheduler() {}
 
-void SerialScheduler::Run(const Application& application) {
+void SerialScheduler::Run(Application& application) {
   MessageProto message;
   TxnProto txn;
   StorageManager* manager;

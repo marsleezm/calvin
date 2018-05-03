@@ -3,12 +3,15 @@
 //
 // This is a TPC-C specific serializable argset
 
-message TPCCArgs {
+message Args {
   // This represents the system time for the transaction
   optional double system_time = 1;
 
   // Number of warehouses in an initialize txn or load generation
   optional bool multipartition = 10;
+
+  optional int32 region_id = 15;
+  optional int32 category_id = 16;
 
   // This represents the total order line count for a new order and an array
   // of the quantity of item per supply warehouse

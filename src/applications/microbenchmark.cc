@@ -244,10 +244,10 @@ TxnProto* Microbenchmark::MicroTxnDependentMP(int64 txn_id, int* parts, int num_
 
 // The load generator can be called externally to return a transaction proto
 // containing a new type of transaction.
-void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* txn) const {
+void Microbenchmark::NewTxn(int64 txn_id, int txn_type, Configuration* config, TxnProto* txn) {
 }
 
-int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
+int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) {
   // Read all elements of 'txn->read_set()', add one to each, write them all
   // back out.
 	storage->Init();
@@ -292,7 +292,7 @@ int Microbenchmark::Execute(TxnProto* txn, StorageManager* storage) const {
 }
 
 void Microbenchmark::InitializeStorage(Storage* storage,
-                                       Configuration* conf) const {
+                                       Configuration* conf) {
   for (int i = 0; i < nparts*kDBSize; i++) {
     if (conf->LookupPartition(IntToString(i)) == conf->this_node_id) {
 #ifdef PREFETCHING

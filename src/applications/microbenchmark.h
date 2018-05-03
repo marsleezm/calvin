@@ -36,8 +36,8 @@ class Microbenchmark : public Application {
   virtual ~Microbenchmark() {}
 
   virtual void NewTxn(int64 txn_id, int txn_type,
-                           Configuration* config = NULL, TxnProto* txn = NULL) const;
-  virtual int Execute(TxnProto* txn, StorageManager* storage) const;
+                           Configuration* config = NULL, TxnProto* txn = NULL) ;
+  virtual int Execute(TxnProto* txn, StorageManager* storage);
 
   TxnProto* InitializeTxn();
   TxnProto* MicroTxnSP(int64 txn_id, int part);
@@ -53,7 +53,7 @@ class Microbenchmark : public Application {
   int indexAccessNum = atoi(ConfigReader::Value("index_num").c_str());
   int kDBSize = atoi(ConfigReader::Value("total_key").c_str());
 
-  virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
+  virtual void InitializeStorage(Storage* storage, Configuration* conf) ;
 
  private:
   void GetRandomKeys(set<int>* keys, int num_keys, int key_start,

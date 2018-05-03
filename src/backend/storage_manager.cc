@@ -16,14 +16,14 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 		Storage* actual_storage)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(NULL), message_(NULL), message_has_value_(false), exec_counter_(0), max_counter_(0){
-	tpcc_args = new TPCCArgs();
+	tpcc_args = new Args();
 }
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		Storage* actual_storage,  TxnProto* txn)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), message_has_value_(false), exec_counter_(0), max_counter_(0){
-	tpcc_args = new TPCCArgs();
+	tpcc_args = new Args();
 
 	tpcc_args ->ParseFromString(txn->arg());
 	if (txn->multipartition()){
@@ -93,9 +93,9 @@ StorageManager::~StorageManager() {
 
 Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 	read_state = NORMAL;
-	LOG(txn_->txn_id(), "Trying to read key "<<key);
+	//LOG(txn_->txn_id(), "Trying to read key "<<key);
 	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
-		LOG(txn_->txn_id(), "Trying to read local key "<<key);
+		//LOG(txn_->txn_id(), "Trying to read local key "<<key);
 		if (read_set_.count(key) == 0){
 			Value* result = actual_storage_->ReadObject(key, txn_->txn_id());
 			while (result == NULL){
@@ -103,7 +103,7 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 				LOG(txn_->txn_id(), " WTF, key is empty: "<<key);
 			}
 			read_set_[key] = result;
-			LOG(txn_->txn_id(), " message is "<<message_);
+			//LOG(txn_->txn_id(), " message is "<<message_);
             if (message_){
                 LOG(txn_->txn_id(), "Adding to msg: "<<key);
                 message_->add_keys(key);

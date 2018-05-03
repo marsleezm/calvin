@@ -32,7 +32,7 @@
 #include "common/configuration.h"
 #include "proto/txn.pb.h"
 #include "proto/message.pb.h"
-#include "proto/tpcc_args.pb.h"
+#include "proto/args.pb.h"
 
 using std::vector;
 using std::tr1::unordered_map;
@@ -75,7 +75,7 @@ class StorageManager {
 
   Storage* GetStorage() { return actual_storage_; }
   inline TxnProto* GetTxn() { return txn_; }
-  inline TPCCArgs* get_args() { return tpcc_args;}
+  inline Args* get_args() { return tpcc_args;}
 
   inline void Init(){
 	  exec_counter_ = 0;
@@ -148,7 +148,7 @@ class StorageManager {
   // Counting how many transaction steps have been executed the last time
   int max_counter_;
 
-  TPCCArgs* tpcc_args;
+  Args* tpcc_args;
 
 };
 

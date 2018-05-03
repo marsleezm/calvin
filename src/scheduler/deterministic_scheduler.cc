@@ -64,7 +64,7 @@ TxnProto* DeterministicScheduler::GetTxnPtr(socket_t* socket,
 DeterministicScheduler::DeterministicScheduler(Configuration* conf,
                                                Connection* batch_connection,
                                                Storage* storage,
-                                               const Application* application,
+                                               Application* application,
 											   AtomicQueue<TxnProto*>* input_queue,
 											   Client* client,
 											   int queue_mode)

@@ -12,7 +12,7 @@
 #include "proto/txn.pb.h"
 #include "common/configuration.h"
 #include "proto/tpcc.pb.h"
-#include "proto/tpcc_args.pb.h"
+#include "proto/args.pb.h"
 #include "common/config_reader.h"
 
 #define WAREHOUSES_PER_NODE 12
@@ -49,7 +49,7 @@ class TPCC : public Application {
 
   // Load generator for a new transaction
   virtual void NewTxn(int64 txn_id, int txn_type,
-                           Configuration* config, TxnProto* txn) const;
+                           Configuration* config, TxnProto* txn) ;
 
   // The key converter takes a valid key (string) and converts it to an id
   // for the checkpoint to use
@@ -88,13 +88,13 @@ class TPCC : public Application {
   }
 
   // Simple execution of a transaction using a given storage
-  virtual int Execute(TxnProto* txn, StorageManager* storage) const;
+  virtual int Execute(TxnProto* txn, StorageManager* storage);
 
 /* TODO(Thad): Uncomment once testing friend class exists
  private: */
   // When the first transaction is called, the following function initializes
   // a set of fake data for use in the application
-  virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
+  virtual void InitializeStorage(Storage* storage, Configuration* conf);
 
   // The following methods are simple randomized initializers that provide us
   // fake data for our TPC-C function

@@ -12,7 +12,7 @@
 #include "proto/txn.pb.h"
 #include "common/configuration.h"
 #include "proto/rubis.pb.h"
-//#include "proto/tpcc_args.pb.h"
+#include "proto/args.pb.h"
 #include "common/config_reader.h"
 
 
@@ -64,23 +64,32 @@ class RUBIS : public Application {
     ABOUT_ME = 18
   };
 
-  RUBIS(): new_user_id(0), new_item_id(0) {
+  RUBIS(): new_user_id(0), new_item_id(0) {}
+  RUBIS(Configuration* config): new_user_id(0), new_item_id(0), conf(config) {
   }
 
   //void PopulateItems(Storage* storage) const;
-  void PopulateUsers(Storage* storage, int node_id, vector<string> region_names) const;
+  void PopulateUsers(Storage* storage, int node_id) const;
   void PopulateItems(Storage* storage, int node_id, vector<int> items_category) const;
 
   virtual ~RUBIS() {}
 
   // Load generator for a new transaction
   virtual void NewTxn(int64 txn_id, int txn_type,
-                           Configuration* config, TxnProto* txn) const;
+                           Configuration* config, TxnProto* txn) ;
 
   // Simple execution of a transaction using a given storage
-  virtual int Execute(TxnProto* txn, StorageManager* storage) const;
-  string select_user(int this_node) const {return ""; }
-  string select_item(int this_node) const {return ""; }
+  virtual int Execute(TxnProto* txn, StorageManager* storage);
+    // TODO: a hack to select items & users. New items have higher probability to be selected. 
+  string select_user(int this_node) const {
+      return to_string(this_node)+"_user_"+to_string(rand()%(NUM_USERS+new_user_id)); 
+  }
+  string select_item(int this_node) const {
+      if(rand() % 100 < 20)
+          return to_string(this_node)+"_item_"+to_string(rand()%(NUM_OLD_ITEMS));
+      else
+          return to_string(this_node)+"_item_"+to_string(rand()%(NUM_ACTIVE_ITEMS+new_item_id)); 
+  }
 
   int HomeTransaction(StorageManager* storage) const;
   int RegisterUserTransaction(StorageManager* storage) const;
@@ -106,10 +115,12 @@ class RUBIS : public Application {
  private: */
   // When the first transaction is called, the following function initializes
   // a set of fake data for use in the application
-  virtual void InitializeStorage(Storage* storage, Configuration* conf) const;
+  virtual void InitializeStorage(Storage* storage, Configuration* conf) ;
 
+  vector<string> region_names;
   int new_user_id;
   int new_item_id;
+  Configuration* conf;
 };
 
 #endif  // _DB_APPLICATIONS_RUBIS_H_

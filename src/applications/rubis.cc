@@ -23,7 +23,7 @@ using namespace std::chrono;
 // The load generator can be called externally to return a
 // transaction proto containing a new type of transaction.
 void RUBIS::NewTxn(int64 txn_id, int txn_type,
-                       Configuration* config, TxnProto* txn) const {
+                       Configuration* config, TxnProto* txn) {
   // Create the new transaction object
 
   // Set the transaction's standard attributes
@@ -43,7 +43,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
 
     //LOG(-1, " Trying to get txn");
   // Create an arg list
-  RUBISArgs* rubis_args = new RUBISArgs();
+  Args* rubis_args = new Args();
 
   // Because a switch is not scoped we declare our variables outside of it
   txn->set_seed(GetUTime());
@@ -61,8 +61,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
         user_key = to_string(config->this_node_id)+"_user_"+to_string(rand()%NUM_USERS+new_user_id);
-        int region_id = rand()%NUM_REGIONS;
-        rubis_args->set_region_id(region_id);
+        rubis_args->set_region_id(rand()%NUM_REGIONS);
         ++new_user_id;
         txn->add_read_write_set(user_key); 
         break;
@@ -76,7 +75,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
     case SEARCH_ITEMS_IN_CATEGORY:
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
-        txn->add_read_write_set(to_string(config->this_node_id)+"_catnew_"+to_string(rand() % NUM_CATEGORIES)); 
+        txn->add_read_set(to_string(config->this_node_id)+"_catnew_"+to_string(rand() % NUM_CATEGORIES)); 
         break;
     case BROWSE_REGIONS:
         txn->add_readers(config->this_node_id);
@@ -95,7 +94,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
     case SEARCH_ITEMS_IN_REGION:
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
-        txn->add_read_write_set(to_string(config->this_node_id)+"_regnew_"+to_string(rand() % NUM_REGIONS)); 
+        txn->add_read_set(to_string(config->this_node_id)+"_regnew_"+to_string(rand() % NUM_REGIONS)); 
         break;
     // TODO: not fixed.
     case VIEW_ITEM:
@@ -152,8 +151,8 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
         item_key = select_item(config->this_node_id), user_key = select_user(config->this_node_id);
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
-        txn->add_read_write_set(item_key);
-        txn->add_read_write_set(user_key);
+        txn->add_read_set(item_key);
+        txn->add_read_set(user_key);
         break;
     case SELECT_CATEGORY_TO_SELL_ITEM:
         txn->add_readers(config->this_node_id);
@@ -191,7 +190,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
 
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
-int RUBIS::Execute(TxnProto* txn, StorageManager* storage) const {
+int RUBIS::Execute(TxnProto* txn, StorageManager* storage) {
     //LOG(-1, " before executing");
     switch(txn->txn_type()){
         case HOME:
@@ -252,14 +251,15 @@ int RUBIS::HomeTransaction(StorageManager* storage) const{
 int RUBIS::RegisterUserTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
     User user;
-    RUBISArgs* rubis_args = storage->get_args();
+    Args* rubis_args = storage->get_args();
     string name = txn->read_write_set(0);
     user.set_first_name(name);
     user.set_last_name(name);
     user.set_nick_name(name);
     user.set_email(name);
     user.set_password(name);
-    user.set_region_name(region_names[rubis_args->region_id()]);
+    LOG(txn->txn_id(), " reg id is "<<rubis_args->region_id());
+    user.set_region_name(to_string(conf->this_node_id)+"_region_"+to_string(rubis_args->region_id()));
     Value* value = new Value();
     assert(user.SerializeToString(value));
     storage->PutObject(name, value);
@@ -268,8 +268,9 @@ int RUBIS::RegisterUserTransaction(StorageManager* storage) const{
 
 int RUBIS::BrowseCategoriesTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+    int read_state;
     for(int i = 0; i <txn->read_set_size(); ++i){
-        Value* value = storage->ReadObject(txn->read_set(i));
+        Value* value = storage->ReadObject(txn->read_set(i), read_state);
         Category category;
         ASSERT(category.ParseFromString(*value));
     }
@@ -277,13 +278,27 @@ int RUBIS::BrowseCategoriesTransaction(StorageManager* storage) const{
 }
 
 int RUBIS::SearchItemsInCategoryTransaction(StorageManager* storage) const{
-    return SUCCESS;
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+    CategoryNewItems cat_new;
+    ASSERT(cat_new.ParseFromString(*value));
+    if(cat_new.new_items_size() == 0)
+        return SUCCESS;
+    else{
+        int idx = rand() % cat_new.new_items_size();
+        value = storage->ReadObject(cat_new.new_items(idx), read_state);
+        RItem item;
+        ASSERT(item.ParseFromString(*value));
+        return SUCCESS;
+    }
 }
 
 int RUBIS::BrowseRegionsTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+    int read_state;
     for(int i = 0; i <txn->read_set_size(); ++i){
-        Value* value = storage->ReadObject(txn->read_set(i));
+        Value* value = storage->ReadObject(txn->read_set(i), read_state);
         Region region;
         ASSERT(region.ParseFromString(*value));
     }
@@ -292,23 +307,61 @@ int RUBIS::BrowseRegionsTransaction(StorageManager* storage) const{
 
 int RUBIS::BrowseCategoriesInRegionTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+    int read_state;
     for(int i = 0; i <txn->read_set_size(); ++i){
-        Value* value = storage->ReadObject(txn->read_set(i));
+        Value* value = storage->ReadObject(txn->read_set(i), read_state);
         Category category;
         ASSERT(category.ParseFromString(*value));
     }
     return SUCCESS;
 }
 
+// Dependent
 int RUBIS::SearchItemsInRegionTransaction(StorageManager* storage) const{
-    return SUCCESS;
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    LOG(txn->txn_id(), " search item "<<txn->read_set(0));
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+    RegionNewItems reg_new;
+    ASSERT(reg_new.ParseFromString(*value));
+    if(reg_new.new_items_size() == 0)
+        return SUCCESS;
+    else{
+        int idx = rand() % reg_new.new_items_size();
+        value = storage->ReadObject(reg_new.new_items(idx), read_state);
+        RItem item;
+        ASSERT(item.ParseFromString(*value));
+        return SUCCESS;
+    }
 }
 
+// Dependent
 int RUBIS::ViewItemTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+    LOG(txn->txn_id(), " view item, reading "<<txn->read_set(0)<<", addr is "<<reinterpret_cast<int64>(value));
+    RItem item;
+    ASSERT(item.ParseFromString(*value));
+    User user;
+    value = storage->ReadObject(item.seller_id(), read_state);
+    LOG(txn->txn_id(), ", seller "<<item.seller_id()<<", bids num is "<<item.bid_ids_size());
+    ASSERT(user.ParseFromString(*value));
+    for(int i = 0; i < item.bid_ids_size(); ++i){
+        Bid bid;
+        LOG(txn->txn_id(), " getting bid "<<item.bid_ids(i)); 
+        value = storage->ReadObject(item.bid_ids(i), read_state);
+        ASSERT(bid.ParseFromString(*value));
+    }
     return SUCCESS;
 }
 
 int RUBIS::ViewUserInfoTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+    User user;
+    ASSERT(user.ParseFromString(*value));
     return SUCCESS;
 }
 
@@ -337,13 +390,51 @@ int RUBIS::PutCommentTransaction(StorageManager* storage) const{
 }
 
 int RUBIS::StoreCommentTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+    User from_user;
+    ASSERT(from_user.ParseFromString(*value));
+
+    value = storage->ReadObject(txn->read_set(1), read_state);
+    RItem item;
+    ASSERT(item.ParseFromString(*value));
+    User to_user;
+    Value* to_user_value;
+    to_user_value = storage->ReadObject(item.seller_id(), read_state);
+    ASSERT(to_user.ParseFromString(*to_user_value));
+
+    int rating = rand()%5+1;
+    Comment comment;
+    comment.set_item_id(txn->read_set(1));
+    comment.set_from_user(txn->read_set(0));
+    comment.set_to_user(item.seller_id());
+    comment.set_rating(rating);
+    comment.set_date(GetUTime());
+    comment.set_comment("Don't buy it");
+
+    int idx = item.seller_id().find('_');
+    string seller_node = item.seller_id().substr(0, idx),
+        rest_str = item.seller_id().substr(idx+1, item.seller_id().size()-idx-1);
+    int second_idx = rest_str.find('_');
+    string seller_id = rest_str.substr(second_idx+1, rest_str.size()-second_idx-1);
+    string comment_key = seller_node+"_comment_"+seller_id+"_"+to_string(to_user.num_comments());
+
+    to_user.set_num_comments(to_user.num_comments()+1);
+    to_user.set_rating(to_user.rating()+rating);
+    ASSERT(to_user.SerializeToString(to_user_value));
+    Value* comment_v = new Value();
+    ASSERT(comment.SerializeToString(comment_v));
+    storage->PutObject(item.seller_id(), to_user_value);
+    storage->PutObject(comment_key, comment_v);
     return SUCCESS;
 }
 
 int RUBIS::SelectCategoryToSellItemTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+    int read_state;
     for(int i = 0; i <txn->read_set_size(); ++i){
-        Value* value = storage->ReadObject(txn->read_set(i));
+        Value* value = storage->ReadObject(txn->read_set(i), read_state);
         Category category;
         ASSERT(category.ParseFromString(*value));
     }
@@ -363,7 +454,7 @@ int RUBIS::AboutMeTransaction(StorageManager* storage) const{
 int RUBIS::NewOrderReconTransaction(ReconStorageManager* storage) const {
     // First, we retrieve the warehouse from storage
     TxnProto* txn = storage->get_txn();
-    RUBISArgs* tpcc_args = storage->get_args();
+    Args* rubis_args = storage->get_args();
     storage->Init();
     LOG(txn->txn_id(), "Executing NEWORDER RECON, is multipart? "<<(txn->multipartition()));
     int retry_cnt = 0;
@@ -394,14 +485,14 @@ int RUBIS::NewOrderReconTransaction(ReconStorageManager* storage) const {
             storage->AddObject(district_key, district.SerializeAsString());
             //LOG(txn->txn_id(), " done trying to read district"<<district_key);
             order_number = district.next_order_id();
-            tpcc_args->set_lastest_order_number(order_number);;
+            rubis_args->set_lastest_order_number(order_number);;
         }
     }
     else
-        order_number = tpcc_args->lastest_order_number();
+        order_number = rubis_args->lastest_order_number();
     // Next, we get the order line count, system time, and other args from the
     // transaction proto
-    int order_line_count = tpcc_args->order_line_count(0);
+    int order_line_count = rubis_args->order_line_count(0);
     // Retrieve the customer we are looking for
     Key customer_key = txn->read_write_set(1);
     if(storage->ShouldExec()){
@@ -446,8 +537,8 @@ int RUBIS::NewOrderReconTransaction(ReconStorageManager* storage) const {
 int RUBIS::NewOrderTransaction(StorageManager* storage) const {
     // First, we retrieve the warehouse from storage
     TxnProto* txn = storage->get_txn();
-    RUBISArgs tpcc_args;
-    tpcc_args.ParseFromString(txn->arg());
+    Args rubis_args;
+    rubis_args.ParseFromString(txn->arg());
     //LOG(txn->txn_id(), "Executing NEWORDER, is multipart? "<<(txn->multipartition()));
     Key warehouse_key = txn->read_set(0);
     Value* warehouse_val = storage->ReadObject(warehouse_key);
@@ -469,7 +560,7 @@ int RUBIS::NewOrderTransaction(StorageManager* storage) const {
     assert(district.SerializeToString(district_val));
     // Next, we get the order line count, system time, and other args from the
     // transaction proto
-    int order_line_count = tpcc_args.order_line_count(0);
+    int order_line_count = rubis_args.order_line_count(0);
     // We initialize the order line amount total to 0
     int order_line_amount_total = 0;
     double system_time = txn->seed();
@@ -526,7 +617,7 @@ int RUBIS::NewOrderTransaction(StorageManager* storage) const {
         // For each order line we parse out the three args
         string stock_key = txn->read_write_set(i + 2);
         string supply_warehouse_key = stock_key.substr(0, stock_key.find("s"));
-        int quantity = tpcc_args.quantities(i);
+        int quantity = rubis_args.quantities(i);
         // Find the item key within the stock key
         size_t item_idx = stock_key.find("i");
         string item_key = stock_key.substr(item_idx, string::npos);
@@ -584,7 +675,7 @@ int RUBIS::NewOrderTransaction(StorageManager* storage) const {
 //int RUBIS::NewOrderReconTransaction(ReconStorageManager* storage) const {
 //  // First, we retrieve the warehouse from storage
 //  TxnProto* txn = storage->get_txn();
-//  RUBISArgs* tpcc_args = storage->get_args();
+//  Args* rubis_args = storage->get_args();
 //  storage->Init();
 //  LOG(txn->txn_id(), "Executing NEWORDER RECON, is multipart? "<<(txn->multipartition()));
 //
@@ -612,16 +703,16 @@ int RUBIS::NewOrderTransaction(StorageManager* storage) const {
 //          District district;
 //          try_until(district.ParseFromString(*district_val));
 //          order_number = district.next_order_id();
-//          tpcc_args->set_lastest_order_number(order_number);;
+//          rubis_args->set_lastest_order_number(order_number);;
 //      }
 //  }
 //  else
-//      order_number = tpcc_args->lastest_order_number();
+//      order_number = rubis_args->lastest_order_number();
 //
 //
 //  // Next, we get the order line count, system time, and other args from the
 //  // transaction proto
-//  int order_line_count = tpcc_args->order_line_count(0);
+//  int order_line_count = rubis_args->order_line_count(0);
 //
 //  // We initialize the order line amount total to 0
 //  for (int i = 0; i < order_line_count; i++) {
@@ -694,8 +785,8 @@ int RUBIS::NewOrderTransaction(StorageManager* storage) const {
 int RUBIS::PaymentReconTransaction(ReconStorageManager* storage) const {
     // First, we parse out the transaction args from the RUBIS proto
     TxnProto* txn = storage->get_txn();
-    RUBISArgs tpcc_args;
-    tpcc_args.ParseFromString(txn->arg());
+    Args rubis_args;
+    rubis_args.ParseFromString(txn->arg());
     // Read & update the warehouse object
     int read_state;
     Key warehouse_key = txn->read_write_set(0);
@@ -750,10 +841,10 @@ int RUBIS::PaymentReconTransaction(ReconStorageManager* storage) const {
 int RUBIS::PaymentTransaction(StorageManager* storage) const {
     // First, we parse out the transaction args from the RUBIS proto
     TxnProto* txn = storage->get_txn();
-    RUBISArgs tpcc_args;
-    tpcc_args.ParseFromString(txn->arg());
+    Args rubis_args;
+    rubis_args.ParseFromString(txn->arg());
     LOG(txn->txn_id(), "Executing PAYMENT, is multipart? "<<(txn->multipartition()));
-    int amount = tpcc_args.amount();
+    int amount = rubis_args.amount();
     // We create a string to hold up the customer object we look up
     // Read & update the warehouse object
     Key warehouse_key = txn->read_write_set(0);
@@ -775,7 +866,7 @@ int RUBIS::PaymentTransaction(StorageManager* storage) const {
     // Read & update the customer
     Key customer_key;
     // If there's a last name we do secondary keying
-    ASSERT(tpcc_args.has_last_name() == false);
+    ASSERT(rubis_args.has_last_name() == false);
     customer_key = txn->read_write_set(2);
     Value* customer_val = storage->ReadObject(customer_key);
     Customer customer;
@@ -869,7 +960,7 @@ int RUBIS::OrderStatusTransaction(StorageManager* storage) const {
 // Read order and orderline new key.
 int RUBIS::OrderStatusReconTransaction(ReconStorageManager* storage) const {
     TxnProto* txn = storage->get_txn();
-    //RUBISArgs* tpcc_args = storage->get_args();
+    //Args* rubis_args = storage->get_args();
     //LOG(txn->txn_id(), " Recon-Executing ORDERSTATUS, is multipart? "<<txn->multipartition());
     storage->Init();
     int read_state = NORMAL, retry_cnt= 0;
@@ -916,7 +1007,7 @@ int RUBIS::OrderStatusReconTransaction(ReconStorageManager* storage) const {
 int RUBIS::StockLevelTransaction(StorageManager* storage) const {
     TxnProto* txn = storage->get_txn();
     //LOG(txn->txn_id(), "Executing STOCKLEVEL, is multipart? "<<txn->multipartition());
-    //int threshold = tpcc_args.threshold();
+    //int threshold = rubis_args.threshold();
     Key warehouse_key = txn->read_set(0);
     // Read & update the warehouse object
     Value* warehouse_val = storage->ReadObject(warehouse_key);
@@ -972,10 +1063,10 @@ int RUBIS::StockLevelTransaction(StorageManager* storage) const {
 int RUBIS::StockLevelReconTransaction(ReconStorageManager* storage) const {
     //int low_stock = 0;
     TxnProto* txn = storage->get_txn();
-    //RUBISArgs* tpcc_args = storage->get_args();
+    //Args* rubis_args = storage->get_args();
     //LOG(txn->txn_id(), " Recon-Executing STOCKLEVEL RECON, is multipart? "<<txn->multipartition());
     storage->Init();
-    //int threshold = tpcc_args.threshold();
+    //int threshold = rubis_args.threshold();
     int read_state = NORMAL, retry_cnt = 0;
     Key warehouse_key = txn->read_set(0);
     // Read & update the warehouse object
@@ -1031,8 +1122,8 @@ int RUBIS::StockLevelReconTransaction(ReconStorageManager* storage) const {
 // Update order, read orderline, delete new order.
 int RUBIS::DeliveryTransaction(StorageManager* storage) const {
     TxnProto* txn = storage->get_txn();
-    RUBISArgs tpcc_args;
-    tpcc_args.ParseFromString(txn->arg());
+    Args rubis_args;
+    rubis_args.ParseFromString(txn->arg());
     LOG(txn->txn_id(), "Executing DELIVERY, is multipart? "<<txn->multipartition());
     int read_state = NORMAL;
     // Read & update the warehouse object
@@ -1146,7 +1237,7 @@ int RUBIS::DeliveryTransaction(StorageManager* storage) const {
 // Update order, read orderline, delete new order.
 int RUBIS::DeliveryReconTransaction(ReconStorageManager* storage) const {
     TxnProto* txn = storage->get_txn();
-    //RUBISArgs* tpcc_args = storage->get_args();
+    //Args* rubis_args = storage->get_args();
     //LOG(txn->txn_id(), " Recon-Executing DELIVERY RECON, size of my pred rw is "<<txn->pred_read_write_set_size());
     storage->Init();
     int read_state = NORMAL, retry_cnt = 0;
@@ -1212,27 +1303,33 @@ int RUBIS::DeliveryReconTransaction(ReconStorageManager* storage) const {
 
 // The initialize function is executed when an initialize transaction comes
 // through, indicating we should populate the database with fake data
-void RUBIS::InitializeStorage(Storage* storage, Configuration* conf) const {
+void RUBIS::InitializeStorage(Storage* storage, Configuration* conf) {
   // We create and write out all of the warehouses
     std::cout<<"Start populating RUBiS data"<<std::endl;
 
-    vector<string> region_names;
     vector<int> items_category;
     std::ifstream fs("ebay_simple_categories.txt");
     string line;
     int i = 0;
     while(std::getline(fs, line)){
         std::string catname = line.substr(0, line.find('(')-1), num = line.substr(line.find('(')+1, line.size()-2-line.find('('));
-        storage->PutObject(to_string(conf->this_node_id)+"_category_"+to_string(i++), new Value(num));
+        Category category;
+        category.set_content(num);
+        Value* value = new Value();
+        ASSERT(category.SerializeToString(value));
+        storage->PutObject(to_string(conf->this_node_id)+"_category_"+to_string(i++), value);
         //std::cout<<i-1<<" Putting "<<catname<<", "<<num<<std::endl;
         items_category.push_back(stoi(num));
     }
     fs = std::ifstream("ebay_regions.txt");
     i = 0;
     while(std::getline(fs, line)){
-        storage->PutObject(to_string(conf->this_node_id)+"_region_"+to_string(i++), new Value(line));
+        Region region;
+        region.set_content(line);
+        Value* value = new Value();
+        ASSERT(region.SerializeToString(value));
+        storage->PutObject(to_string(conf->this_node_id)+"_region_"+to_string(i++), value);
         //std::cout<<i-1<<" Putting "<<line<<std::endl;
-        region_names.push_back(line);
     }
 
     for(int i = 0; i < NUM_REGIONS; ++i){
@@ -1252,13 +1349,13 @@ void RUBIS::InitializeStorage(Storage* storage, Configuration* conf) const {
         storage->PutObject(key, val);
     }
 
-    PopulateUsers(storage, conf->this_node_id, region_names);
+    PopulateUsers(storage, conf->this_node_id);
     PopulateItems(storage, conf->this_node_id, items_category);
 
     std::cout<<"Finish populating RUBIS data"<<std::endl;
 }
 
-void RUBIS::PopulateUsers(Storage* storage, int node_id, vector<string> region_names) const {
+void RUBIS::PopulateUsers(Storage* storage, int node_id) const {
     int getNbOfUsers = NUM_USERS;
 
     for (int i = 0 ; i < getNbOfUsers ; i++)
@@ -1270,7 +1367,8 @@ void RUBIS::PopulateUsers(Storage* storage, int node_id, vector<string> region_n
         user.set_nick_name(name);
         user.set_email(name);
         user.set_password(name);
-        user.set_region_name(region_names[i%NUM_REGIONS]);
+        user.set_num_comments(0);
+        user.set_region_name(to_string(node_id)+"_region_"+to_string(i%NUM_REGIONS));
         Value* value = new Value();
         assert(user.SerializeToString(value));
         storage->PutObject(name, value);
@@ -1287,6 +1385,7 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
     for(int i = 0; i < total_items; ++i){
         string item_id = to_string(node_id)+"_item_"+to_string(i);
         int64 now = GetUTime();
+        RItem item;
         int init_price = rand() % 5000, duration = rand()%7, reserve_price, buy_now, quantity;
         if(i < num_old_items){
             duration = -duration; // give a negative auction duration so that auction will be over
@@ -1331,7 +1430,7 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
         {
             int add_bid = rand()%10+1;
             Bid bid;
-            string bid_name = to_string(node_id)+"_bid_"+to_string(j);
+            string bid_name = to_string(node_id)+"_bid_"+to_string(i)+"_"+to_string(j);
             bid.set_user_id(user);
             bid.set_item_id(item_id);
             bid.set_qty(rand()%quantity);
@@ -1343,6 +1442,8 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
             value = new Value();
             assert(bid.SerializeToString(value));
             storage->PutObject(bid_name, value);
+            item.add_bid_ids(bid_name);
+            LOG(0, " putting "<<bid_name);
         }
 
         int rating = rand()%5;
@@ -1355,6 +1456,7 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
         comment.set_rating(rating);
         comment.set_comment("Not bad");
         comment.set_date(now);
+        value = new Value();
         assert(comment.SerializeToString(value));
         storage->PutObject(comment_key, value);
 
@@ -1387,7 +1489,6 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
             storage->PutObject(region_new_items, value);
         }
 
-        RItem item;
         item.set_name(item_id);
         item.set_description("don't buy it!");
         item.set_qty(quantity);
@@ -1404,6 +1505,7 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
         value = new Value();
         assert(item.SerializeToString(value));
         storage->PutObject(item_id, value);
+        LOG(0, " putting "<<item_id);
     }
 }
 

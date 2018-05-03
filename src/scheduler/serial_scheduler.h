@@ -17,7 +17,7 @@ class SerialScheduler : public Scheduler {
   SerialScheduler(Configuration* conf, Connection* connection,
                   Storage* storage, bool checkpointing);
   virtual ~SerialScheduler();
-  virtual void Run(const Application& application);
+  virtual void Run(Application& application);
 
  private:
   // Configuration specifying node & system settings.

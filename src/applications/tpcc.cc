@@ -25,7 +25,7 @@ void TPCC::SetItem(Key key, Value* value) const { ItemList[key] = value; }
 // The load generator can be called externally to return a
 // transaction proto containing a new type of transaction.
 void TPCC::NewTxn(int64 txn_id, int txn_type,
-                       Configuration* config, TxnProto* txn) const {
+                       Configuration* config, TxnProto* txn)  {
   // Create the new transaction object
 
   // Set the transaction's standard attributes
@@ -51,7 +51,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
   }
 
   // Create an arg list
-  TPCCArgs* tpcc_args = new TPCCArgs();
+  Args* tpcc_args = new Args();
 
   // Because a switch is not scoped we declare our variables outside of it
   int warehouse_id, district_id, customer_id;
@@ -292,7 +292,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
-int TPCC::Execute(TxnProto* txn, StorageManager* storage) const {
+int TPCC::Execute(TxnProto* txn, StorageManager* storage) {
 	int txn_type = txn->txn_type();
 	if (txn_type == INITIALIZE) {
 		InitializeStorage(storage->GetStorage(), NULL);
@@ -324,7 +324,7 @@ int TPCC::NewOrderTransaction(StorageManager* storage) const {
 	// First, we retrieve the warehouse from storage
 	storage->Init();
 	TxnProto* txn = storage->get_txn();
-	TPCCArgs* tpcc_args = storage->get_args();
+	Args* tpcc_args = storage->get_args();
 
 	//LOG(txn->txn_id(), "Executing NEWORDER, is multipart? "<<(txn->multipartition()));
 
@@ -499,7 +499,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	// First, we parse out the transaction args from the TPCC proto
 	storage->Init();
 	TxnProto* txn = storage->get_txn();
-	TPCCArgs tpcc_args;
+	Args tpcc_args;
 	tpcc_args.ParseFromString(txn->arg());
 	LOG(txn->txn_id(), "Executing PAYMENT, is multipart? "<<(txn->multipartition()));
 	int amount = tpcc_args.amount();
@@ -703,7 +703,7 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 // Update order, read orderline, delete new order.
 int TPCC::DeliveryTransaction(StorageManager* storage) const {
 	TxnProto* txn = storage->get_txn();
-	TPCCArgs tpcc_args;
+	Args tpcc_args;
 	tpcc_args.ParseFromString(txn->arg());
 	LOG(txn->txn_id(), "Executing DELIVERY, is multipart? "<<txn->multipartition());
 
@@ -793,7 +793,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 
 // The initialize function is executed when an initialize transaction comes
 // through, indicating we should populate the database with fake data
-void TPCC::InitializeStorage(Storage* storage, Configuration* conf) const {
+void TPCC::InitializeStorage(Storage* storage, Configuration* conf) {
   // We create and write out all of the warehouses
 	std::cout<<"Start populating TPC-C data"<<std::endl;
   for (int i = 0; i < (int)(WAREHOUSES_PER_NODE * conf->all_nodes.size()); i++) {

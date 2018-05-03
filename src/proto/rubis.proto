@@ -12,6 +12,12 @@ message User{
   required bytes email = 4;
   required bytes password = 5;
   required bytes region_name = 6;
+  optional int32 rating = 7;
+  optional int32 balance = 8;
+  repeated bytes bids = 9;
+  repeated bytes sellings = 10;
+  repeated bytes bought = 11;
+  required int32 num_comments = 12;
 }
 
 message Bid{
@@ -47,6 +53,7 @@ message RItem {
   required int64 end_date = 10;
   required bytes seller_id = 11;
   required int32 category = 12;
+  repeated bytes bid_ids = 13;
 }
 
 message CategoryNewItems {
@@ -59,4 +66,12 @@ message RegionNewItems {
   // The following are informational fields as defined in TPC-C standard
   repeated bytes new_items = 1;
   required int32 idx = 2;
+}
+
+message Category {
+  required bytes content = 1;
+}
+
+message Region {
+  required bytes content = 1;
 }

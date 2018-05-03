@@ -19,7 +19,7 @@
 #include "scheduler/serial_scheduler.h"
 #include "scheduler/deterministic_scheduler.h"
 #include "sequencer/sequencer.h"
-#include "proto/tpcc_args.pb.h"
+#include "proto/args.pb.h"
 
 //#define HOT 100
 
@@ -138,11 +138,8 @@ class TClient : public Client {
 };
 
 class RClient : public Client {
-  int update_rate;
-  int read_rate;
-  int delivery_rate=4;      
   //std::tr1::unordered_map<string, vector<float>> transition_map;
-  vector<int> chances;
+  vector<float> chances;
   
   private:
     std::vector<std::string> split(const std::string& s, char delimiter)
@@ -228,8 +225,9 @@ class RClient : public Client {
             chances[l] += accum;
             accum = chances[l]; 
         }
-        //for(uint l = 0; l < chances.size(); ++l)
-        //    std::cout<<l<<": "<<chances[l]/(float)TIMES<<std::endl;
+        for(uint l = 0; l < chances.size(); ++l){
+            chances[l] /= (float)TIMES;
+        }
     }
 
     // TODO: To make it work
@@ -240,8 +238,6 @@ class RClient : public Client {
   public:
   RClient(Configuration* config, double mp, int ur) : config_(config), percent_mp_(mp*100) {
       LoadTransition();
-      update_rate = ur-delivery_rate;
-      read_rate = 100-ur;
   }
 
   
@@ -251,12 +247,13 @@ class RClient : public Client {
     *txn = new TxnProto();
 
     // New order txn
-    float random_prob = rand() / RAND_MAX;
+    float random_prob = ((float)rand()) / RAND_MAX;
     
     uint i = 0;
     while(i < chances.size()){
         if(chances[i] >= random_prob)
         {
+            //LOG(-1, random_prob<<" smaller than "<<chances[i]<<", i is "<<i);
             if(CanMP(i)){
                 if (rand() % 10000 < percent_mp_)
                     (*txn)->set_multipartition(true);
@@ -392,7 +389,7 @@ int main(int argc, char** argv) {
       scheduler = new DeterministicScheduler(&config,
                                           scheduler_connection,
                                            storage,
-                                           new RUBIS(), sequencer.GetTxnsQueue(), client, queue_mode);
+                                           new RUBIS(&config), sequencer.GetTxnsQueue(), client, queue_mode);
   }
   else{
       scheduler = new DeterministicScheduler(&config,

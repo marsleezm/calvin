@@ -46,7 +46,7 @@ class Client;
 class DeterministicScheduler : public Scheduler {
  public:
   DeterministicScheduler(Configuration* conf, Connection* batch_connection, Storage* storage,
-		  const Application* application, AtomicQueue<TxnProto*>* input_queue, Client* client, int queue_mode);
+		  Application* application, AtomicQueue<TxnProto*>* input_queue, Client* client, int queue_mode);
   virtual ~DeterministicScheduler();
 
  private:
@@ -90,7 +90,7 @@ class DeterministicScheduler : public Scheduler {
   Storage* storage_;
   
   // Application currently being run.
-  const Application* application_;
+  Application* application_;
 
   AtomicQueue<TxnProto*>* to_lock_txns;
 
