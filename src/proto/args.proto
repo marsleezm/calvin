@@ -12,6 +12,7 @@ message Args {
 
   optional int32 region_id = 15;
   optional int32 category_id = 16;
+  optional bytes item_key = 17;
 
   // This represents the total order line count for a new order and an array
   // of the quantity of item per supply warehouse

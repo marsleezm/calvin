@@ -28,6 +28,8 @@
 #define PERCENT_RESERVED_PRICE 40
 #define PERCENT_BUY_NOW 10
 #define MAX_QUANTITY 10
+#define MAX_SELLING 10
+#define MAX_BUYNOW 10
 #define MAX_BID 20
 
 #define MAX_COMMENT 20

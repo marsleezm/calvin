@@ -49,6 +49,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
   txn->set_seed(GetUTime());
   // We set the read and write set based on type
   string user_key, item_key, cat_key, reg_key;
+  int category_id;
   switch (txn_type) {
     // Initialize
     case HOME:
@@ -124,9 +125,11 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
         break;
     case STORE_BUY_NOW:
         item_key = select_item(config->this_node_id);
+        user_key = select_user(config->this_node_id);
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
         txn->add_read_write_set(item_key);
+        txn->add_read_write_set(user_key);
         break;
     case PUT_BID:
         item_key = select_item(config->this_node_id);
@@ -136,9 +139,11 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
         break;
     case STORE_BID:
         item_key = select_item(config->this_node_id);
+        user_key = select_user(config->this_node_id);
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
         txn->add_read_write_set(item_key);
+        txn->add_read_write_set(user_key);
         break;
     case PUT_COMMENT:
         item_key = select_item(config->this_node_id), user_key = select_user(config->this_node_id);
@@ -151,8 +156,8 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
         item_key = select_item(config->this_node_id), user_key = select_user(config->this_node_id);
         txn->add_readers(config->this_node_id);
         txn->add_writers(config->this_node_id);
-        txn->add_read_set(item_key);
         txn->add_read_set(user_key);
+        txn->add_read_set(item_key);
         break;
     case SELECT_CATEGORY_TO_SELL_ITEM:
         txn->add_readers(config->this_node_id);
@@ -166,7 +171,13 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
         txn->add_writers(config->this_node_id);
         item_key = to_string(config->this_node_id)+"_item_"+to_string(rand()%NUM_ACTIVE_ITEMS+new_item_id);
         ++new_item_id;
-        txn->add_read_write_set(item_key); 
+		category_id = rand()%NUM_CATEGORIES;
+		//region_id = rand()%NUM_REGIONS;
+		rubis_args->set_item_key(item_key);
+		rubis_args->set_category_id(category_id);
+		//rubis_args->set_region_id(region_id);
+		user_key = select_user(config->this_node_id);	
+        txn->add_read_write_set(user_key); 
         txn->add_read_write_set(to_string(config->this_node_id)+"_regnew_"+to_string(rand()%NUM_REGIONS)); 
         txn->add_read_write_set(to_string(config->this_node_id)+"_catnew_"+to_string(rand()%NUM_CATEGORIES)); 
         break;
@@ -191,7 +202,7 @@ void RUBIS::NewTxn(int64 txn_id, int txn_type,
 // The execute function takes a single transaction proto and executes it based
 // on what the type of the transaction is.
 int RUBIS::Execute(TxnProto* txn, StorageManager* storage) {
-    //LOG(-1, " before executing");
+    LOG(txn->txn_id(), " before executing "<<txn->txn_type());
     switch(txn->txn_type()){
         case HOME:
             return HomeTransaction(storage);
@@ -234,12 +245,13 @@ int RUBIS::Execute(TxnProto* txn, StorageManager* storage) {
         default:
             return FAILURE;
     }
-    //LOG(-1, " after executing");
+    LOG(-1, " after executing");
 }
 
 
 int RUBIS::HomeTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+	LOG(txn->txn_id(), " Home "<<txn->read_set(0));
     Key key = txn->read_set(0);
     int read_state;
     Value* v = storage->ReadObject(key, read_state);
@@ -258,7 +270,11 @@ int RUBIS::RegisterUserTransaction(StorageManager* storage) const{
     user.set_nick_name(name);
     user.set_email(name);
     user.set_password(name);
-    LOG(txn->txn_id(), " reg id is "<<rubis_args->region_id());
+    LOG(txn->txn_id(), " RegisterUser:"<<name<<" to region "<<rubis_args->region_id());
+    user.set_num_comments(0);
+    user.set_buynow_idx(0);
+    user.set_bid_idx(0);
+    user.set_selling_idx(0);
     user.set_region_name(to_string(conf->this_node_id)+"_region_"+to_string(rubis_args->region_id()));
     Value* value = new Value();
     assert(user.SerializeToString(value));
@@ -268,6 +284,7 @@ int RUBIS::RegisterUserTransaction(StorageManager* storage) const{
 
 int RUBIS::BrowseCategoriesTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+    LOG(txn->txn_id(), " BrowseCategories");
     int read_state;
     for(int i = 0; i <txn->read_set_size(); ++i){
         Value* value = storage->ReadObject(txn->read_set(i), read_state);
@@ -281,6 +298,7 @@ int RUBIS::SearchItemsInCategoryTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
     int read_state;
     Value* value = storage->ReadObject(txn->read_set(0), read_state);
+    LOG(txn->txn_id(), " SearchItemsInCategory");
     CategoryNewItems cat_new;
     ASSERT(cat_new.ParseFromString(*value));
     if(cat_new.new_items_size() == 0)
@@ -296,6 +314,7 @@ int RUBIS::SearchItemsInCategoryTransaction(StorageManager* storage) const{
 
 int RUBIS::BrowseRegionsTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+    LOG(txn->txn_id(), " BrowseRegions");
     int read_state;
     for(int i = 0; i <txn->read_set_size(); ++i){
         Value* value = storage->ReadObject(txn->read_set(i), read_state);
@@ -307,6 +326,7 @@ int RUBIS::BrowseRegionsTransaction(StorageManager* storage) const{
 
 int RUBIS::BrowseCategoriesInRegionTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+    LOG(txn->txn_id(), " BrowseCategories");
     int read_state;
     for(int i = 0; i <txn->read_set_size(); ++i){
         Value* value = storage->ReadObject(txn->read_set(i), read_state);
@@ -320,7 +340,7 @@ int RUBIS::BrowseCategoriesInRegionTransaction(StorageManager* storage) const{
 int RUBIS::SearchItemsInRegionTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
     int read_state;
-    LOG(txn->txn_id(), " search item "<<txn->read_set(0));
+    LOG(txn->txn_id(), " SearchItemsInRegion");
     Value* value = storage->ReadObject(txn->read_set(0), read_state);
     RegionNewItems reg_new;
     ASSERT(reg_new.ParseFromString(*value));
@@ -340,17 +360,17 @@ int RUBIS::ViewItemTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
     int read_state;
     Value* value = storage->ReadObject(txn->read_set(0), read_state);
-    LOG(txn->txn_id(), " view item, reading "<<txn->read_set(0)<<", addr is "<<reinterpret_cast<int64>(value));
+    LOG(txn->txn_id(), " ViewItem, reading "<<txn->read_set(0)<<", addr is "<<reinterpret_cast<int64>(value));
     RItem item;
     ASSERT(item.ParseFromString(*value));
     User user;
     value = storage->ReadObject(item.seller_id(), read_state);
-    LOG(txn->txn_id(), ", seller "<<item.seller_id()<<", bids num is "<<item.bid_ids_size());
     ASSERT(user.ParseFromString(*value));
-    for(int i = 0; i < item.bid_ids_size(); ++i){
+	string bid_key = txn->read_set(0);
+	bid_key.replace(bid_key.find('i'), 4, "bid")+"_";
+    for(int i = max(0, item.bid_num()-MAX_BID); i < item.bid_num(); ++i){
         Bid bid;
-        LOG(txn->txn_id(), " getting bid "<<item.bid_ids(i)); 
-        value = storage->ReadObject(item.bid_ids(i), read_state);
+        value = storage->ReadObject(bid_key+to_string(i), read_state);
         ASSERT(bid.ParseFromString(*value));
     }
     return SUCCESS;
@@ -361,31 +381,186 @@ int RUBIS::ViewUserInfoTransaction(StorageManager* storage) const{
     int read_state;
     Value* value = storage->ReadObject(txn->read_set(0), read_state);
     User user;
+	LOG(txn->txn_id(), " ViewUserInfo: "<<txn->read_set(0));
     ASSERT(user.ParseFromString(*value));
+
+	int idx = txn->read_set(0).find('_');
+	string seller_node = txn->read_set(0).substr(0, idx),
+	rest_str = txn->read_set(0).substr(idx+1, txn->read_set(0).size()-idx-1);
+	int second_idx = rest_str.find('_');
+	string comment_str = seller_node+"_comment_"+rest_str.substr(second_idx+1, rest_str.size()-second_idx-1)+"_";
+
+	for(int i = max(0, user.num_comments()-MAX_COMMENT); i < user.num_comments(); ++i){
+		string comment_key = comment_str+to_string(i);
+    	value = storage->ReadObject(comment_key, read_state);
+		Comment comment;
+		ASSERT(comment.ParseFromString(*value));
+	}
     return SUCCESS;
 }
 
 int RUBIS::ViewBidHistoryTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+	RItem item;
+    ASSERT(item.ParseFromString(*value));
+	LOG(txn->txn_id(), " ViewBidHistory: "<<txn->read_set(0)<<", num bids "<<item.bid_num());
+	string bid_key = txn->read_set(0);
+	bid_key.replace(bid_key.find('i'), 4, "bid")+"_";
+    for(int i = max(0, item.bid_num()-MAX_BID); i < item.bid_num(); ++i){
+        Bid bid;
+        value = storage->ReadObject(bid_key+to_string(i), read_state);
+        ASSERT(bid.ParseFromString(*value));
+    }
     return SUCCESS;
 }
 
 int RUBIS::BuyNowTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+	RItem item;
+    ASSERT(item.ParseFromString(*value));
+	LOG(txn->txn_id(), " BuyNow: "<<txn->read_set(0)<<", seller is "<<item.seller_id());
+
+	User user;
+	value = storage->ReadObject(item.seller_id(), read_state);
+	ASSERT(user.ParseFromString(*value));
     return SUCCESS;
 }
 
 int RUBIS::StoreBuyNowTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* item_value = storage->ReadObject(txn->read_write_set(0), read_state), *buyer_value, *buynow_value;
+	RItem item;
+    ASSERT(item.ParseFromString(*item_value));
+	LOG(txn->txn_id(), " StoreBuyNow: "<<txn->read_write_set(0)<<", seller is "<<item.seller_id()<<", buyer is "<<txn->read_write_set(1));
+	if(item.qty() == 0)
+		return SUCCESS;
+	else{
+   		buyer_value = storage->ReadObject(txn->read_write_set(1), read_state);
+		User buyer;
+    	ASSERT(buyer.ParseFromString(*buyer_value));
+
+		int idx = txn->read_write_set(0).find('_');
+		string seller_node = txn->read_write_set(0).substr(0, idx),
+		rest_str = txn->read_write_set(0).substr(idx+1, txn->read_write_set(0).size()-idx-1);
+		int second_idx = rest_str.find('_');
+		string item_idx = rest_str.substr(second_idx+1, rest_str.size()-second_idx-1);
+		string buynow_key = seller_node+"_buynow_"+item_idx+"_"+to_string(item.buynow_num());
+		item.set_buynow_num(item.buynow_num()+1);
+	
+		int to_buy = rand()%item.qty() + 1;
+		item.set_qty(item.qty() - to_buy);
+		BuyNow buynow;
+		buynow.set_buyer_id(txn->read_write_set(1));
+		buynow.set_qty(to_buy);
+		buynow.set_item_id(txn->read_write_set(0));
+		buynow.set_date(GetUTime());
+		LOG(txn->txn_id(), " buynow is"<<buynow_key<<", tobuy "<<to_buy<<", total is "<<to_buy+item.qty());
+	
+		if(buyer.buynows_size() == MAX_BUYNOW)
+			buyer.set_buynows(buyer.buynow_idx(), buynow_key);
+		else
+			buyer.add_buynows(buynow_key);
+		buyer.set_buynow_idx((buyer.buynow_idx()+1)%MAX_BUYNOW);
+		LOG(txn->txn_id(), " buyer's idx "<<buyer.buynow_idx());
+
+		buynow_value = new Value();
+		ASSERT(item.SerializeToString(item_value));
+		ASSERT(buyer.SerializeToString(buyer_value));
+		ASSERT(buynow.SerializeToString(buynow_value));
+		storage->PutObject(txn->read_write_set(0), item_value);
+		storage->PutObject(txn->read_write_set(1), buyer_value);
+		storage->PutObject(buynow_key, buynow_value);
+	}
+
     return SUCCESS;
 }
 
 int RUBIS::PutBidTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+	RItem item;
+    ASSERT(item.ParseFromString(*value));
+	LOG(txn->txn_id(), " BuyNow: "<<txn->read_set(0)<<", seller is "<<item.seller_id());
+
+	User user;
+	value = storage->ReadObject(item.seller_id(), read_state);
+	ASSERT(user.ParseFromString(*value));
     return SUCCESS;
 }
 
 int RUBIS::StoreBidTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* item_value = storage->ReadObject(txn->read_write_set(0), read_state), *buyer_value, *bid_value;
+	RItem item;
+    ASSERT(item.ParseFromString(*item_value));
+	LOG(txn->txn_id(), " StoreBuyNow: "<<txn->read_write_set(0)<<", seller is "<<item.seller_id()<<", buyer is "<<txn->read_write_set(1));
+	if(item.qty() == 0)
+		return SUCCESS;
+	else{
+   		buyer_value = storage->ReadObject(txn->read_write_set(1), read_state);
+		User buyer;
+    	ASSERT(buyer.ParseFromString(*buyer_value));
+
+		int to_buy = rand()%item.qty() + 1;
+		int add_bid = rand()%100, mybid = add_bid, maxbid = 2*add_bid;
+		Bid bid;
+		bid.set_user_id(txn->read_write_set(1));
+		bid.set_item_id(txn->read_write_set(0));
+		bid.set_bid(mybid);
+		bid.set_max_bid(maxbid);
+		bid.set_qty(to_buy);
+		bid.set_date(GetUTime());
+
+		int idx = txn->read_write_set(0).find('_');
+		string seller_node = txn->read_write_set(0).substr(0, idx),
+		rest_str = txn->read_write_set(0).substr(idx+1, txn->read_write_set(0).size()-idx-1);
+		int second_idx = rest_str.find('_');
+		string item_idx = rest_str.substr(second_idx+1, rest_str.size()-second_idx-1);
+		string bid_key = seller_node+"_bid_"+item_idx+"_"+to_string(item.bid_num());
+
+		if(maxbid > item.max_bid())
+			item.set_max_bid(maxbid);
+		item.set_bid_num(item.bid_num()+1);
+	
+		LOG(txn->txn_id(), " bid is"<<bid_key<<", tobuy "<<to_buy<<", total is "<<to_buy+item.qty());
+	
+		if(buyer.bids_size() == MAX_BUYNOW)
+			buyer.set_bids(buyer.bid_idx(), bid_key);
+		else
+			buyer.add_bids(bid_key);
+		buyer.set_bid_idx((buyer.bid_idx()+1)%MAX_BID);
+		LOG(txn->txn_id(), " buyer's idx "<<buyer.bid_idx());
+
+		bid_value = new Value();
+		ASSERT(item.SerializeToString(item_value));
+		ASSERT(buyer.SerializeToString(buyer_value));
+		ASSERT(bid.SerializeToString(bid_value));
+		storage->PutObject(txn->read_write_set(0), item_value);
+		storage->PutObject(txn->read_write_set(1), buyer_value);
+		storage->PutObject(bid_key, bid_value);
+	}
+
     return SUCCESS;
 }
 
 int RUBIS::PutCommentTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+    int read_state;
+    Value* value = storage->ReadObject(txn->read_set(0), read_state);
+	RItem item;
+    ASSERT(item.ParseFromString(*value));
+	LOG(txn->txn_id(), " PutComment: "<<txn->read_set(0)<<", seller is "<<item.seller_id());
+
+	User user;
+	value = storage->ReadObject(txn->read_set(1), read_state);
+	ASSERT(user.ParseFromString(*value));
     return SUCCESS;
 }
 
@@ -394,6 +569,7 @@ int RUBIS::StoreCommentTransaction(StorageManager* storage) const{
     int read_state;
     Value* value = storage->ReadObject(txn->read_set(0), read_state);
     User from_user;
+	LOG(txn->txn_id(), " StoreComment"<<txn->read_set(0));
     ASSERT(from_user.ParseFromString(*value));
 
     value = storage->ReadObject(txn->read_set(1), read_state);
@@ -423,15 +599,17 @@ int RUBIS::StoreCommentTransaction(StorageManager* storage) const{
     to_user.set_num_comments(to_user.num_comments()+1);
     to_user.set_rating(to_user.rating()+rating);
     ASSERT(to_user.SerializeToString(to_user_value));
+    storage->PutObject(item.seller_id(), to_user_value);
+
     Value* comment_v = new Value();
     ASSERT(comment.SerializeToString(comment_v));
-    storage->PutObject(item.seller_id(), to_user_value);
     storage->PutObject(comment_key, comment_v);
     return SUCCESS;
 }
 
 int RUBIS::SelectCategoryToSellItemTransaction(StorageManager* storage) const{
     TxnProto* txn = storage->get_txn();
+	LOG(txn->txn_id(), " SelectCategory");
     int read_state;
     for(int i = 0; i <txn->read_set_size(); ++i){
         Value* value = storage->ReadObject(txn->read_set(i), read_state);
@@ -442,10 +620,100 @@ int RUBIS::SelectCategoryToSellItemTransaction(StorageManager* storage) const{
 }
 
 int RUBIS::RegisterItemTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+	Args* args = storage->get_args();
+	LOG(txn->txn_id(), " RegisterItem");
+    int read_state;
+
+	int init_price = rand()%5000+1;
+    int reserve_price = 0, buynow = 0, duration, quantity;
+	int64 start_date, end_date;
+	if (rand()%100 < PERCENT_RESERVED_PRICE)
+		reserve_price = rand()%1000 + init_price;
+
+    if (rand()%100 < PERCENT_BUY_NOW)
+	  	buynow = rand()%1000 + init_price + reserve_price;
+
+    duration = rand()% MAX_DURATION;
+	
+    if (rand()%100 < PERCENT_UNIQUE_ITEMS) 
+		quantity = 1;
+	else
+		quantity = MAX_QUANTITY;
+
+    start_date = GetUTime();
+    end_date = start_date + duration;
+
+	string item_name = args->item_key(), user_name = txn->read_write_set(0);
+	int32 category_id = args->category_id();
+	RItem item;
+	item.set_name(item_name);
+	item.set_description("don't buy it!");
+	item.set_qty(quantity);
+	item.set_init_price(init_price);
+	item.set_reserve_price(reserve_price);
+	item.set_buy_now(buynow);
+	item.set_buynow_num(0);
+	item.set_bid_num(0);
+	item.set_max_bid(0);
+	item.set_start_date(start_date);
+	item.set_end_date(end_date);
+	item.set_seller_id(user_name);
+	item.set_category_id(category_id);
+
+	Value* item_value = new Value();
+	assert(item.SerializeToString(item_value));
+	storage->PutObject(item_name, item_value);
+
+	Value* regnewitems_value, *catnewitems_value, *user_value;
+	User user;
+	user_value = storage->ReadObject(txn->read_write_set(0), read_state);
+	assert(user.ParseFromString(*user_value));
+	if(user.sellings_size() >= MAX_SELLING)
+		user.set_sellings(user.selling_idx(), item_name);
+	else
+		user.add_sellings(item_name);
+	user.set_selling_idx((user.selling_idx()+1)%MAX_SELLING);
+	assert(user.SerializeToString(user_value));
+	storage->PutObject(txn->read_write_set(0), user_value);
+
+	string regnewitems_key = txn->read_write_set(1), catnewitems_key = txn->read_write_set(2); 
+	regnewitems_value = storage->ReadObject(regnewitems_key, read_state);
+	RegionNewItems regnewitems;
+	assert(regnewitems.ParseFromString(*regnewitems_value));
+	if(regnewitems.new_items_size() >= MAX_NEW_ITEMS)
+		regnewitems.set_new_items(regnewitems.idx(), item_name);
+	else
+		regnewitems.add_new_items(item_name);
+	regnewitems.set_idx((regnewitems.idx()+1)%MAX_NEW_ITEMS);
+	assert(regnewitems.SerializeToString(regnewitems_value));
+	storage->PutObject(txn->read_write_set(1), regnewitems_value);
+
+	catnewitems_value = storage->ReadObject(catnewitems_key, read_state);
+	CategoryNewItems catnewitems;
+	assert(catnewitems.ParseFromString(*catnewitems_value));
+	if(catnewitems.new_items_size() >= MAX_NEW_ITEMS)
+		catnewitems.set_new_items(catnewitems.idx(), item_name);
+	else
+		catnewitems.add_new_items(item_name);
+	catnewitems.set_idx((catnewitems.idx()+1)%MAX_NEW_ITEMS);
+	assert(catnewitems.SerializeToString(catnewitems_value));
+	storage->PutObject(txn->read_write_set(1), catnewitems_value);
+		
     return SUCCESS;
 }
 
 int RUBIS::AboutMeTransaction(StorageManager* storage) const{
+    TxnProto* txn = storage->get_txn();
+	Args* args = storage->get_args();
+	LOG(txn->txn_id(), " AboutMe");
+    int read_state;
+
+	User user;
+	Value* user_value = storage->ReadObject(txn->read_set(0), read_state);
+	assert(user.ParseFromString(*user_value));
+	
+
     return SUCCESS;
 }
 
@@ -1368,6 +1636,9 @@ void RUBIS::PopulateUsers(Storage* storage, int node_id) const {
         user.set_email(name);
         user.set_password(name);
         user.set_num_comments(0);
+		user.set_buynow_idx(0);
+		user.set_bid_idx(0);
+		user.set_selling_idx(0);
         user.set_region_name(to_string(node_id)+"_region_"+to_string(i%NUM_REGIONS));
         Value* value = new Value();
         assert(user.SerializeToString(value));
@@ -1411,7 +1682,7 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
                 buy_now = rand()%1000+init_price+reserve_price;
             else
                 buy_now = 0;
-            if (i < PERCENT_UNIQUE_ITEMS*num_active_items/100)
+            if ((i-num_old_items) < PERCENT_UNIQUE_ITEMS*num_active_items/100)
                 quantity = 1;
             else
                 quantity = rand()%MAX_QUANTITY+1; 
@@ -1442,8 +1713,8 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
             value = new Value();
             assert(bid.SerializeToString(value));
             storage->PutObject(bid_name, value);
-            item.add_bid_ids(bid_name);
-            LOG(0, " putting "<<bid_name);
+            item.set_bid_num(item.bid_num()+1);
+            //LOG(0, " putting "<<bid_name);
         }
 
         int rating = rand()%5;
@@ -1495,17 +1766,18 @@ void RUBIS::PopulateItems(Storage* storage, int node_id, vector<int> items_categ
         item.set_init_price(init_price);
         item.set_reserve_price(reserve_price);
         item.set_buy_now(buy_now);
-        item.set_nb_of_bids(0);
+        item.set_buynow_num(0);
+        item.set_bid_num(0);
         item.set_max_bid(0);
         item.set_start_date(now);
         item.set_end_date(now+duration);
         item.set_seller_id(user);
-        item.set_category(categoryId);
+        item.set_category_id(categoryId);
 
         value = new Value();
         assert(item.SerializeToString(value));
         storage->PutObject(item_id, value);
-        LOG(0, " putting "<<item_id);
+        //LOG(0, " putting "<<item_id);
     }
 }
 

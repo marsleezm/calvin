@@ -109,8 +109,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	//if (i == 0 || i == 1)
 	CPU_SET(4, &cpuset);
 	std::cout << "Worker thread starts at core 4"<<std::endl;
-		//else
-		//CPU_SET(i+2, &cpuset);
 	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,

@@ -16,8 +16,11 @@ message User{
   optional int32 balance = 8;
   repeated bytes bids = 9;
   repeated bytes sellings = 10;
-  repeated bytes bought = 11;
+  repeated bytes buynows = 11;
   required int32 num_comments = 12;
+  required int32 buynow_idx = 13;
+  required int32 bid_idx = 14;
+  required int32 selling_idx = 15;
 }
 
 message Bid{
@@ -28,6 +31,14 @@ message Bid{
   required int32 bid = 4;
   required int32 max_bid = 5;
   required int64 date = 6;
+}
+
+message BuyNow{
+  // The following are informational fields as defined in TPC-C standard
+  required bytes buyer_id = 1;
+  required bytes item_id = 2;
+  required int32 qty = 3;
+  required int64 date = 4;
 }
 
 message Comment {
@@ -47,13 +58,13 @@ message RItem {
   required int32 init_price = 4;
   required int32 reserve_price = 5;
   required int32 buy_now = 6;
-  required int32 nb_of_bids = 7;
+  required int32 bid_num = 7;
   required int32 max_bid = 8;
   required int64 start_date = 9;
   required int64 end_date = 10;
   required bytes seller_id = 11;
-  required int32 category = 12;
-  repeated bytes bid_ids = 13;
+  required int32 category_id = 12;
+  required int32 buynow_num = 13;
 }
 
 message CategoryNewItems {
