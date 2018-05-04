@@ -83,14 +83,21 @@ class RUBIS : public Application {
   // Simple execution of a transaction using a given storage
   virtual int Execute(TxnProto* txn, StorageManager* storage);
     // TODO: a hack to select items & users. New items have higher probability to be selected. 
+
   string select_user(int this_node) const {
-      return to_string(this_node)+"_user_"+to_string(rand()%(NUM_USERS+new_user_id)); 
+	  int oldest_90 = 0.9*(NUM_USERS+new_user_id);
+	  if(rand()%100 < 90)
+      	  return to_string(this_node)+"_user_"+to_string(oldest_90+ rand()%(NUM_USERS+new_user_id-oldest_90)); 
+	  else
+      	  return to_string(this_node)+"_user_"+to_string(rand()%(oldest_90)); 
   }
+
   string select_item(int this_node) const {
-      if(rand() % 100 < 20)
-          return to_string(this_node)+"_item_"+to_string(rand()%(NUM_OLD_ITEMS));
-      else
-          return to_string(this_node)+"_item_"+to_string(rand()%(NUM_ACTIVE_ITEMS+new_item_id)); 
+	  int oldest_90 = 0.9*(NUM_OLD_ITEMS+NUM_ACTIVE_ITEMS+new_item_id);
+	  if(rand()%100 < 90)
+      	  return to_string(this_node)+"_item_"+to_string(oldest_90+ rand()%(NUM_OLD_ITEMS+NUM_ACTIVE_ITEMS+new_item_id-oldest_90)); 
+	  else
+      	  return to_string(this_node)+"_item_"+to_string(rand()%(oldest_90)); 
   }
 
   int HomeTransaction(StorageManager* storage) const;
