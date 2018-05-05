@@ -43,7 +43,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
               remote_node == config->this_node_id);
 
      do {
-        remote_warehouse_id = rand() % (WAREHOUSES_PER_NODE *
+        remote_warehouse_id = rand() % (num_warehouses *
                                         config->all_nodes.size());
      } while (config->all_nodes.size() > 1 &&
            config->LookupPartition(remote_warehouse_id) !=
@@ -77,7 +77,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 		txn->add_writers(config->this_node_id);
 
       // First, we pick a local warehouse
-        warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+        warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
         snprintf(warehouse_key, sizeof(warehouse_key), "w%d",
                  warehouse_id);
 
@@ -154,7 +154,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
                             4999.0 + 1);
 
 		// First, we pick a local warehouse
-		warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+		warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
 		snprintf(warehouse_key, sizeof(warehouse_key), "w%dy", warehouse_id);
 		txn->add_read_write_set(warehouse_key);
 
@@ -171,7 +171,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 		txn->add_write_set(history_key);
 
 		// Next, we find the customer as a local one
-		if (WAREHOUSES_PER_NODE * config->all_nodes.size() == 1 || !mp) {
+		if (num_warehouses * config->all_nodes.size() == 1 || !mp) {
 			customer_id = rand() % CUSTOMERS_PER_DISTRICT;
 			snprintf(customer_key, sizeof(customer_key),
                  "w%dd%dc%d",
@@ -215,7 +215,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
     	 string district_string;
     	 //int customer_order_line_number;
 
-    	 warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+    	 warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%dy",
     		   warehouse_id);
     	 district_id = rand() % DISTRICTS_PER_WAREHOUSE;
@@ -239,7 +239,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
      case STOCK_LEVEL:
      {
     	 //LOG(txn->txn_id(), " populating stock level");
-    	 warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+    	 warehouse_id = (rand() % num_warehouses)* config->all_nodes.size() + config->this_node_id;
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
 
     	 // Next, we pick a random district
@@ -258,7 +258,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
      case DELIVERY :
      {
     	 //(txn->txn_id(), " populating delivery");
-         warehouse_id = (rand() % WAREHOUSES_PER_NODE) * config->all_nodes.size() + config->this_node_id;
+         warehouse_id = (rand() % num_warehouses)* config->all_nodes.size() + config->this_node_id;
          snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
          txn->add_read_set(warehouse_key);
          //char order_line_key[128];
@@ -796,7 +796,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 void TPCC::InitializeStorage(Storage* storage, Configuration* conf) {
   // We create and write out all of the warehouses
 	std::cout<<"Start populating TPC-C data"<<std::endl;
-  for (int i = 0; i < (int)(WAREHOUSES_PER_NODE * conf->all_nodes.size()); i++) {
+  for (int i = 0; i < (int)(num_warehouses * conf->all_nodes.size()); i++) {
     // First, we create a key for the warehouse
     char warehouse_key[128], warehouse_key_ytd[128];
     Value* warehouse_value = new Value();

@@ -83,21 +83,9 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
     Spin(2);
 
+    txns_queue = new AtomicQueue<TxnProto*>();
   // start lock manager thread
     cpu_set_t cpuset;
-    pthread_attr_t attr1;
-    pthread_attr_init(&attr1);
-  //pthread_attr_setdetachstate(&attr1, PTHREAD_CREATE_DETACHED);
-  
-//    CPU_ZERO(&cpuset);
-//    CPU_SET(3, &cpuset);
-//    std::cout << "Central locking thread starts at 3"<<std::endl;
-//    pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
-//    pthread_create(&lock_manager_thread_, &attr1, LockManagerThread,
-//                 reinterpret_cast<void*>(this));
-
-
-    //  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
     // Start all worker threads.
     string channel("scheduler");
@@ -106,14 +94,21 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	CPU_ZERO(&cpuset);
-	//if (i == 0 || i == 1)
-	CPU_SET(4, &cpuset);
+	CPU_SET(3+conf->this_node_id*5, &cpuset);
 	std::cout << "Worker thread starts at core 4"<<std::endl;
-		//else
-		//CPU_SET(i+2, &cpuset);
 	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,
+					   reinterpret_cast<void*>(this));
+
+    pthread_attr_t attr1;
+    pthread_attr_init(&attr1);
+	CPU_ZERO(&cpuset);
+	CPU_SET(4+conf->this_node_id*5, &cpuset);
+	std::cout << "Unpacking thread starts at core 5"<<std::endl;
+	pthread_attr_setaffinity_np(&attr1, sizeof(cpu_set_t), &cpuset);
+
+	pthread_create(&unpacking_thread_, &attr1, RunUnpackingThread,
 					   reinterpret_cast<void*>(this));
 
 }
@@ -154,6 +149,68 @@ MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicSchedu
   }
 }
 
+void* DeterministicScheduler::RunUnpackingThread(void* arg) {
+  	DeterministicScheduler* scheduler =
+      	reinterpret_cast<DeterministicScheduler*>(arg);
+
+	MessageProto message;
+	MessageProto* batch_message = NULL;
+	double time = GetTime();
+	int batch_offset = 0;
+	int batch_number = 0;
+	int second = 0;
+	int abort_number = 0;
+	int last_committed = 0, now_committed = 0;
+
+  	while (!scheduler->deconstructor_invoked_) {
+  		if (batch_message == NULL) {
+			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
+		} else if (batch_offset >= batch_message->data_size()) {
+			batch_offset = 0;
+			batch_number++;
+			delete batch_message;
+			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
+		}
+
+		// Current batch has remaining txns, grab up to 10.
+		if (scheduler->txns_queue->Size() < 2000 && batch_message) {
+			for (int i = 0; i < 200; i++) {
+				if (batch_offset >= batch_message->data_size())
+					break;
+				TxnProto* txn = new TxnProto();
+				txn->ParseFromString(batch_message->data(batch_offset));
+				//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+				if (txn->start_time() == 0){
+					int64 now_time = GetUTime();
+					txn->set_start_time(now_time);
+				}
+				batch_offset++;
+				scheduler->txns_queue->Push(txn);
+			}
+		}
+
+		// Report throughput.
+		if (GetTime() > time + 1) {
+			now_committed = scheduler->committed;
+			double total_time = GetTime() - time;
+			std::cout << "Completed " << (static_cast<double>(now_committed-last_committed) / total_time)
+				<< " txns/sec, "
+				<< abort_number<< " transaction restart, "
+				<< second << "  second \n"
+				<< std::flush;
+
+			// Reset txn count.
+			scheduler->throughput[second] = (static_cast<double>(now_committed-last_committed) / total_time);
+			scheduler->abort[second] = abort_number/total_time;
+			time = GetTime();
+			last_committed = now_committed;
+			abort_number = 0;
+			second++;
+		}
+  }
+  return NULL;
+}
+
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	DeterministicScheduler* scheduler =
       	reinterpret_cast<DeterministicScheduler*>(arg);
@@ -163,21 +220,13 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	StorageManager* manager;
   	TxnProto* txn = NULL;
   	map<int64, MessageProto> buffered_messages;
-    AtomicQueue<TxnProto*>* txns_queue = new AtomicQueue<TxnProto*>();;
 
 	MessageProto message;
-	MessageProto* batch_message = NULL;
-	double time = GetTime();
-	int batch_offset = 0;
-	int batch_number = 0;
-	int second = 0;
-	int abort_number = 0;
 	int sample_count = 0;
-	int last_committed = 0, now_committed = 0, pending_txns= 0;
 
   	while (!scheduler->deconstructor_invoked_) {
   		if (txn == NULL){
-  			if(txns_queue->Pop(&txn)){
+  			if(scheduler->txns_queue->Pop(&txn)){
 			  // No remote read result found, start on next txn if one is waiting.
 			  // Create manager.
   				manager = new StorageManager(scheduler->configuration_,
@@ -198,7 +247,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					}
 					delete manager;
 					txn = NULL;
-					--pending_txns;
 				}
   			}
   		}
@@ -221,7 +269,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   				}
   				delete manager;
   				txn = NULL;
-  				--pending_txns;
   			}
   		}
   		else if (scheduler->message_queue->Pop(&message)){
@@ -232,6 +279,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   		}
 
 
+        /*
   		if (batch_message == NULL) {
 			batch_message = GetBatch(batch_number, scheduler->batch_connection_, scheduler);
 		} else if (batch_offset >= batch_message->data_size()) {
@@ -277,6 +325,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			abort_number = 0;
 			second++;
 		}
+        */
   }
   return NULL;
 }
@@ -284,6 +333,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 DeterministicScheduler::~DeterministicScheduler() {
 	deconstructor_invoked_ = true;
 	pthread_join(worker_thread_, NULL);
+	pthread_join(unpacking_thread_, NULL);
 	delete thread_connection_;
 	//pthread_join(lock_manager_thread_, NULL);
 

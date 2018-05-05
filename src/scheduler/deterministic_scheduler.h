@@ -52,6 +52,7 @@ class DeterministicScheduler : public Scheduler {
  private:
   // Function for starting main loops in a separate pthreads.
   static void* RunWorkerThread(void* arg);
+  static void* RunUnpackingThread(void* arg);
   
   //static void* LockManagerThread(void* arg);
 
@@ -80,6 +81,7 @@ class DeterministicScheduler : public Scheduler {
 
   // Thread contexts and their associated Connection objects.
   pthread_t worker_thread_;
+  pthread_t unpacking_thread_;
   Connection* thread_connection_;
 
   //pthread_t lock_manager_thread_;
@@ -127,6 +129,7 @@ class DeterministicScheduler : public Scheduler {
   	  int latency_cnt = 0;
       double throughput[THROUGHPUT_SIZE];
       double abort[THROUGHPUT_SIZE];
+      AtomicQueue<TxnProto*>* txns_queue;
 
 };
 #endif  // _DB_SCHEDULER_DETERMINISTIC_SCHEDULER_H_

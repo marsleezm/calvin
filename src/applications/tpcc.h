@@ -15,11 +15,10 @@
 #include "proto/args.pb.h"
 #include "common/config_reader.h"
 
-#define WAREHOUSES_PER_NODE 12
 #define DISTRICTS_PER_WAREHOUSE 10
-#define DISTRICTS_PER_NODE (WAREHOUSES_PER_NODE * DISTRICTS_PER_WAREHOUSE)
+//#define districts_per_node (num_warehouses * DISTRICTS_PER_WAREHOUSE)
 #define CUSTOMERS_PER_DISTRICT 3000
-#define CUSTOMERS_PER_NODE (DISTRICTS_PER_NODE * CUSTOMERS_PER_DISTRICT)
+//#define customers_per_node (districts_per_node * CUSTOMERS_PER_DISTRICT)
 #define NUMBER_OF_ITEMS 100000
 
 using std::string;
@@ -51,42 +50,6 @@ class TPCC : public Application {
   virtual void NewTxn(int64 txn_id, int txn_type,
                            Configuration* config, TxnProto* txn) ;
 
-  // The key converter takes a valid key (string) and converts it to an id
-  // for the checkpoint to use
-  static int CheckpointID(Key key) {
-    // Initial dissection of the key
-    size_t id_idx;
-
-    // Switch based on key type
-    size_t bad = string::npos;
-    if ((id_idx = key.find("s")) != bad) {
-      size_t ware = key.find("w");
-      return 1000000 + NUMBER_OF_ITEMS * atoi(&key[ware + 1]) +
-             atoi(&key[id_idx + 2]);
-    } else if ((id_idx = key.find("c")) != bad) {
-      return WAREHOUSES_PER_NODE + DISTRICTS_PER_NODE + atoi(&key[id_idx + 1]);
-    } else if ((id_idx = key.find("d")) != bad && key.find("y") == bad) {
-      return WAREHOUSES_PER_NODE + atoi(&key[id_idx + 1]);
-    } else if ((id_idx = key.find("w")) != bad) {
-      return atoi(&key[id_idx + 1]);
-    } else if ((id_idx = key.find("i")) != bad) {
-      return 3000000 + atoi(&key[id_idx + 1]);
-    } else if ((id_idx = key.find("ol")) != bad) {
-      return 4000000 + atoi(&key[id_idx + 2]);
-    } else if ((id_idx = key.find("no")) != bad) {
-      return 5000000 + atoi(&key[id_idx + 2]);
-    } else if ((id_idx = key.find("o")) != bad) {
-      return 6000000 + atoi(&key[id_idx + 1]);
-    } else if ((id_idx = key.find("h")) != bad) {
-      return 7000000 + atoi(&key[id_idx + 1]);
-    } else if ((id_idx = key.find("ln")) != bad) {
-      return 8000000 + atoi(&key[id_idx + 2]);
-    }
-
-    // Invalid key
-    return -1;
-  }
-
   // Simple execution of a transaction using a given storage
   virtual int Execute(TxnProto* txn, StorageManager* storage);
 
@@ -96,6 +59,10 @@ class TPCC : public Application {
   // a set of fake data for use in the application
   virtual void InitializeStorage(Storage* storage, Configuration* conf);
 
+  int num_warehouses = atoi(ConfigReader::Value("num_warehouses").c_str());
+  int districts_per_node = num_warehouses*DISTRICTS_PER_WAREHOUSE;
+  int customers_per_node = districts_per_node * CUSTOMERS_PER_DISTRICT;
+  
   // The following methods are simple randomized initializers that provide us
   // fake data for our TPC-C function
   Warehouse* CreateWarehouse(Key id) const;

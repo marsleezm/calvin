@@ -80,7 +80,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	CPU_ZERO(&cpuset);
-	CPU_SET(1, &cpuset);
+	CPU_SET(1+conf->this_node_id*5, &cpuset);
 	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
 	std::cout << "Sequencer writer starts at core 1"<<std::endl;
 
@@ -91,7 +91,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 		  reinterpret_cast<void*>(this));
 
 	CPU_ZERO(&cpuset);
-	CPU_SET(2, &cpuset);
+	CPU_SET(2+conf->this_node_id*5, &cpuset);
 	pthread_attr_t attr_reader;
 	pthread_attr_init(&attr_reader);
 	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);

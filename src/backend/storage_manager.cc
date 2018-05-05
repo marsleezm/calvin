@@ -76,8 +76,6 @@ StorageManager::~StorageManager() {
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
 
-	read_set_.clear();
-
 	for (std::tr1::unordered_map<Key, Value*>::iterator it = remote_objects_.begin();
        it != remote_objects_.end(); ++it)
 	{
@@ -96,25 +94,19 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 	//LOG(txn_->txn_id(), "Trying to read key "<<key);
 	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
 		//LOG(txn_->txn_id(), "Trying to read local key "<<key);
-		if (read_set_.count(key) == 0){
-			Value* result = actual_storage_->ReadObject(key, txn_->txn_id());
-			while (result == NULL){
-				result = actual_storage_->ReadObject(key, txn_->txn_id());
-				LOG(txn_->txn_id(), " WTF, key is empty: "<<key);
-			}
-			read_set_[key] = result;
-			//LOG(txn_->txn_id(), " message is "<<message_);
-            if (message_){
-                LOG(txn_->txn_id(), "Adding to msg: "<<key);
-                message_->add_keys(key);
-                message_->add_values(result == NULL ? "" : *result);
-                message_has_value_ = true;
-            }
-			return result;
-		}
-		else{
-			return read_set_[key];
-		}
+        Value* result = actual_storage_->ReadObject(key, txn_->txn_id());
+        while (result == NULL){
+            result = actual_storage_->ReadObject(key, txn_->txn_id());
+            LOG(txn_->txn_id(), " WTF, key is empty: "<<key);
+        }
+        //LOG(txn_->txn_id(), " message is "<<message_);
+        if (message_){
+            LOG(txn_->txn_id(), "Adding to msg: "<<key);
+            message_->add_keys(key);
+            message_->add_values(result == NULL ? "" : *result);
+            message_has_value_ = true;
+        }
+        return result;
 	}
 	else // The key is not replicated locally, the writer should wait
 	{
