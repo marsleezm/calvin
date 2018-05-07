@@ -90,11 +90,12 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     string channel("scheduler");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
+    int exec_core = 2+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()); 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	CPU_ZERO(&cpuset);
-	CPU_SET(3+conf->this_node_id*5, &cpuset);
-	std::cout << "Worker thread starts at core 4"<<std::endl;
+	CPU_SET(exec_core, &cpuset);
+	std::cout << "Worker thread starts at core "<<exec_core<<std::endl;
 	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,
@@ -236,11 +237,12 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			if(scheduler->txns_queue->Pop(&txn)){
 			  // No remote read result found, start on next txn if one is waiting.
 			  // Create manager.
+  				LOG(txn->txn_id(), " started");
   				manager = new StorageManager(scheduler->configuration_,
 									scheduler->thread_connection_,
 									scheduler->storage_, txn);
 				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+					LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node){
 	  					if (sample_count == 2){
 	  						int64 now_time = GetUTime();

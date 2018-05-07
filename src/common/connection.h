@@ -20,6 +20,7 @@
 #include "common/zmq.hpp"
 #include "proto/message.pb.h"
 #include "common/utils.h"
+#include "common/config_reader.h"
 
 using std::map;
 using std::set;

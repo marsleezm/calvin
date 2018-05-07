@@ -53,12 +53,12 @@ pthread_attr_init(&attr);
 //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 CPU_ZERO(&cpuset);
-CPU_SET(0+config->this_node_id*5, &cpuset);
+CPU_SET(0+config->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()), &cpuset);
 //CPU_SET(4, &cpuset);
 //CPU_SET(5, &cpuset);
 //CPU_SET(6, &cpuset);
 //CPU_SET(7, &cpuset);
-    std::cout<<"Connection starts at 0"<<std::endl;
+    std::cout<<"Connection starts at "<<config->this_node_id*atoi(ConfigReader::Value("num_threads").c_str())<<std::endl;
 pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 
@@ -270,14 +270,6 @@ void ConnectionMultiplexer::Run() {
          }
          undelivered_messages_.erase(message.channel_request());
        }
-//       else if (message.type() == MessageProto::UNLINK_CHANNEL) {
-//    	   pthread_mutex_lock(&remote_result_mutex_);
-//    	   //if(remote_result_[message.channel_request()] == remote_result_[it->first]){
-//    	   remote_result_.erase(message.channel_request());
-//    	   //}
-//		   pthread_mutex_unlock(&remote_result_mutex_);
-//		   //LOG(-1, " unlinking channel: "<<message.channel_request()<<" from "<<it->first);
-//       }
      }
    }
        

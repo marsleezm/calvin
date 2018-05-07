@@ -90,13 +90,11 @@ class Sequencer {
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
   void RunPaxos();
-  void RunReader();
+  void RunReader(MessageProto*& fetching_batch_message, int& batch_offset);
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
-  static void* RunSequencerPaxos(void *arg);
-  static void* RunSequencerReader(void *arg);
 
 
   MessageProto* GetBatch(int batch_id, Connection* connection);
@@ -179,5 +177,10 @@ class Sequencer {
   AtomicQueue<TxnProto*>* txns_queue_;
   bool started = false;
   Connection* scheduler_connection_;
+  queue<pair<int64, string>> paxos_msg;
+  int64 paxos_duration = atoi(ConfigReader::Value("paxos_delay").c_str())*1000;
+  map<int, MessageProto> batches;
+  int reader_batch_number;
+  int got_batch_number;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
