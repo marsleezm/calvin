@@ -377,6 +377,7 @@ int main(int argc, char** argv) {
   Sequencer sequencer(&config, &multiplexer, client,
                       storage, queue_mode);
   Connection* scheduler_connection = multiplexer.NewConnection("scheduler_");
+  sequencer.set_scheduler_connection(scheduler_connection);
 
   DeterministicScheduler* scheduler;
   if (argv[2][0] == 't') {

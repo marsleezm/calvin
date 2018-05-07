@@ -73,6 +73,7 @@ class Sequencer {
   void output(DeterministicScheduler* scheduler);
 
   void WaitForStart(){ while(!started) ; }
+  void set_scheduler_connection(Connection* connection) { scheduler_connection_ = connection; }
 
  private:
   // Sequencer's main loops:
@@ -96,6 +97,9 @@ class Sequencer {
   static void* RunSequencerWriter(void *arg);
   static void* RunSequencerPaxos(void *arg);
   static void* RunSequencerReader(void *arg);
+
+
+  MessageProto* GetBatch(int batch_id, Connection* connection);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
@@ -174,5 +178,6 @@ class Sequencer {
 
   AtomicQueue<TxnProto*>* txns_queue_;
   bool started = false;
+  Connection* scheduler_connection_;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

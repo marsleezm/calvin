@@ -69,7 +69,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 											   Client* client,
 											   int queue_mode)
     : configuration_(conf), batch_connection_(batch_connection),
-      storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode),
+      storage_(storage), application_(application), txns_queue(input_queue), client_(client), queue_mode_(queue_mode),
 	  committed(0), pending_txns(0) {
 
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
@@ -83,7 +83,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
     Spin(2);
 
-    txns_queue = new AtomicQueue<TxnProto*>();
   // start lock manager thread
     cpu_set_t cpuset;
 
@@ -101,6 +100,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,
 					   reinterpret_cast<void*>(this));
 
+    /*
     pthread_attr_t attr1;
     pthread_attr_init(&attr1);
 	CPU_ZERO(&cpuset);
@@ -110,7 +110,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
 	pthread_create(&unpacking_thread_, &attr1, RunUnpackingThread,
 					   reinterpret_cast<void*>(this));
-
+    */
 }
 
 void UnfetchAll(Storage* storage, TxnProto* txn) {
@@ -126,6 +126,7 @@ void UnfetchAll(Storage* storage, TxnProto* txn) {
 }
 
 // Returns ptr to heap-allocated
+/*
 std::tr1::unordered_map<int, MessageProto*> batches;
 MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicScheduler* scheduler) {
   if (batches.count(batch_id) > 0) {
@@ -148,7 +149,9 @@ MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicSchedu
     return NULL;
   }
 }
+*/
 
+/*
 void* DeterministicScheduler::RunUnpackingThread(void* arg) {
   	DeterministicScheduler* scheduler =
       	reinterpret_cast<DeterministicScheduler*>(arg);
@@ -188,7 +191,6 @@ void* DeterministicScheduler::RunUnpackingThread(void* arg) {
 				scheduler->txns_queue->Push(txn);
 			}
 		}
-
 		// Report throughput.
 		if (GetTime() > time + 1) {
 			now_committed = scheduler->committed;
@@ -210,6 +212,7 @@ void* DeterministicScheduler::RunUnpackingThread(void* arg) {
   }
   return NULL;
 }
+*/
 
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	DeterministicScheduler* scheduler =
@@ -223,6 +226,10 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 	MessageProto message;
 	int sample_count = 0;
+	double time = GetTime();
+	int second = 0;
+	int abort_number = 0;
+	int last_committed = 0, now_committed = 0;
 
   	while (!scheduler->deconstructor_invoked_) {
   		if (txn == NULL){
@@ -308,6 +315,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		}
 
 		// Report throughput.
+        */
 		if (GetTime() > time + 1) {
 			now_committed = scheduler->committed;
 			double total_time = GetTime() - time;
@@ -325,7 +333,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			abort_number = 0;
 			second++;
 		}
-        */
   }
   return NULL;
 }
