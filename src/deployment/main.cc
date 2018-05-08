@@ -364,13 +364,10 @@ int main(int argc, char** argv) {
   int queue_mode;
   if (argv[2][1] == 'n') {
 	queue_mode = NORMAL_QUEUE;
-	std::cout << "Normal queue mode" << std::endl;
   } else if(argv[2][1] == 's'){
 	queue_mode = SELF_QUEUE;
-	std::cout << "Self-generation queue mode" << std::endl;
   } else if(argv[2][1] == 'd'){
 	  queue_mode = DIRECT_QUEUE;
-	  std::cout << "Direct queue by sequencer mode" << std::endl;
   }
 
   // Initialize sequencer component and start sequencer thread running.

@@ -54,13 +54,13 @@ class ConnectionMultiplexer {
   Connection* NewConnection(const string& channel, AtomicQueue<MessageProto>** aa, AtomicQueue<MessageProto>** bb);
 
   zmq::context_t* context() { return &context_; }
+  void Run();
 
  private:
   friend class Connection;
 
   // Runs the Multiplexer's main loop. Run() is called in a new thread by the
   // constructor.
-  void Run();
 
   // Function to call multiplexer->Run() in a new pthread.
   static void* RunMultiplexer(void *multiplexer);

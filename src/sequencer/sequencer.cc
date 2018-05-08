@@ -70,7 +70,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_attr_init(&attr_writer);
 	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    int writer_core = 1+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str());
+    int writer_core = conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str());
 	CPU_ZERO(&cpuset);
 	CPU_SET(writer_core, &cpuset);
 	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
@@ -83,8 +83,8 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 Sequencer::~Sequencer() {
   deconstructor_invoked_ = true;
   pthread_join(writer_thread_, NULL);
-  pthread_join(reader_thread_, NULL);
-  pthread_join(paxos_thread_, NULL);
+  //pthread_join(reader_thread_, NULL);
+  //pthread_join(paxos_thread_, NULL);
   delete paxos_queues;
   delete connection_;
   std::cout<<"Sequencer done"<<std::endl;
@@ -140,23 +140,45 @@ void Sequencer::RunWriter() {
     batches[it->first].set_destination_node(it->first);
     batches[it->first].set_type(MessageProto::TXN_BATCH);
   }
+
+  std::cout<<"Start sync"<<std::endl;
+
   // Synchronization loadgen start with other sequencers.
   MessageProto synchronization_message;
   synchronization_message.set_type(MessageProto::EMPTY);
   synchronization_message.set_destination_channel("sequencer");
   for (uint32 i = 0; i < configuration_->all_nodes.size(); i++) {
+    synchronization_message.set_source_node(configuration_->this_node_id);
     synchronization_message.set_destination_node(i);
     if (i != static_cast<uint32>(configuration_->this_node_id))
       connection_->Send(synchronization_message);
   }
+
   uint32 synchronization_counter = 1;
+  set<int> not_received;
+  for(int i = 0; i < (int)configuration_->all_nodes.size(); ++i){
+      if (i != configuration_->this_node_id)
+          not_received.insert(i);
+  }
+  double start_time = GetTime();
+  bool showed = false;
   while (synchronization_counter < configuration_->all_nodes.size()) {
+    multiplexer_->Run();
     synchronization_message.Clear();
+     if(GetTime() - start_time > 15 and showed == false){
+        showed = true;
+        for(auto n : not_received)
+            std::cout<<"Lacking "<<n<<std::endl;
+     }
     if (connection_->GetMessage(&synchronization_message)) {
+      not_received.erase(synchronization_message.source_node());
+      //std::cout<<"Gotta one msg "<<std::endl;
       assert(synchronization_message.type() == MessageProto::EMPTY);
       synchronization_counter++;
     }
   }
+  std::cout<<"Sync done "<<std::endl;
+  Spin(15);
 
   started = true;
 
@@ -188,6 +210,9 @@ void Sequencer::RunWriter() {
 	  while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_ ) {
 		  // Add next txn request to batch.
+          multiplexer_->Run();
+          RunPaxos();
+          RunReader(fetching_batch_message, batch_offset);
 
           if(this_batch_added < max_batch_size){
               client_->GetTxn(&txn, increment_counter(txn_batch_number, txn_id_offset, all_nodes, max_batch_size));
@@ -196,10 +221,11 @@ void Sequencer::RunWriter() {
 			  batch.add_data(txn_string);
 			  delete txn;
           }
-          else{
-              RunPaxos();
-              RunReader(fetching_batch_message, batch_offset);
-          }
+              //bool paxos_result = false, reader_result = false;
+              //paxos_result = RunPaxos();
+              //reader_result = RunReader(fetching_batch_message, batch_offset);
+              //if(paxos_result == false and reader_result == false)
+              //   std::this_thread::yield();
 	  }
       batch.SerializeToString(&batch_string);
       paxos_queues->Push(batch_string);
@@ -209,7 +235,7 @@ void Sequencer::RunWriter() {
 }
 
 
-void Sequencer::RunPaxos() {
+bool Sequencer::RunPaxos() {
   string result;
   int64 now_time = GetUTime();
   if(paxos_queues->Pop(&result)){
@@ -217,6 +243,7 @@ void Sequencer::RunPaxos() {
     //		  <<now_time+paxos_duration<<std::endl;
       paxos_msg.push(make_pair(now_time+paxos_duration, result));
   }
+  bool popped_something = false;
   while(paxos_msg.size()){
       if(paxos_msg.front().first <= now_time){
           //std::cout<<"Popping from queue, because now is "<<now_time<<", msg time is  "
@@ -225,16 +252,19 @@ void Sequencer::RunPaxos() {
           batch_queue_.push(paxos_msg.front().second);
           pthread_mutex_unlock(&mutex_);
           paxos_msg.pop();
+          popped_something = true;
       }
       else
           break;
   }
+  return popped_something;
 }
 
 
-void Sequencer::RunReader(MessageProto*& fetching_batch_message, int& batch_offset) {
+bool Sequencer::RunReader(MessageProto*& fetching_batch_message, int& batch_offset) {
 
     // Get batch from Paxos service.
+    bool done_something;
     string batch_string = "";
     MessageProto batch_message;
 
@@ -246,6 +276,7 @@ void Sequencer::RunReader(MessageProto*& fetching_batch_message, int& batch_offs
     pthread_mutex_unlock(&mutex_);
 
     if(batch_string != ""){
+        done_something = true;
         LOG(got_batch_number, " unpacking batch!"); 
         batch_message.ParseFromString(batch_string);
         for (int i = 0; i < batch_message.data_size(); i++) {
@@ -294,20 +325,22 @@ void Sequencer::RunReader(MessageProto*& fetching_batch_message, int& batch_offs
     LOG(got_batch_number, " after trying to get msg "<<reinterpret_cast<int64>(fetching_batch_message)<<", queue size is "<<txns_queue_->Size());
     // Current batch has remaining txns, grab up to 10.
     if (txns_queue_->Size() < 2000 && fetching_batch_message) {
+        done_something = true;
         for (int i = 0; i < 200; i++) {
             if (batch_offset >= fetching_batch_message->data_size())
                 break;
             TxnProto* txn = new TxnProto();
             txn->ParseFromString(fetching_batch_message->data(batch_offset));
             //LOG(-1, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type());
-            if (txn->start_time() == 0){
-                int64 now_time = GetUTime();
-                txn->set_start_time(now_time);
-            }
+            //if (txn->start_time() == 0){
+            //    int64 now_time = GetUTime();
+            //    txn->set_start_time(now_time);
+            //}
             batch_offset++;
             txns_queue_->Push(txn);
         }
     }
+    return done_something;
 }
 
 
@@ -321,14 +354,14 @@ void Sequencer::output(DeterministicScheduler* scheduler){
         myfile << scheduler->throughput[count] << ", "<< abort << '\n';
         ++count;
     }
-	std::cout<<"My latency cnt is "<<scheduler->latency_cnt<<", total lat is "<<scheduler->total_lat<<", avg lat is "<<
-		scheduler->total_lat/scheduler->latency_cnt<<std::endl;
+    scheduler->spt_cnt = max(1, scheduler->spt_cnt);
+    scheduler->mpt_cnt = max(1, scheduler->mpt_cnt);
+	std::cout<<"My spt cnt is "<<scheduler->spt_cnt<<", my mpt cnt is "<<scheduler->mpt_cnt<<", total lat is "<<scheduler->total_lat<<", avg spt lat is "<<scheduler->spt_process_lat/scheduler->spt_cnt<<", avg mpt lat is "<<scheduler->mpt_process_lat/scheduler->mpt_cnt<<std::endl;
     myfile << "LATENCY" << '\n';
-	myfile << 1000*scheduler->process_lat/scheduler->latency_cnt<<", "<<1000*scheduler->total_lat/scheduler->latency_cnt << '\n';
+	myfile << 1000*scheduler->spt_process_lat/scheduler->spt_cnt<<", "<<1000*scheduler->mpt_process_lat/scheduler->mpt_cnt<<", "<<1000*scheduler->total_lat/(scheduler->spt_cnt+scheduler->mpt_cnt) << '\n';
     myfile.close();
 }
 
-std::tr1::unordered_map<int, MessageProto*> batch_mpts;
 MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
   if (batch_mpts.count(batch_id) > 0) {
     // Requested batch has already been received.

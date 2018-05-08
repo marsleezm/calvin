@@ -89,8 +89,8 @@ class Sequencer {
   //
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
-  void RunPaxos();
-  void RunReader(MessageProto*& fetching_batch_message, int& batch_offset);
+  bool RunPaxos();
+  bool RunReader(MessageProto*& fetching_batch_message, int& batch_offset);
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
@@ -141,9 +141,9 @@ class Sequencer {
 
   // Connection for sending and receiving protocol messages.
   // Connection for sending and receiving protocol messages.
-  Connection* connection_;
 
   ConnectionMultiplexer* multiplexer_;
+  Connection* connection_;
 
   // Client from which to get incoming txns.
   Client* client_;
@@ -182,5 +182,6 @@ class Sequencer {
   map<int, MessageProto> batches;
   int reader_batch_number;
   int got_batch_number;
+  std::tr1::unordered_map<int, MessageProto*> batch_mpts;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_

@@ -90,7 +90,9 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     string channel("scheduler");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
-    int exec_core = 2+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()); 
+    Spin(22);
+
+    int exec_core = 1+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()); 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	CPU_ZERO(&cpuset);
@@ -238,6 +240,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			  // No remote read result found, start on next txn if one is waiting.
 			  // Create manager.
   				LOG(txn->txn_id(), " started");
+                txn->set_start_time(GetUTime());
   				manager = new StorageManager(scheduler->configuration_,
 									scheduler->thread_connection_,
 									scheduler->storage_, txn);
@@ -246,9 +249,15 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node){
 	  					if (sample_count == 2){
 	  						int64 now_time = GetUTime();
-	  						scheduler->process_lat += (now_time - txn->start_time())/1000;
+                            if(txn->readers_size() == 1){
+                                scheduler->spt_process_lat += (now_time - txn->start_time())/1000;
+                                scheduler->spt_cnt += 1;
+                            }
+                            else{
+                                scheduler->mpt_process_lat += (now_time - txn->start_time())/1000;
+                                scheduler->mpt_cnt += 1;
+                            }
 	  						scheduler->total_lat += (now_time - txn->seed())/1000;
-	  						scheduler->latency_cnt += 1;
 	  						sample_count = 0;
 	  					}
 	  					++sample_count;
@@ -267,10 +276,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   				LOG(-1, " finished execution for "<<txn->txn_id());
   				if(txn->writers_size() == 0 || txn->writers(0) == this_node){
   					if (sample_count == 2){
+                        assert(txn->readers_size() >= 2);
   						int64 now_time = GetUTime();
-  						scheduler->process_lat += (now_time - txn->start_time())/1000;
+  						scheduler->mpt_process_lat += (now_time - txn->start_time())/1000;
   						scheduler->total_lat += (now_time - txn->seed())/1000;
-  						scheduler->latency_cnt += 1;
+  						scheduler->mpt_cnt += 1;
   						sample_count = 0;
   					}
   					++sample_count;
