@@ -221,6 +221,7 @@ void Sequencer::RunWriter() {
   batch.set_destination_node(-1);
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
+  bool mp_batching = atoi(ConfigReader::Value("mp_batching").c_str());
   int prev_node = (configuration_->this_node_id-1 + configuration_->all_nodes.size())%configuration_->all_nodes.size(),
        after_node = (configuration_->this_node_id+1)%configuration_->all_nodes.size();
   prev_node = 0 | (1 << prev_node);
@@ -240,12 +241,19 @@ void Sequencer::RunWriter() {
     string txn_string;
 	int64 involved_nodes = 0;
 	int uncertain_node;
-	client_->SetRemote(involved_nodes, uncertain_node);
+	//if(mp_batching == true)
+		client_->SetRemote(involved_nodes, uncertain_node);
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
       if (txn_id_offset < max_batch_size) {
         TxnProto* txn;
+		/*
+		if(mp_batching == false){
+			involved_nodes = 0;
+			client_->SetRemote(involved_nodes, uncertain_node);
+		}
+		*/
         client_->GetTxn(&txn, 0, GetUTime());
 		txn->set_batch_number(batch_number);
         if(txn->txn_id() == -1) {
@@ -256,64 +264,75 @@ void Sequencer::RunWriter() {
        	if (txn->multipartition() == false){
 			txn->set_involved_nodes(0);
 			txn->set_uncertain_node(CERTAIN);
-           	txn_map[0].push_back(txn);
 		}
        	else{
 			txn->set_involved_nodes(involved_nodes);
 			txn->set_uncertain_node(uncertain_node);
-		   	txn_map[involved_nodes].push_back(txn);
+		}
+		if(mp_batching == false)
+		{
+			txn->set_txn_id(batch_number * max_batch_size+txn_id_offset);
+			txn->SerializeToString(&txn_string);
+			batch.add_data(txn_string);
+			delete txn;
+		}
+		else{
+			if(txn->multipartition())
+		   		txn_map[involved_nodes].push_back(txn);
+			else
+		   		txn_map[0].push_back(txn);
 		}
         txn_id_offset++;
       }
     }
     txn_id_offset = 0;
 
-	set<int> prev_node_set, after_node_set;
-	for(const auto inv: txn_map){
-		if(inv.first&prev_node)
-			prev_node_set.insert(inv.first);
-		else if (inv.first&after_node)
-			after_node_set.insert(inv.first);
-	} 
+	if(mp_batching){
+		set<int> prev_node_set, after_node_set;
+		for(const auto inv: txn_map){
+			if(inv.first&prev_node)
+				prev_node_set.insert(inv.first);
+			else if (inv.first&after_node)
+				after_node_set.insert(inv.first);
+		} 
 
-	for(const auto prev_node: prev_node_set){
-       for(auto txn: txn_map[prev_node]) {
-		   //LOG(batch_number, " adding "<<txn->txn_id()<<" for prev node"<<prev_node<<", inv "<<txn->involved_nodes());
-           txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
-           txn->SerializeToString(&txn_string);
-           batch.add_data(txn_string);
-           delete txn;
-       }
-   }
+		for(const auto prev_node: prev_node_set){
+		   for(auto txn: txn_map[prev_node]) {
+			   //LOG(batch_number, " adding "<<txn->txn_id()<<" for prev node"<<prev_node<<", inv "<<txn->involved_nodes());
+			   txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
+			   txn->SerializeToString(&txn_string);
+			   batch.add_data(txn_string);
+			   delete txn;
+		   }
+	   }
 
-   for (auto it = txn_map.begin(); it != txn_map.end(); ++it){
-       if(prev_node_set.count(it->first) == 0 and after_node_set.count(it->first) == 0){
-          for(auto txn: it->second) {
-		   	   //LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<it->first<<", multi "<<txn->involved_nodes());
-               txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
-               txn->SerializeToString(&txn_string);
-               batch.add_data(txn_string);
-               delete txn;
-           }
-       }
-   }
-
-
-	// Create a map iterator and point to the end of map
-	std::set<int>::reverse_iterator it = after_node_set.rbegin();
- 
-	// Iterate over the map using Iterator till beginning.
-	while (it != after_node_set.rend()) {
-       	for(auto txn: txn_map[*it]) {
-		   	//LOG(batch_number, " adding "<<txn->txn_id()<<" for after node "<<after_node<<", multi "<<txn->involved_nodes());
-            txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
-          	txn->SerializeToString(&txn_string);
-           	batch.add_data(txn_string);
-           	delete txn;
-       	}
-		it++;
+	   for (auto it = txn_map.begin(); it != txn_map.end(); ++it){
+		   if(prev_node_set.count(it->first) == 0 and after_node_set.count(it->first) == 0){
+			  for(auto txn: it->second) {
+				   //LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<it->first<<", multi "<<txn->involved_nodes());
+				   txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
+				   txn->SerializeToString(&txn_string);
+				   batch.add_data(txn_string);
+				   delete txn;
+			   }
+		   }
+	   }
+		// Create a map iterator and point to the end of map
+		std::set<int>::reverse_iterator it = after_node_set.rbegin();
+	 
+		// Iterate over the map using Iterator till beginning.
+		while (it != after_node_set.rend()) {
+			for(auto txn: txn_map[*it]) {
+				//LOG(batch_number, " adding "<<txn->txn_id()<<" for after node "<<after_node<<", multi "<<txn->involved_nodes());
+				txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
+				txn->SerializeToString(&txn_string);
+				batch.add_data(txn_string);
+				delete txn;
+			}
+			it++;
+		}
 	}
-	//std::cout << "Batch "<<batch_number<<": sending msg from "<< batch_number * max_batch_size <<
+
 	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
     // Send this epoch's requests to Paxos service.
     batch.SerializeToString(&batch_string);

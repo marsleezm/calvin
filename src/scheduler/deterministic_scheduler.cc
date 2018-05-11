@@ -231,6 +231,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
     queue<MyTuple<int64, int, StorageManager*>> retry_txns;
     int this_node = scheduler->configuration_->this_node_id;
+	bool mp_batching = atoi(ConfigReader::Value("mp_batching").c_str());
 
     int max_sc = scheduler->max_sc, sc_array_size=scheduler->sc_array_size; 
     int64 local_gc= 0; //prevtx=0; 
@@ -304,6 +305,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
            	int involved_nodes=-1, batch_number = -1;
             MessageProto* msg_to_send = NULL;
             StorageManager* mgr, *first_mgr=NULL;
+			int64 prev_txn = -1;
 
 		    while(true){
                 bool did_something = false;
@@ -317,7 +319,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 						did_something = true;
 						if(result == CAN_ADD){
 							LOG(first_tx.first, " OK, gid:"<<first_tx.third);
-							if (batch_number == -1 or (involved_nodes == first_tx.fourth->txn_->involved_nodes() and first_tx.fourth->txn_->batch_number()-batch_number==0)){
+							if (batch_number == -1 or (involved_nodes == first_tx.fourth->txn_->involved_nodes() and ((mp_batching and first_tx.fourth->txn_->batch_number()-batch_number==0) or (!mp_batching and first_tx.third == prev_txn+1)))){
 								INIT_MSG(msg_to_send, this_node);
 								if (mgr->TryAddSC(msg_to_send, record_abort_bit, num_lc_txns_)){ 
                                     LOG(first_tx.first, " added confirm, aborted_tx size is "<<mgr->aborted_txs->size()<<", my batch "<<first_tx.fourth->txn_->batch_number()<<", nlc batch "<<batch_number<<", nlc "<<num_lc_txns_);
@@ -337,6 +339,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                                         }
                                     }
 								}
+								prev_txn = first_tx.third;
 							}
 							else{
 								LOG(-1, " stop as involved node changed from "<< scheduler->sc_txn_list[num_lc_txns_%sc_array_size].fourth->txn_->involved_nodes()<<" to "<<first_tx.fourth->txn_->involved_nodes());

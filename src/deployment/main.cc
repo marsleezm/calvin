@@ -260,6 +260,11 @@ int main(int argc, char** argv) {
 			reinterpret_cast<Client*>(new MClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()))) :
 			reinterpret_cast<Client*>(new TClient(&config, stof(ConfigReader::Value("distribute_percent").c_str()), stof(ConfigReader::Value("update_percent").c_str())));
 
+	if(atoi(ConfigReader::Value("mp_batching").c_str()) == 0)
+		std::cout<<"Not allowing mp batching"<<std::endl;
+	else
+		std::cout<<"Allowing mp batching"<<std::endl;
+
 	// #ifdef PAXOS
 	//  StartZookeeper(ZOOKEEPER_CONF);
 	// #endif

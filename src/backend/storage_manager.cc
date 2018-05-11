@@ -584,7 +584,7 @@ StorageManager::~StorageManager() {
 				}
 			}
 			else{
-				LOG(txn_->txn_id(), "sending finalize to "<<i);
+				LOG(txn_->txn_id(), "sending finalize to ");
 				msg.set_destination_node(txn_->uncertain_node());
 				connection_->Send1(msg);
 			}
