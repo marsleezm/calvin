@@ -87,6 +87,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 		abort[i] = -1;
 	}
 
+    txn_scheduler = new TxnScheduler(conf->all_nodes.size(), conf->this_node_id, connection, txns_queue_);
 	cpu_set_t cpuset;
 	batch_div = 2*(conf->all_nodes.size()-1);
 	batch_msgs = new MessageProto*[conf->all_nodes.size()];
@@ -577,57 +578,20 @@ void Sequencer::RunLoader(){
 }
 
 void* Sequencer::FetchMessage() {
-  MessageProto* batch_message = NULL;
-  GetBatch(fetched_batch_num_, batch_connection_);
+  //MessageProto* batch_message = NULL;
+  //GetBatch(fetched_batch_num_, batch_connection_);
 
   //TxnProto* done_txn;
   while (txns_queue_->Size() < 2000){
 	  ASSERT(queue_mode == NORMAL_QUEUE);
 	  // Have we run out of txns in our batch? Let's get some new ones.
-	  if (batch_msgs[cb_idx]){
-		  if(cb_idx != configuration_->this_node_id){
-		  	  batch_message = batch_msgs[cb_idx];
-			  for (int i = 0; i < batch_message->data_size(); i++)
-			  {
-				  TxnProto* txn = new TxnProto();
-				  txn->ParseFromString(batch_message->data(i));
-				  txn->set_local_txn_id(fetched_txn_num_++);
-				  txns_queue_->Push(txn);
-				  ++num_fetched_this_round;
-			  }
-			  if(batch_msgs[configuration_->this_node_id] != NULL){
-				  for (int i = 0; i < batch_message->data_size(); i++)
-				  {
-					  TxnProto* txn = new TxnProto();
-					  txn->ParseFromString(batch_message->data(i));
-					  txn->set_local_txn_id(fetched_txn_num_++);
-					  txns_queue_->Push(txn);
-					  ++num_fetched_this_round;
-				  }
-			  }
-			  else
-			      need_spt = true;
-		  }
-	      else{
-		  }
-	  }
-	  if (batch_message != NULL) {
-		  for (int i = 0; i < batch_message->data_size(); i++)
-		  {
-			  TxnProto* txn = new TxnProto();
-			  txn->ParseFromString(batch_message->data(i));
-			  txn->set_local_txn_id(fetched_txn_num_++);
-			  txns_queue_->Push(txn);
-			  LOG(fetched_batch_num_, " adding txn "<<txn->txn_id()<<", local id is "<<txn->local_txn_id()<<", inv:"<<txn->involved_nodes());
-			  ++num_fetched_this_round;
-		  }
-		  delete batch_message;
-		  ++fetched_batch_num_;
-	  }
+      txn_scheduler->addTxn();
+    
   }
   return NULL;
 }
 
+/*
 void Sequencer::GetBatch(int batch_id, Connection* connection) {
   if (batches_.count(batch_id) > 0) {
     // Requested batch has already been received.
@@ -647,6 +611,7 @@ void Sequencer::GetBatch(int batch_id, Connection* connection) {
     	delete message;
   }
 }
+*/
 
 void Sequencer::output(){
     ofstream myfile;

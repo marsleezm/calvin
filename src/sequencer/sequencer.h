@@ -121,7 +121,7 @@ class Sequencer {
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   //void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
 
-  MessageProto* GetBatch(int batch_id, Connection* connection);
+  //MessageProto* GetBatch(int batch_id, Connection* connection);
 
   // Length of time spent collecting client requests before they are ordered,
   // batched, and sent out to schedulers.
@@ -158,17 +158,13 @@ class Sequencer {
   pthread_mutex_t mutex_;
 
   // The number of fetched batches
-  int fetched_batch_num_;
+  //int fetched_batch_num_;
 
   // The number of fetched txns
-  int fetched_txn_num_;
+  //int fetched_txn_num_;
 
-
-  int batch_div;
-  int last_spt_idx;
   MessageProto** batch_msgs;
   int current_batch;
-  bool need_spt;
 
   // Returns ptr to heap-allocated
   //unordered_map<int, MessageProto*> batches_;
@@ -193,5 +189,6 @@ class Sequencer {
   double abort[THROUGHPUT_SIZE];
 
   bool started = false;
+  TxnScheduler* txn_scheduler;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
