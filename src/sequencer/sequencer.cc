@@ -88,6 +88,8 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 	}
 
 	cpu_set_t cpuset;
+	batch_div = 2*(conf->all_nodes.size()-1);
+	batch_msgs = new MessageProto*[conf->all_nodes.size()];
 	if (mode == NORMAL_QUEUE){
 
 		pthread_attr_t attr_writer;
@@ -288,6 +290,8 @@ void Sequencer::RunWriter() {
     txn_id_offset = 0;
 
 	if(mp_batching){
+		if (txn_map.contains(0))
+			batch.set_num_spt(txn_map[0].size());
 		set<int> prev_node_set, after_node_set;
 		for(const auto inv: txn_map){
 			if(inv.first&prev_node)
@@ -574,15 +578,39 @@ void Sequencer::RunLoader(){
 
 void* Sequencer::FetchMessage() {
   MessageProto* batch_message = NULL;
-  //double time = GetTime();
-  //int executing_txns = 0;
-  //int pending_txns = 0;
+  GetBatch(fetched_batch_num_, batch_connection_);
 
   //TxnProto* done_txn;
-  if (txns_queue_->Size() < 2000){
+  while (txns_queue_->Size() < 2000){
 	  ASSERT(queue_mode == NORMAL_QUEUE);
-	  batch_message = GetBatch(fetched_batch_num_, batch_connection_);
 	  // Have we run out of txns in our batch? Let's get some new ones.
+	  if (batch_msgs[cb_idx]){
+		  if(cb_idx != configuration_->this_node_id){
+		  	  batch_message = batch_msgs[cb_idx];
+			  for (int i = 0; i < batch_message->data_size(); i++)
+			  {
+				  TxnProto* txn = new TxnProto();
+				  txn->ParseFromString(batch_message->data(i));
+				  txn->set_local_txn_id(fetched_txn_num_++);
+				  txns_queue_->Push(txn);
+				  ++num_fetched_this_round;
+			  }
+			  if(batch_msgs[configuration_->this_node_id] != NULL){
+				  for (int i = 0; i < batch_message->data_size(); i++)
+				  {
+					  TxnProto* txn = new TxnProto();
+					  txn->ParseFromString(batch_message->data(i));
+					  txn->set_local_txn_id(fetched_txn_num_++);
+					  txns_queue_->Push(txn);
+					  ++num_fetched_this_round;
+				  }
+			  }
+			  else
+			      need_spt = true;
+		  }
+	      else{
+		  }
+	  }
 	  if (batch_message != NULL) {
 		  for (int i = 0; i < batch_message->data_size(); i++)
 		  {
@@ -598,42 +626,25 @@ void* Sequencer::FetchMessage() {
 	  }
   }
   return NULL;
-
-//    // Report throughput.
-//    if (GetTime() > time + 1) {
-//      double total_time = GetTime() - time;
-//      std::cout << "Completed " << (static_cast<double>(txns) / total_time)
-//                << " txns/sec, "
-//                //<< test<< " for drop speed , "
-//                << executing_txns << " executing, "
-//                << pending_txns << " pending\n" << std::flush;
-//      // Reset txn count.
-//      time = GetTime();
-//      txns = 0;
-//      //test ++;
-//    }
-//  }
 }
 
-MessageProto* Sequencer::GetBatch(int batch_id, Connection* connection) {
+void Sequencer::GetBatch(int batch_id, Connection* connection) {
   if (batches_.count(batch_id) > 0) {
     // Requested batch has already been received.
     MessageProto* batch = batches_[batch_id];
     batches_.erase(batch_id);
-    return batch;
+	batch_msgs[batch_id%configuration_->all_nodes().size()] = batch;
   } else {
     MessageProto* message = new MessageProto();
-    while (!deconstructor_invoked_ && connection->GetMessage(message)) {
-      ASSERT(message->type() == MessageProto::TXN_BATCH);
-      if (message->batch_number() == batch_id) {
-        return message;
-      } else {
-        batches_[message->batch_number()] = message;
-        message = new MessageProto();
-      }
+    if (connection->GetMessage(message)) {
+      	ASSERT(message->type() == MessageProto::TXN_BATCH);
+      	if (message->batch_number() == batch_id)
+			batch_msgs[batch_id%configuration_->all_nodes().size()] = message;
+      	else
+        	batches_[message->batch_number()] = message;
     }
-    delete message;
-    return NULL;
+	else
+    	delete message;
   }
 }
 

@@ -139,6 +139,80 @@ struct Status {
   }
 };
 
+class TxnScheduler{
+	public:
+		TxnScheduler(int num_all_nodes, int this_node_id) 
+			:num_nodes(num_all_nodes), this_node(this_node_id) {}
+
+		void addTxn(int& fetched_num){
+			if (batch_msgs[idx]){
+				int txn_idx;
+				int64 prev_inv_node;
+				while(true){
+					if(idx != this_node){
+						if(txn_idx < batch_msgs[idx].data_size()){
+							TxnProto* txn = new TxnProto();
+							txn->ParseFromString(batch_message->data(i));
+							txn->set_local_txn_id(fetched_num_++);
+							txns_queue_->Push(txn);
+							++fetched_num;
+						}
+						else
+							break;
+					}
+					else{
+						
+					}
+				}
+				for (int i = 0; i < batch_msgs[idx]->data_size(); i++)
+				{
+					TxnProto* txn = new TxnProto();
+					txn->ParseFromString(batch_message->data(i));
+					txn->set_local_txn_id(fetched_num_++);
+					txns_queue_->Push(txn);
+					++fetched_num;
+				}
+				if(batch_msgs[this_node] != NULL){
+					int spt_max;
+					if(idx == num_nodes - 1)
+						spt_max = batch_msgs[this_node].num_spt();
+					else
+						spt_max = spt_idx + batch_div;;
+					for (int i = spt_idx; i < spt_max; i++)
+					{
+						TxnProto* txn = new TxnProto();
+						txn->ParseFromString(batch_msgs[this_node]->data(i));
+						txn->set_local_txn_id(fetched_txn_num_++);
+						txns_queue_->Push(txn);
+						++num_fetched_this_round;
+					}
+					if(idx == num_nodes - 1){
+						delete batch_msgs[this_node];
+						spt_idx = 0;
+					}
+					else
+						spt_idx = spt_max;
+				}
+				else
+					need_spt = true;
+				}
+          }
+		}
+
+		~TxnScheduler(){
+			delete batch_msgs;
+		}
+
+	private:
+		int num_nodes;
+		int batch_div;
+		int this_node;
+		int msg_idx;
+		bool need_spt = false;
+		int spt_idx;
+		MessageProto** batch_msgs;
+}
+
 // Returns the number of seconds since midnight according to local system time,
 // to the nearest microsecond.
 static inline double GetTime() {

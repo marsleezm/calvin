@@ -11,6 +11,7 @@ message MessageProto {
   // 'destination_node'.
   required string destination_channel = 2;
 
+
   // Node from which the message originated.
   optional int32 source_node = 3;
 
@@ -31,6 +32,9 @@ message MessageProto {
     MULTI_READ_CONFIRM = 9;
 	FINALIZE_UNCERTAIN = 10;
   };
+
+  optional int32 num_spt = 6;
+
   required MessageType type = 9;
 
   // Actual data for the message being carried, to be deserialized into a
