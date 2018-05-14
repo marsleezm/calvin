@@ -154,6 +154,7 @@ void Sequencer::RunWriter() {
       connection_->Send(synchronization_message);
   }
 
+  Spin(5);
   uint32 synchronization_counter = 1;
   set<int> not_received;
   for(int i = 0; i < (int)configuration_->all_nodes.size(); ++i){
@@ -178,7 +179,6 @@ void Sequencer::RunWriter() {
     }
   }
   std::cout<<"Sync done "<<std::endl;
-  Spin(15);
 
   started = true;
 

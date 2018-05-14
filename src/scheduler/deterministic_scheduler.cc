@@ -81,7 +81,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     }
 
 
-    Spin(2);
+    Spin(10);
 
   // start lock manager thread
     cpu_set_t cpuset;
@@ -90,7 +90,6 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     string channel("scheduler");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
-    Spin(22);
 
     int exec_core = 1+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()); 
 	pthread_attr_t attr;
