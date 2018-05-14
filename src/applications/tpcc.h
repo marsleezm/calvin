@@ -43,6 +43,7 @@ class TPCC : public Application {
   };
 
   TPCC() {
+      deterministic_ = atoi(ConfigReader::Value("deterministic").c_str()); 
 	  if (ConfigReader::Value("all_recon").compare("true") == 0)
 		  recon_mask = RECON_MASK;
 	  else{
@@ -55,7 +56,7 @@ class TPCC : public Application {
 
   // Load generator for a new transaction
   virtual void NewTxn(int64 txn_id, int txn_type,
-                           Configuration* config, TxnProto* txn) const;
+                           Configuration* config, TxnProto* txn) ;
 
   // The key converter takes a valid key (string) and converts it to an id
   // for the checkpoint to use
@@ -143,6 +144,10 @@ class TPCC : public Application {
   void SetItem(Key key, Value* value) const;
   int recon_mask;
   int num_warehouses = atoi(ConfigReader::Value("num_warehouses").c_str());
+  bool deterministic_;
+  Configuration* config_;
+  int prev_warehouse=0;
+  int prev_district=0;
 };
 
 #endif  // _DB_APPLICATIONS_TPCC_H_

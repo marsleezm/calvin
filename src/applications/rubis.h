@@ -65,7 +65,7 @@ class RUBIS : public Application {
 
   // Load generator for a new transaction
   virtual void NewTxn(int64 txn_id, int txn_type,
-                           Configuration* config, TxnProto* txn) const;
+                           Configuration* config, TxnProto* txn);
 
   // Simple execution of a transaction using a given storage
   virtual int Execute(TxnProto* txn, StorageManager* storage) const;

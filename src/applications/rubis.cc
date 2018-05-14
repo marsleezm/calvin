@@ -23,7 +23,7 @@ using namespace std::chrono;
 // The load generator can be called externally to return a
 // transaction proto containing a new type of transaction.
 void RUBIS::NewTxn(int64 txn_id, int txn_type,
-                       Configuration* config, TxnProto* txn) const {
+                       Configuration* config, TxnProto* txn) {
   // Create the new transaction object
 
   // Set the transaction's standard attributes

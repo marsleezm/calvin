@@ -26,7 +26,7 @@ class Application {
 
   // Load generation.
   virtual void NewTxn(int64 txn_id, int txn_type,
-                           Configuration* config, TxnProto* txn) const = 0;
+                           Configuration* config, TxnProto* txn) = 0;
 
   // Static method to convert a key into an int for an array
   static int CheckpointID(Key key);

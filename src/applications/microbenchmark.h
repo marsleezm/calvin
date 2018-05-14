@@ -46,7 +46,7 @@ class Microbenchmark : public Application {
   virtual ~Microbenchmark() {}
 
   virtual void NewTxn(int64 txn_id, int txn_type,
-                           Configuration* config = NULL, TxnProto* txn = NULL) const;
+                           Configuration* config = NULL, TxnProto* txn = NULL);
   virtual int Execute(TxnProto* txn, StorageManager* storage) const;
   virtual int ReconExecute(TxnProto* txn, ReconStorageManager* storage) const;
 

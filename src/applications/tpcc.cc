@@ -25,7 +25,7 @@ void TPCC::SetItem(Key key, Value* value) const { ItemList[key] = value; }
 // The load generator can be called externally to return a
 // transaction proto containing a new type of transaction.
 void TPCC::NewTxn(int64 txn_id, int txn_type,
-                       Configuration* config, TxnProto* txn) const {
+                       Configuration* config, TxnProto* txn) {
   // Create the new transaction object
 
   // Set the transaction's standard attributes
@@ -77,7 +77,11 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 		txn->add_writers(config->this_node_id);
 
       // First, we pick a local warehouse
-        warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+        if(deterministic_)
+            warehouse_id = (++prev_warehouse % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+        else
+            warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+        
         snprintf(warehouse_key, sizeof(warehouse_key), "w%d",
                  warehouse_id);
 
@@ -86,12 +90,14 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
 
         // Next, we pick a random district
-        district_id = rand() % DISTRICTS_PER_WAREHOUSE;
+        if(deterministic_)
+            district_id = (++prev_district % num_warehouses) % DISTRICTS_PER_WAREHOUSE;
+        else
+            district_id = rand() % DISTRICTS_PER_WAREHOUSE;
         snprintf(district_key, sizeof(district_key), "w%dd%d",
         		warehouse_id, district_id);
         // 0th key in read-write set is district
         txn->add_read_write_set(district_key);
-
 
         // Finally, we pick a random customer
         customer_id = rand() % CUSTOMERS_PER_DISTRICT;
@@ -154,12 +160,18 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
                             4999.0 + 1);
 
 		// First, we pick a local warehouse
-		warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+        if(deterministic_) 
+		    warehouse_id = (++prev_warehouse % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+        else
+		    warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
 		snprintf(warehouse_key, sizeof(warehouse_key), "w%dy", warehouse_id);
 		txn->add_read_write_set(warehouse_key);
 
 		// Next, we pick a district
-		district_id = rand() % DISTRICTS_PER_WAREHOUSE;
+        if(deterministic_) 
+		    district_id = ++prev_district % DISTRICTS_PER_WAREHOUSE;
+        else
+		    district_id = rand() % DISTRICTS_PER_WAREHOUSE;
 		snprintf(district_key, sizeof(district_key), "w%dd%dy",
                warehouse_id, district_id);
 		txn->add_read_write_set(district_key);
@@ -215,10 +227,17 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
     	 string district_string;
     	 //int customer_order_line_number;
 
+         if(deterministic_)
+    	    warehouse_id = (++prev_warehouse % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+         else
+    	    warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
     	 warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%dy",
     		   warehouse_id);
-    	 district_id = rand() % DISTRICTS_PER_WAREHOUSE;
+         if(deterministic_)
+    	    district_id = ++prev_district % DISTRICTS_PER_WAREHOUSE;
+         else
+    	    district_id = rand() % DISTRICTS_PER_WAREHOUSE;
     	 snprintf(district_key, sizeof(district_key), "w%dd%dy",
               warehouse_id, district_id);
     	 customer_id = rand() % CUSTOMERS_PER_DISTRICT;
@@ -239,11 +258,17 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
      case STOCK_LEVEL:
      {
     	 //LOG(txn->txn_id(), " populating stock level");
-    	 warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+         if(deterministic_)
+    	      warehouse_id = (++prev_warehouse % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+         else
+    	      warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
 
     	 // Next, we pick a random district
-    	 district_id = rand() % DISTRICTS_PER_WAREHOUSE;
+         if(deterministic_)
+    	    district_id = ++prev_district % DISTRICTS_PER_WAREHOUSE;
+         else
+    	    district_id = rand() % DISTRICTS_PER_WAREHOUSE;
     	 snprintf(district_key, sizeof(district_key), "w%dd%d",warehouse_id, district_id);
 
     	 txn->add_read_set(warehouse_key);
@@ -258,7 +283,10 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
      case DELIVERY :
      {
     	 //(txn->txn_id(), " populating delivery");
-         warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
+         if(deterministic_)
+            warehouse_id = (++prev_warehouse% num_warehouses) * config->all_nodes.size() + config->this_node_id;
+         else
+            warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
          snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
          txn->add_read_set(warehouse_key);
          //char order_line_key[128];
