@@ -73,8 +73,7 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
                      Client* client, LockedVersionedStorage* storage, int mode)
     : epoch_duration_(0.01), configuration_(conf), connection_(connection),
       batch_connection_(batch_connection), client_(client), storage_(storage),
-	  deconstructor_invoked_(false), fetched_batch_num_(0), fetched_txn_num_(0), queue_mode(mode),
-	  num_fetched_this_round(0) {
+	  deconstructor_invoked_(false), queue_mode(mode), num_fetched_this_round(0) {
 
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
 	pthread_mutex_init(&mutex_, NULL);
@@ -87,10 +86,8 @@ Sequencer::Sequencer(Configuration* conf, Connection* connection, Connection* ba
 		abort[i] = -1;
 	}
 
-    txn_scheduler = new TxnScheduler(conf->all_nodes.size(), conf->this_node_id, connection, txns_queue_);
+    txn_scheduler = new TxnScheduler(conf->all_nodes.size(), conf->this_node_id, batch_connection_, txns_queue_);
 	cpu_set_t cpuset;
-	batch_div = 2*(conf->all_nodes.size()-1);
-	batch_msgs = new MessageProto*[conf->all_nodes.size()];
 	if (mode == NORMAL_QUEUE){
 
 		pthread_attr_t attr_writer;
@@ -195,14 +192,12 @@ void Sequencer::RunWriter() {
 #endif
 
   // Synchronization loadgen start with other sequencers.
-   LOG(-1, " before synchronizing");
   MessageProto synchronization_message;
   synchronization_message.set_type(MessageProto::EMPTY);
   synchronization_message.set_destination_channel("sequencer");
   for (uint32 i = 0; i < configuration_->all_nodes.size(); i++) {
     synchronization_message.set_source_node(configuration_->this_node_id);
     synchronization_message.set_destination_node(i);
-   LOG(-1, " sending to "<<i);
     if (i != static_cast<uint32>(configuration_->this_node_id))
       connection_->Send(synchronization_message);
   }
@@ -210,12 +205,10 @@ void Sequencer::RunWriter() {
   while (synchronization_counter < configuration_->all_nodes.size()) {
     synchronization_message.Clear();
     if (connection_->GetMessage(&synchronization_message)) {
-   	LOG(-1, " got msg from "<<synchronization_message.source_node());
       ASSERT(synchronization_message.type() == MessageProto::EMPTY);
       synchronization_counter++;
     }
   }
-   LOG(-1, " after synchronizing");
   started = true;
 
   // Set up batch messages for each system node.
@@ -224,7 +217,8 @@ void Sequencer::RunWriter() {
   batch.set_destination_node(-1);
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
-  bool mp_batching = atoi(ConfigReader::Value("mp_batching").c_str());
+  bool mp_batching = atoi(ConfigReader::Value("mp_batching").c_str()), 
+		homo = atoi(ConfigReader::Value("homo").c_str());
   int prev_node = (configuration_->this_node_id-1 + configuration_->all_nodes.size())%configuration_->all_nodes.size(),
        after_node = (configuration_->this_node_id+1)%configuration_->all_nodes.size();
   prev_node = 0 | (1 << prev_node);
@@ -244,19 +238,19 @@ void Sequencer::RunWriter() {
     string txn_string;
 	int64 involved_nodes = 0;
 	int uncertain_node;
-	//if(mp_batching == true)
+	if(homo == true)
 		client_->SetRemote(involved_nodes, uncertain_node);
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
       if (txn_id_offset < max_batch_size) {
         TxnProto* txn;
-		/*
-		if(mp_batching == false){
+		if(homo == false){
 			involved_nodes = 0;
+			//LOG(-1, " before setting remote");
 			client_->SetRemote(involved_nodes, uncertain_node);
+			//LOG(-1, " after setting remote");
 		}
-		*/
         client_->GetTxn(&txn, 0, GetUTime());
 		txn->set_batch_number(batch_number);
         if(txn->txn_id() == -1) {
@@ -291,51 +285,27 @@ void Sequencer::RunWriter() {
     txn_id_offset = 0;
 
 	if(mp_batching){
-		if (txn_map.contains(0))
+		if (txn_map.count(0)){
 			batch.set_num_spt(txn_map[0].size());
-		set<int> prev_node_set, after_node_set;
-		for(const auto inv: txn_map){
-			if(inv.first&prev_node)
-				prev_node_set.insert(inv.first);
-			else if (inv.first&after_node)
-				after_node_set.insert(inv.first);
-		} 
-
-		for(const auto prev_node: prev_node_set){
-		   for(auto txn: txn_map[prev_node]) {
-			   //LOG(batch_number, " adding "<<txn->txn_id()<<" for prev node"<<prev_node<<", inv "<<txn->involved_nodes());
+			for(const auto txn : txn_map[0]){
 			   txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
 			   txn->SerializeToString(&txn_string);
 			   batch.add_data(txn_string);
 			   delete txn;
-		   }
-	   }
-
-	   for (auto it = txn_map.begin(); it != txn_map.end(); ++it){
-		   if(prev_node_set.count(it->first) == 0 and after_node_set.count(it->first) == 0){
-			  for(auto txn: it->second) {
-				   //LOG(batch_number, " adding "<<txn->txn_id()<<" for node "<<it->first<<", multi "<<txn->involved_nodes());
-				   txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
-				   txn->SerializeToString(&txn_string);
-				   batch.add_data(txn_string);
-				   delete txn;
-			   }
-		   }
-	   }
-		// Create a map iterator and point to the end of map
-		std::set<int>::reverse_iterator it = after_node_set.rbegin();
-	 
-		// Iterate over the map using Iterator till beginning.
-		while (it != after_node_set.rend()) {
-			for(auto txn: txn_map[*it]) {
-				//LOG(batch_number, " adding "<<txn->txn_id()<<" for after node "<<after_node<<", multi "<<txn->involved_nodes());
-				txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
-				txn->SerializeToString(&txn_string);
-				batch.add_data(txn_string);
-				delete txn;
 			}
-			it++;
 		}
+		
+		for(const auto inv: txn_map){
+			if( inv.first != 0 ){
+			   	for(auto txn: txn_map[inv.first]) {
+				   	//LOG(batch_number, " adding "<<txn->txn_id()<<" for prev node"<<prev_node<<", inv "<<txn->involved_nodes());
+				   	txn->set_txn_id(batch_number * max_batch_size + txn_id_offset++);
+				   	txn->SerializeToString(&txn_string);
+				   	batch.add_data(txn_string);
+				   	delete txn;
+			   	}
+			}
+		} 
 	}
 
 	//		"to" <<  batch_number * max_batch_size+max_batch_size << std::endl;
@@ -382,9 +352,6 @@ void Sequencer::RunPaxos() {
 // Send txns to all involved partitions
 void Sequencer::RunReader() {
   Spin(1);
-#ifdef PAXOS
-  Paxos paxos(ZOOKEEPER_CONF, true);
-#endif
   pthread_setname_np(pthread_self(), "reader");
 
   FetchMessage();
@@ -405,17 +372,10 @@ void Sequencer::RunReader() {
   int batch_number = configuration_->this_node_id;
   int second = 0;
 
-#ifdef LATENCY_TEST
-  int watched_txn = -1;
-#endif
-
   while (!deconstructor_invoked_) {
     // Get batch from Paxos service.
     string batch_string;
 
-#ifdef PAXOS
-    paxos.GetNextBatchBlocking(&batch_string);
-#else
     bool got_batch = false;
     do {
     	FetchMessage();
@@ -429,7 +389,6 @@ void Sequencer::RunReader() {
     	if (!got_batch)
     		Spin(0.001);
     } while (!deconstructor_invoked_ && !got_batch);
-#endif
     MessageProto* batch_message = new MessageProto();
     batch_message->ParseFromString(batch_string);
     for (int i = 0; i < batch_message->data_size(); i++) {
@@ -468,8 +427,9 @@ void Sequencer::RunReader() {
     		it->second.set_batch_number(batch_number);
     		connection_->Send(it->second);
     	}
-    	else
-  		  batches_[batch_number] = batch_message;
+    	else{
+			txn_scheduler->addBatch(batch_number, batch_message);
+		}
 
     	it->second.clear_data();
     }
@@ -582,12 +542,10 @@ void* Sequencer::FetchMessage() {
   //GetBatch(fetched_batch_num_, batch_connection_);
 
   //TxnProto* done_txn;
-  while (txns_queue_->Size() < 2000){
-	  ASSERT(queue_mode == NORMAL_QUEUE);
-	  // Have we run out of txns in our batch? Let's get some new ones.
-      txn_scheduler->addTxn();
-    
+  while (txns_queue_->Size() < 2000 and txn_scheduler->addTxn()){
+      ; 
   }
+  //LOG(-1, " over"); 
   return NULL;
 }
 

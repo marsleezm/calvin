@@ -14,6 +14,7 @@
 #include <tr1/unordered_map>
 #include <atomic>
 #include "common/config_reader.h"
+#include "sequencer/txn_scheduler.h"
 
 //#define PAXOS
 //#define PREFETCHING
