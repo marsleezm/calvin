@@ -61,14 +61,14 @@ void StorageManager::HandleReadResult(const MessageProto& message) {
 
 StorageManager::~StorageManager() {
 	// Send read results to other partitions if has not done yet
-	//LOCKLOG(txn_->txn_id(), " committing and cleaning tx "<<txn_->txn_id());
+	LOCKLOG(txn_->txn_id(), " committing and cleaning tx "<<txn_->txn_id());
 	if (message_){
 		//LOG(txn_->txn_id(), "Has message");
 		if (message_has_value_){
-			LOG(txn_->txn_id(), "Sending message to remote");
-			for (int i = 0; i < txn_->writers().size(); i++) {
-			  if (txn_->writers(i) != configuration_->this_node_id) {
-				  message_->set_destination_node(txn_->writers(i));
+			for (int i = 0; i < txn_->readers().size(); i++) {
+			  if (txn_->readers(i) != configuration_->this_node_id) {
+			      LOG(txn_->txn_id(), "Sending message to remote "<<txn_->readers(i));
+				  message_->set_destination_node(txn_->readers(i));
 				  connection_->Send1(*message_);
 			  }
 			}
@@ -92,7 +92,8 @@ StorageManager::~StorageManager() {
 Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 	read_state = NORMAL;
 	//LOG(txn_->txn_id(), "Trying to read key "<<key);
-	if (configuration_->LookupPartition(key) ==  configuration_->this_node_id){
+    int partition = configuration_->LookupPartition(key, atoi(ConfigReader::Value("num_warehouses").c_str()));
+	if (partition ==  configuration_->this_node_id){
 		//LOG(txn_->txn_id(), "Trying to read local key "<<key);
         Value* result = actual_storage_->ReadObject(key, txn_->txn_id());
         while (result == NULL){
@@ -110,8 +111,9 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 	}
 	else // The key is not replicated locally, the writer should wait
 	{
-		LOG(txn_->txn_id(), "Trying to read non-local key "<<key<<", count is "<<remote_objects_.count(key));
+		LOG(txn_->txn_id(), "Trying to read non-local key "<<key<<", belong to "<<partition);
 		if (remote_objects_.count(key) > 0){
+		    LOG(txn_->txn_id(), " returning");
 			return remote_objects_[key];
 		}
 		else{ //Should be blocked
@@ -119,7 +121,7 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 			read_state = SUSPENDED;
 			// The tranasction will perform the read again
 			if (message_has_value_){
-				LOG(txn_->txn_id(), ": blocked and sent.");
+				LOG(txn_->txn_id(), " blocked and sent.");
 				SendLocalReads();
 			}
 			return NULL;
@@ -129,10 +131,10 @@ Value* StorageManager::ReadObject(const Key& key, int& read_state) {
 
 
 void StorageManager::SendLocalReads(){
-	for (int i = 0; i < txn_->writers_size(); i++) {
-	  if (txn_->writers(i) != configuration_->this_node_id) {
-		  LOG(txn_->txn_id()," sending reads to " << txn_->writers(i));
-		  message_->set_destination_node(txn_->writers(i));
+	for (int i = 0; i < txn_->readers_size(); i++) {
+	  if (txn_->readers(i) != configuration_->this_node_id) {
+		  LOG(txn_->txn_id()," sending reads to " << txn_->readers(i));
+		  message_->set_destination_node(txn_->readers(i));
 		  connection_->Send1(*message_);
 	  }
 	}

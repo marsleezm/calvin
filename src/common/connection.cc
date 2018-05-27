@@ -210,7 +210,7 @@ void ConnectionMultiplexer::Run() {
         vector<MessageProto>::iterator i;
         for (i = undelivered_messages_[*new_connection_channel_].begin();
              i != undelivered_messages_[*new_connection_channel_].end(); ++i) {
-        	LOG(-1, " sending undelivered msg: "<<message.type()<<" for "<<message.destination_channel());
+        	//LOG(-1, " sending undelivered msg: "<<message.type()<<" for "<<message.destination_channel());
           Send(*i);
         }
         undelivered_messages_.erase(*new_connection_channel_);

@@ -113,20 +113,17 @@ class TClient : public Client {
     else
     	(*txn)->set_multipartition(false);
 
-   int random_txn_type = rand() % 100;
+    int random_txn_type = rand() % 100;
     // New order txn
-    if (random_txn_type < update_rate/2)  {
+    if(random_txn_type < update_rate/2) {
       tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, config_, *txn);
     } else if(random_txn_type < update_rate) {
       tpcc.NewTxn(txn_id, TPCC::PAYMENT, config_, *txn);
     } else if(random_txn_type < update_rate+delivery_rate) {
-    	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::DELIVERY, config_, *txn);
     } else if(random_txn_type < update_rate+delivery_rate+read_rate/2){
-    	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, config_, *txn);
     } else {
-    	(*txn)->set_multipartition(false);
     	tpcc.NewTxn(txn_id, TPCC::ORDER_STATUS, config_, *txn);
     }
   }
@@ -318,6 +315,12 @@ int main(int argc, char** argv) {
   // Build connection context and start multiplexer thread running.
   ConnectionMultiplexer multiplexer(&config);
 
+  /*
+  Key key1 = "w33d1", key2 = "w2", key3 = "w1d1c2";
+  std::cout<<OffsetStringToInt(key1, 1)<<std::endl;
+  std::cout<<OffsetStringToInt(key2, 1)<<std::endl;
+  std::cout<<OffsetStringToInt(key3, 1)<<std::endl;
+  */
   // Artificial loadgen clients.
 
     Client* client;

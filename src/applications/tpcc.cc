@@ -29,26 +29,28 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
   // Create the new transaction object
 
   // Set the transaction's standard attributes
+  int partition_per_warehouse = config->all_nodes.size()/num_warehouses; 
+  int district_per_partition = DISTRICTS_PER_WAREHOUSE/partition_per_warehouse;
   txn->set_txn_id(txn_id);
   txn->set_txn_type(txn_type);
   txn->set_isolation_level(TxnProto::SERIALIZABLE);
   txn->set_status(TxnProto::NEW);
 
-  bool mp = txn->multipartition();
+  int my_warehouse = num_warehouses*config->this_node_id/config->all_nodes.size();
   int remote_node = -1, remote_warehouse_id = -1;
+  bool mp = txn->multipartition();
+  set<int> readers, writers;
+  //LOG(txn->txn_id(), " trying to get txn");
   if (mp) {
      do {
-       remote_node = rand() % config->all_nodes.size();
-     } while (config->all_nodes.size() > 1 &&
-              remote_node == config->this_node_id);
-
-     do {
-        remote_warehouse_id = rand() % (num_warehouses *
-                                        config->all_nodes.size());
-     } while (config->all_nodes.size() > 1 &&
-           config->LookupPartition(remote_warehouse_id) !=
-             remote_node);
+        remote_warehouse_id = rand() % num_warehouses;
+        //LOG(txn->txn_id(), " trying warehosue "<<remote_warehouse_id);
+     } while (config->all_nodes.size() > 1 && remote_warehouse_id != my_warehouse); 
+     //LOG(txn->txn_id(), " remote warehouse is "<<remote_warehouse_id);
+    
+     remote_node = remote_warehouse_id*partition_per_warehouse;
   }
+  //LOG(txn->txn_id(), " remote");
 
   // Create an arg list
   Args* tpcc_args = new Args();
@@ -70,36 +72,28 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
     // New Order
     case NEW_ORDER:{
-    	set<int> reader_set;
-    	reader_set.insert(config->this_node_id);
-
-		txn->add_readers(config->this_node_id);
-		txn->add_writers(config->this_node_id);
-
       // First, we pick a local warehouse
-        warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
-        snprintf(warehouse_key, sizeof(warehouse_key), "w%d",
-                 warehouse_id);
-
-        // 0th key in read set is warehouse
+        warehouse_id = config->this_node_id*num_warehouses/config->all_nodes.size();
+    	snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
+        readers.insert(config->LookupPartition(warehouse_key, num_warehouses));
         txn->add_read_set(warehouse_key);
+        //LOG(txn->txn_id(), warehouse_key<<" adding "<<config->LookupPartition(warehouse_key, num_warehouses));
 
-
-        // Next, we pick a random district
-        district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-        snprintf(district_key, sizeof(district_key), "w%dd%d",
-        		warehouse_id, district_id);
-        // 0th key in read-write set is district
+    	//district_id = (config->this_node_id*district_per_partition + rand() % district_per_partition)%DISTRICTS_PER_WAREHOUSE;
+        district_id = GetDistrict(partition_per_warehouse, district_per_partition, config->this_node_id);
+    	snprintf(district_key, sizeof(district_key), "w%dd%d",warehouse_id, district_id);
+        readers.insert(config->LookupPartition(district_key, num_warehouses));
+        writers.insert(config->LookupPartition(district_key, num_warehouses));
         txn->add_read_write_set(district_key);
-
+        //LOG(txn->txn_id(), district_key<<" adding "<<config->LookupPartition(district_key, num_warehouses));
 
         // Finally, we pick a random customer
         customer_id = rand() % CUSTOMERS_PER_DISTRICT;
-        snprintf(customer_key, sizeof(customer_key),
-        		"w%dd%dc%d",
-               	   warehouse_id, district_id, customer_id);
-        // 1st key in read set is customer
+        snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d", warehouse_id, district_id, customer_id);
+        readers.insert(config->this_node_id);
+        writers.insert(config->this_node_id);
         txn->add_read_write_set(customer_key);
+        //LOG(txn->txn_id(), " adding "<<config->this_node_id);
 
         // We set the length of the read and write set uniformly between 5 and 15
         order_line_count = (rand() % 11) + 5;
@@ -108,8 +102,10 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
         if(mp){
             snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
                      "w%d", remote_warehouse_id);
-			txn->add_readers(remote_node);
-			txn->add_writers(remote_node);
+			//txn->add_readers(remote_node);
+			//txn->add_writers(remote_node);
+            readers.insert(remote_node);
+            writers.insert(remote_node);
         }
         else {
             snprintf(remote_warehouse_key, sizeof(remote_warehouse_key),
@@ -132,12 +128,28 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
         	// Create an order line warehouse key (default is local)
 			// Finally, we set the stock key to the read and write set
 			Key stock_key = string(remote_warehouse_key) + "s" + item_key;
+            readers.insert(config->LookupPartition(stock_key, num_warehouses));
+            writers.insert(config->LookupPartition(stock_key, num_warehouses));
+            //LOG(txn->txn_id(), stock_key<<" adding "<<config->LookupPartition(stock_key, num_warehouses));
+
 			txn->add_read_write_set(stock_key);
 
 			// Set the quantity randomly within [1..10]
 			//tpcc_args->add_items(item);
 			tpcc_args->add_quantities(rand() % 10 + 1);
       }
+      for(const auto node : readers){
+          //LOG(txn->txn_id(), " will read from "<<node);
+          txn->add_readers(node);
+      }
+      for(const auto node : writers){
+          //LOG(txn->txn_id(), " will write from "<<node);
+          txn->add_writers(node);
+      }
+      if(readers.size() > 1)
+          txn->set_multipartition(true);
+      else
+          txn->set_multipartition(false);
 
       // Set the order line count in the args
       tpcc_args->add_order_line_count(order_line_count);
@@ -147,21 +159,19 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 
     // Payment
     case PAYMENT:
-		txn->add_readers(config->this_node_id);
-		txn->add_writers(config->this_node_id);
 		// Specify an amount for the payment
 		tpcc_args->set_amount(rand() / (static_cast<double>(RAND_MAX + 1.0)) *
                             4999.0 + 1);
 
-		// First, we pick a local warehouse
-		warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
-		snprintf(warehouse_key, sizeof(warehouse_key), "w%dy", warehouse_id);
+        warehouse_id = config->this_node_id*num_warehouses/config->all_nodes.size();
+    	snprintf(warehouse_key, sizeof(warehouse_key), "w%dy",warehouse_id);
+        readers.insert(config->LookupPartition(warehouse_key, num_warehouses));
 		txn->add_read_write_set(warehouse_key);
 
-		// Next, we pick a district
-		district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-		snprintf(district_key, sizeof(district_key), "w%dd%dy",
-               warehouse_id, district_id);
+    	//district_id = config->this_node_id*district_per_partition + rand() % district_per_partition;
+        district_id = GetDistrict(partition_per_warehouse, district_per_partition, config->this_node_id);
+    	snprintf(district_key, sizeof(district_key), "w%dd%dy",warehouse_id, district_id);
+        readers.insert(config->LookupPartition(district_key, num_warehouses));
 		txn->add_read_write_set(district_key);
 
 		// Add history key to write set
@@ -169,6 +179,7 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 		snprintf(history_key, sizeof(history_key), "w%dh%ld",
                warehouse_id, txn->txn_id());
 		txn->add_write_set(history_key);
+        writers.insert(config->this_node_id);
 
 		// Next, we find the customer as a local one
 		if (num_warehouses * config->all_nodes.size() == 1 || !mp) {
@@ -184,12 +195,12 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 			char remote_warehouse_key[40];
 			snprintf(remote_warehouse_key, sizeof(remote_warehouse_key), "w%d",
 					remote_warehouse_id);
-			remote_district_id = rand() % DISTRICTS_PER_WAREHOUSE;
+			remote_district_id = GetDistrict(partition_per_warehouse, district_per_partition, remote_node); 
 			remote_customer_id = rand() % CUSTOMERS_PER_DISTRICT;
 			snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d",
 				remote_warehouse_id, remote_district_id, remote_customer_id);
-			txn->add_readers(remote_node);
-			txn->add_writers(remote_node);
+            readers.insert(remote_node);
+            writers.insert(remote_node);
 		}
 
 		// We only do secondary keying ~60% of the time
@@ -203,6 +214,18 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
 			txn->add_read_write_set(customer_key);
 		}
 
+        for(const auto node : readers){
+            //LOG(txn->txn_id(), " will read from "<<node);
+            txn->add_readers(node);
+        }
+        for(const auto node : writers){
+            //LOG(txn->txn_id(), " will write from "<<node);
+            txn->add_writers(node);
+        }
+        if(readers.size() > 1)
+            txn->set_multipartition(true);
+        else
+            txn->set_multipartition(false);
 		txn->set_txn_type(txn_type);
 		break;
 
@@ -215,22 +238,28 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
     	 string district_string;
     	 //int customer_order_line_number;
 
-    	 warehouse_id = (rand() % num_warehouses) * config->all_nodes.size() + config->this_node_id;
-    	 snprintf(warehouse_key, sizeof(warehouse_key), "w%dy",
-    		   warehouse_id);
-    	 district_id = rand() % DISTRICTS_PER_WAREHOUSE;
-    	 snprintf(district_key, sizeof(district_key), "w%dd%dy",
-              warehouse_id, district_id);
-    	 customer_id = rand() % CUSTOMERS_PER_DISTRICT;
-    	 snprintf(customer_key, sizeof(customer_key),
-				"w%dd%dc%d",
-				warehouse_id, district_id, customer_id);
-
+         warehouse_id = config->this_node_id*num_warehouses/config->all_nodes.size();
+    	 snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
+         readers.insert(config->LookupPartition(warehouse_key, num_warehouses));
     	 txn->add_read_set(warehouse_key);
+
+    	 //district_id = config->this_node_id*district_per_partition + rand() % district_per_partition;
+         district_id = GetDistrict(partition_per_warehouse, district_per_partition, config->this_node_id);
+    	 snprintf(district_key, sizeof(district_key), "w%dd%d",warehouse_id, district_id);
+         readers.insert(config->LookupPartition(district_key, num_warehouses));
     	 txn->add_read_set(district_key);
+
+    	 customer_id = rand() % CUSTOMERS_PER_DISTRICT;
+    	 snprintf(customer_key, sizeof(customer_key), "w%dd%dc%d", warehouse_id, district_id, customer_id);
     	 txn->add_read_set(customer_key);
 
-    	 txn->add_readers(config->this_node_id);
+         for(const auto node : readers){
+            txn->add_readers(node);
+        }
+         if(readers.size() > 1)
+            txn->set_multipartition(true);
+         else
+            txn->set_multipartition(false);
     	 txn->set_txn_type(txn_type);
     	 break;
      }
@@ -239,37 +268,59 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
      case STOCK_LEVEL:
      {
     	 //LOG(txn->txn_id(), " populating stock level");
-    	 warehouse_id = (rand() % num_warehouses)* config->all_nodes.size() + config->this_node_id;
+    	 //warehouse_id = (rand() % num_warehouses)* config->all_nodes.size() + config->this_node_id;
+         warehouse_id = config->this_node_id*num_warehouses/config->all_nodes.size();
     	 snprintf(warehouse_key, sizeof(warehouse_key), "w%d",warehouse_id);
+         readers.insert(config->LookupPartition(warehouse_key, num_warehouses));
+    	 txn->add_read_set(warehouse_key);
 
     	 // Next, we pick a random district
-    	 district_id = rand() % DISTRICTS_PER_WAREHOUSE;
+    	 //district_id = config->this_node_id*district_per_partition + rand() % district_per_partition;
+         district_id = GetDistrict(partition_per_warehouse, district_per_partition, config->this_node_id);
     	 snprintf(district_key, sizeof(district_key), "w%dd%d",warehouse_id, district_id);
-
-    	 txn->add_read_set(warehouse_key);
+         readers.insert(config->LookupPartition(district_key, num_warehouses));
     	 txn->add_read_set(district_key);
 
     	 tpcc_args->set_threshold(rand()%10 + 10);
-    	 txn->add_readers(config->this_node_id);
+
+         int div = config->this_node_id / partition_per_warehouse;
+         for(int i = 0; i < partition_per_warehouse; ++i){
+            //LOG(txn->txn_id(), " I am "<<config->this_node_id<<" adding "<<div*partition_per_warehouse+i);
+            txn->add_readers(div*partition_per_warehouse+i);
+         }
+         if(txn->readers_size() > 1)
+            txn->set_multipartition(true);
+         else
+            txn->set_multipartition(false);
     	 txn->set_txn_type(txn_type);
     	 break;
       }
 
      case DELIVERY :
      {
-    	 //(txn->txn_id(), " populating delivery");
-         warehouse_id = (rand() % num_warehouses)* config->all_nodes.size() + config->this_node_id;
+         warehouse_id = config->this_node_id*num_warehouses/config->all_nodes.size();
          snprintf(warehouse_key, sizeof(warehouse_key), "w%d", warehouse_id);
+         readers.insert(config->LookupPartition(warehouse_key, num_warehouses));
          txn->add_read_set(warehouse_key);
-         //char order_line_key[128];
-         //int oldest_order;
 
          for(int i = 0; i < DISTRICTS_PER_WAREHOUSE; i++) {
         	 snprintf(district_key, sizeof(district_key), "%sd%d", warehouse_key, i);
+             readers.insert(config->LookupPartition(district_key, num_warehouses));
+             writers.insert(config->LookupPartition(district_key, num_warehouses));
         	 txn->add_read_write_set(district_key);
          }
-         txn->add_readers(config->this_node_id);
-         txn->add_writers(config->this_node_id);
+         for(const auto node : readers){
+            //LOG(txn->txn_id(), " will read from "<<node);
+            txn->add_readers(node);
+         }
+         for(const auto node : writers){
+            //LOG(txn->txn_id(), " will write from "<<node);
+            txn->add_writers(node);
+         }
+         if(readers.size() > 1)
+            txn->set_multipartition(true);
+         else
+            txn->set_multipartition(false);
          txn->set_txn_type(txn_type);
 
          break;
@@ -505,7 +556,6 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 	int amount = tpcc_args.amount();
 
 	// We create a string to hold up the customer object we look up
-
 	// Read & update the warehouse object
 	int read_state;
 	Key warehouse_key = txn->read_write_set(0);
@@ -528,7 +578,7 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 
 	// Read & update the district object
 	Key district_key = txn->read_write_set(1);
-	LOG(txn->txn_id(), " district key is  "<<warehouse_key);
+	LOG(txn->txn_id(), " district key is  "<<district_key);
 	if(storage->ShouldExec()){
 		Value* district_val = storage->ReadObject(district_key, read_state);
 		if (read_state == SUSPENDED)
@@ -541,7 +591,6 @@ int TPCC::PaymentTransaction(StorageManager* storage) const {
 			storage->PutObject(district_key, district_val);
 		}
 	}
-
 
 	// Read & update the customer
 	Key customer_key;
@@ -609,19 +658,30 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 
 	//Warehouse warehouse;
 	int read_state = NORMAL;
-	Value* warehouse_val = storage->ReadObject(txn->read_set(0), read_state);
-	Warehouse warehouse;
-	assert(warehouse.ParseFromString(*warehouse_val));
+    Value* warehouse_val = storage->ReadObject(txn->read_set(0), read_state);
+    if (read_state == SUSPENDED)
+        return SUSPENDED;
+    else {
+        Warehouse warehouse;
+        warehouse.ParseFromString(*warehouse_val);
+    }
 
 	//District district;
 	Value* district_val = storage->ReadObject(txn->read_set(1), read_state);
-	District district;
-	LOG(txn->txn_id(), " before trying to read district "<<txn->read_set(1)<<", "<<reinterpret_cast<int64>(district_val));
-	assert(district.ParseFromString(*district_val));
+    if (read_state == SUSPENDED)
+        return SUSPENDED;
+    else {
+        District district;
+        district.ParseFromString(*district_val);
+    }
 
 	Customer customer;
 	Value* customer_val = storage->ReadObject(txn->read_set(2), read_state);
-	assert(customer.ParseFromString(*customer_val));
+    if (read_state == SUSPENDED)
+        return SUSPENDED;
+    else {
+        assert(customer.ParseFromString(*customer_val));
+    }
 
 	if(customer.last_order() == ""){
 		return SUCCESS;
@@ -631,8 +691,10 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 
 	Value* order_val = storage->ReadObject(customer.last_order(), read_state);
 	Order order;
-	LOG(txn->txn_id(), " before trying to read order "<<customer.last_order()<<", value is "<<reinterpret_cast<int64>(order_val));
-	assert(order.ParseFromString(*order_val));
+    if (read_state == SUSPENDED)
+        return SUSPENDED;
+    else 
+	    assert(order.ParseFromString(*order_val));
 	order_line_count = order.order_line_count();
 
 	char order_line_key[128];
@@ -640,7 +702,10 @@ int TPCC::OrderStatusTransaction(StorageManager* storage) const {
 		snprintf(order_line_key, sizeof(order_line_key), "%sol%d", customer.last_order().c_str(), i);
 		Value* order_line_val = storage->ReadObject(order_line_key, read_state);
 		OrderLine order_line;
-		assert(order_line.ParseFromString(*order_line_val));
+        if (read_state == SUSPENDED)
+            return SUSPENDED;
+        else 
+		    assert(order_line.ParseFromString(*order_line_val));
 	}
 
 	return SUCCESS;
@@ -655,17 +720,28 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 	Key warehouse_key = txn->read_set(0);
 	// Read & update the warehouse object
 	int read_state = NORMAL;
-	Value* warehouse_val = storage->ReadObject(warehouse_key, read_state);
-	Warehouse warehouse;
-	assert(warehouse.ParseFromString(*warehouse_val));
+    Value* warehouse_val;
+	//LOG(txn->txn_id(), "Executing STOCKLEVEL, is multipart? "<<txn->multipartition());
+    warehouse_val = storage->ReadObject(warehouse_key, read_state);
+    if (read_state == SUSPENDED)
+        return SUSPENDED;
+    else {
+        Warehouse warehouse;
+        warehouse.ParseFromString(*warehouse_val);
+    }
 
 	District district;
 	Key district_key = txn->read_set(1);
 	int latest_order_number;
-	Value* district_val = storage->ReadObject(district_key, read_state);
+	Value* district_val; 
+    district_val = storage->ReadObject(district_key, read_state);
 	LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
-	assert(district.ParseFromString(*district_val));
-	latest_order_number = district.next_order_id()-1;
+    if (read_state == SUSPENDED)
+        return SUSPENDED;
+    else {
+        district.ParseFromString(*district_val);
+        latest_order_number = district.next_order_id()-1;
+    }
 
 	for(int i = latest_order_number; (i >= 0) && (i > latest_order_number - 20); i--) {
 		char order_key[128];
@@ -673,8 +749,13 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 				  "%so%d", district_key.c_str(), i);
 
 		Order order;
-		Value* order_val = storage->ReadObject(order_key, read_state);
-		assert(order.ParseFromString(*order_val));
+        Value* order_val;
+        order_val = storage->ReadObject(order_key, read_state);
+        if (read_state == SUSPENDED)
+            return SUSPENDED;
+        else {
+            order.ParseFromString(*order_val);
+        }
 
 
 		int ol_number = order.order_line_count();
@@ -685,7 +766,11 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 						order_key, j);
 			OrderLine order_line;
 			Value* order_line_val = storage->ReadObject(order_line_key, read_state);
-			assert(order_line.ParseFromString(*order_line_val));
+            if (read_state == SUSPENDED)
+                return SUSPENDED;
+            else {
+			    assert(order_line.ParseFromString(*order_line_val));
+            } 
 
 			string item = order_line.item_id();
 			char stock_key[128];
@@ -693,7 +778,11 @@ int TPCC::StockLevelTransaction(StorageManager* storage) const {
 						warehouse_key.c_str(), item.c_str());
 			Stock stock;
 			Value* stock_val = storage->ReadObject(stock_key, read_state);
-			assert(stock.ParseFromString(*stock_val));
+            if (read_state == SUSPENDED)
+                return SUSPENDED;
+            else {
+			    assert(stock.ParseFromString(*stock_val));
+            } 
 		 }
 	}
 	return SUCCESS;
@@ -712,9 +801,14 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 	// Read & update the warehouse object
 
 	Key warehouse_key = txn->read_set(0);
-	Value* warehouse_val = storage->ReadObject(warehouse_key, read_state);
-	Warehouse warehouse;
-	assert(warehouse.ParseFromString(*warehouse_val));
+    Value* warehouse_val;
+    warehouse_val = storage->ReadObject(warehouse_key, read_state);
+    if (read_state == SUSPENDED)
+        return SUSPENDED;
+    else {
+        Warehouse warehouse;
+        warehouse.ParseFromString(*warehouse_val);
+    }
 
 	char district_key[128];
 	Key order_key;
@@ -726,7 +820,11 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 		Value* district_val = storage->ReadObject(district_key, read_state);
 		District district;
 		LOG(txn->txn_id(), " before trying to read district "<<district_key<<", "<<reinterpret_cast<int64>(district_val));
-		assert(district.ParseFromString(*district_val));
+        if (read_state == SUSPENDED)
+            return SUSPENDED;
+        else 
+            assert(district.ParseFromString(*district_val));
+
 		// Only update the value of district after performing all orderline updates
 		if(district.smallest_order_id() == -1 || district.smallest_order_id() >= district.next_order_id())
 			continue;
@@ -738,23 +836,24 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 			Order order;
 			snprintf(order_key, sizeof(order_key), "%so%d", district_key, district.smallest_order_id());
 			Value* order_val = storage->ReadObject(order_key, read_state);
+            if (read_state == SUSPENDED)
+                return SUSPENDED;
+            else 
+			    assert(order.ParseFromString(*order_val));
+
 			LOG(txn->txn_id(), " before trying to read and write order "<<order_key<<", value is "<<reinterpret_cast<int64>(order_val));
-			assert(order.ParseFromString(*order_val));
 			order.set_carrier_id(i);
 			assert(order.SerializeToString(order_val));
 			storage->PutObject(order_key, order_val);
-
 
 			char new_order_key[128];
 			snprintf(new_order_key, sizeof(new_order_key), "%sn%s", district_key, order_key);
 			storage->DeleteObject(new_order_key);
 
-
 			// Update order by setting its carrier id
 			Key customer_key;
 			order_line_count = order.order_line_count();
 			customer_key = order.customer_id();
-
 
 			double total_amount = 0;
 			for(int j = 0; j < order_line_count; j++) {
@@ -762,8 +861,11 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 
 				Value* order_line_val = storage->ReadObject(order_line_key, read_state);
 				OrderLine order_line;
+                if (read_state == SUSPENDED)
+                    return SUSPENDED;
+                else
+				    assert(order_line.ParseFromString(*order_line_val));
 				//LOG(txn->txn_id(), " before trying to write orderline "<<order_line_key<<", "<<reinterpret_cast<int64>(order_line_val));
-				assert(order_line.ParseFromString(*order_line_val));
 				order_line.set_delivery_date(txn->seed());
 				assert(order_line.SerializeToString(order_line_val));
 				storage->PutObject(order_line_key, order_line_val);
@@ -773,7 +875,10 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 
 			Value* customer_val = storage->ReadObject(customer_key, read_state);
 			Customer customer;
-			assert(customer.ParseFromString(*customer_val));
+            if (read_state == SUSPENDED)
+                return SUSPENDED;
+            else
+                assert(customer.ParseFromString(*customer_val));
 			customer.set_balance(customer.balance() + total_amount);
 			customer.set_delivery_count(customer.delivery_count() + 1);
 			assert(customer.SerializeToString(customer_val));
@@ -802,17 +907,12 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) {
     Value* warehouse_value = new Value();
     snprintf(warehouse_key, sizeof(warehouse_key), "w%d", i);
     snprintf(warehouse_key_ytd, sizeof(warehouse_key_ytd), "w%dy", i);
-    if (conf->LookupPartition(warehouse_key) != conf->this_node_id) {
-      continue;
-    }
-    // Next we initialize the object and serialize it
     Warehouse* warehouse = CreateWarehouse(warehouse_key);
-    assert(warehouse->SerializeToString(warehouse_value));
-
-    // Finally, we pass it off to the storage manager to write to disk
-    if (conf->LookupPartition(warehouse_key) == conf->this_node_id) {
-      storage->PutObject(warehouse_key, warehouse_value);
-      storage->PutObject(warehouse_key_ytd, new Value(*warehouse_value));
+    if (conf->LookupPartition(warehouse_key, num_warehouses) == conf->this_node_id) {
+        // Next we initialize the object and serialize it
+        assert(warehouse->SerializeToString(warehouse_value));
+        storage->PutObject(warehouse_key, warehouse_value);
+        storage->PutObject(warehouse_key_ytd, new Value(*warehouse_value));
     }
 
     // Next, we create and write out all of the districts
@@ -824,38 +924,35 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) {
       snprintf(district_key_ytd, sizeof(district_key_ytd), "w%dd%dy",
                i, j);
 
-      // Next we initialize the object and serialize it
-      Value* district_value = new Value();
-      District* district = CreateDistrict(district_key, warehouse_key);
-      assert(district->SerializeToString(district_value));
-
-      // Finally, we pass it off to the storage manager to write to disk
-      if (conf->LookupPartition(district_key) == conf->this_node_id) {
-        storage->PutObject(district_key, district_value);
-        storage->PutObject(district_key_ytd, new Value(*district_value));
-      }
-
-      // Next, we create and write out all of the customers
-      for (int k = 0; k < CUSTOMERS_PER_DISTRICT; k++) {
-        // First, we create a key for the customer
-        char customer_key[128];
-        snprintf(customer_key, sizeof(customer_key),
-                 "w%dd%dc%d", i, j, k);
-
+      if (conf->LookupPartition(district_key, num_warehouses) == conf->this_node_id) {
         // Next we initialize the object and serialize it
-        Value* customer_value = new Value();
-        Customer* customer = CreateCustomer(customer_key, district_key,
-          warehouse_key);
-        assert(customer->SerializeToString(customer_value));
+        Value* district_value = new Value();
+        District* district = CreateDistrict(district_key, warehouse_key);
+        assert(district->SerializeToString(district_value));
 
         // Finally, we pass it off to the storage manager to write to disk
-        if (conf->LookupPartition(customer_key) == conf->this_node_id)
-          storage->PutObject(customer_key, customer_value);
-        delete customer;
-      }
+        storage->PutObject(district_key, district_value);
+        storage->PutObject(district_key_ytd, new Value(*district_value));
+    
+        for (int k = 0; k < CUSTOMERS_PER_DISTRICT; k++) {
+            // First, we create a key for the customer
+            char customer_key[128];
+            snprintf(customer_key, sizeof(customer_key),
+                     "w%dd%dc%d", i, j, k);
 
-      // Free storage
-      delete district;
+            // Next we initialize the object and serialize it
+            Value* customer_value = new Value();
+            Customer* customer = CreateCustomer(customer_key, district_key,
+              warehouse_key);
+            assert(customer->SerializeToString(customer_value));
+
+            // Finally, we pass it off to the storage manager to write to disk
+            assert(conf->LookupPartition(customer_key, num_warehouses) == conf->this_node_id);
+            storage->PutObject(customer_key, customer_value);
+            delete customer;
+        }
+        delete district;
+      }
     }
 
     // Next, we create and write out all of the stock
@@ -865,13 +962,14 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) {
       Value* stock_value = new Value();
       snprintf(item_key, sizeof(item_key), "i%d", j);
 
-      // Next we initialize the object and serialize it
+        // Next we initialize the object and serialize it
       Stock* stock = CreateStock(item_key, warehouse_key);
       assert(stock->SerializeToString(stock_value));
 
-      // Finally, we pass it off to the storage manager to write to disk
-      if (conf->LookupPartition(stock->id()) == conf->this_node_id)
+      if (conf->LookupPartition(stock->id(), num_warehouses) == conf->this_node_id){
+        //LOG(conf->this_node_id, " populate "<<stock->id());
         storage->PutObject(stock->id(), stock_value);
+      }
       delete stock;
     }
 

@@ -52,6 +52,13 @@ class TPCC : public Application {
 
   // Simple execution of a transaction using a given storage
   virtual int Execute(TxnProto* txn, StorageManager* storage);
+  inline int GetDistrict(int partition_per_warehouse, int district_per_partition, int node_id){
+       int remain = node_id % partition_per_warehouse;
+       if (remain == partition_per_warehouse-1)
+           return remain*district_per_partition + rand()%(DISTRICTS_PER_WAREHOUSE-remain*district_per_partition);
+       else
+           return remain*district_per_partition + rand()%district_per_partition;
+  }
 
 /* TODO(Thad): Uncomment once testing friend class exists
  private: */

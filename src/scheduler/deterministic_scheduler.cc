@@ -179,7 +179,7 @@ void* DeterministicScheduler::RunUnpackingThread(void* arg) {
 					break;
 				TxnProto* txn = new TxnProto();
 				txn->ParseFromString(batch_message->data(batch_offset));
-				//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type()<<", pending txns is "<<pending_txns);
+				//LOG(batch_number, " adding txn "<<txn->txn_id()<<" of type "<<txn->txn_type());
 				if (txn->start_time() == 0){
 					int64 now_time = GetUTime();
 					txn->set_start_time(now_time);

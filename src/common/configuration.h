@@ -83,6 +83,8 @@ class Configuration {
 
   // Returns the node_id of the partition at which 'key' is stored.
   int LookupPartition(const Key& key) const;
+  int LookupPartition(const int& w_id, const int& num_warehouses) const;
+  int LookupPartition(const Key& key, const int& num_warehouses) const;
   int LookupPartition(const int& key) const;
 
   // Dump the current config into the file in key=value format.

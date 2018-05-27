@@ -30,12 +30,35 @@ Configuration::Configuration(int node_id, const string& filename, char bench_typ
 
 // TODO(alex): Implement better (application-specific?) partitioning.
 int Configuration::LookupPartition(const Key& key) const {
-    if (benchmark_type == TPCC) // TPCC
-        return OffsetStringToInt(key, 1) % static_cast<int>(all_nodes.size());
-    else if (benchmark_type == RUBIS)
+    if (benchmark_type == RUBIS)
         return stoi(key.substr(0, key.find('_')));
     else
         return StringToInt(key) % static_cast<int>(all_nodes.size());
+}
+
+int Configuration::LookupPartition(const Key& key, const int& num_warehouses) const {
+    if (num_warehouses > static_cast<int>(all_nodes.size())) 
+        return OffsetStringToInt(key, 1) % static_cast<int>(all_nodes.size());
+    else{
+        assert(num_warehouses <= 5);
+        if(key.size() <=3)
+            return static_cast<int>(all_nodes.size())/num_warehouses*OffsetStringToInt(key, 1);
+        else if(key[2] == 'h')
+            return static_cast<int>(this_node_id);
+        else if(key[2] == 'd')
+            return (OffsetStringToInt(key, 1)*10+OffsetStringToInt(key, 3))/(num_warehouses*10/static_cast<int>(all_nodes.size()));
+        else
+            return (OffsetStringToInt(key, 1)*100000+OffsetStringToInt(key, 4))/(num_warehouses*100000/static_cast<int>(all_nodes.size())); 
+    }
+}
+
+int Configuration::LookupPartition(const int& w_id, const int& num_warehouses) const {
+    if (num_warehouses > static_cast<int>(all_nodes.size())) 
+        return w_id % static_cast<int>(all_nodes.size());
+    else{
+        assert(num_warehouses <= 5);
+        return static_cast<int>(all_nodes.size())/num_warehouses*w_id;
+    }
 }
 
 int Configuration::LookupPartition(const int& key) const {
