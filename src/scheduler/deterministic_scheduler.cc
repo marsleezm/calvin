@@ -69,7 +69,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 											   Client* client,
 											   int queue_mode)
     : configuration_(conf), batch_connection_(batch_connection),
-      storage_(storage), application_(application), to_lock_txns(input_queue), client_(client), queue_mode_(queue_mode),
+      storage_(storage), application_(application), txns_queue(input_queue), client_(client), queue_mode_(queue_mode),
 	  committed(0), pending_txns(0) {
 
 	num_threads = atoi(ConfigReader::Value("num_threads").c_str());
@@ -81,9 +81,8 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     }
 
 
-    Spin(2);
+    Spin(10);
 
-    txns_queue = new AtomicQueue<TxnProto*>();
   // start lock manager thread
     cpu_set_t cpuset;
 
@@ -91,16 +90,19 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     string channel("scheduler");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
+
+    int exec_core = 1+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()); 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	CPU_ZERO(&cpuset);
-	CPU_SET(3+conf->this_node_id*5, &cpuset);
-	std::cout << "Worker thread starts at core 4"<<std::endl;
+	CPU_SET(exec_core, &cpuset);
+	std::cout << "Worker thread starts at core "<<exec_core<<std::endl;
 	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 
 	pthread_create(&worker_thread_, &attr, RunWorkerThread,
 					   reinterpret_cast<void*>(this));
 
+    /*
     pthread_attr_t attr1;
     pthread_attr_init(&attr1);
 	CPU_ZERO(&cpuset);
@@ -110,7 +112,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 
 	pthread_create(&unpacking_thread_, &attr1, RunUnpackingThread,
 					   reinterpret_cast<void*>(this));
-
+    */
 }
 
 void UnfetchAll(Storage* storage, TxnProto* txn) {
@@ -126,6 +128,7 @@ void UnfetchAll(Storage* storage, TxnProto* txn) {
 }
 
 // Returns ptr to heap-allocated
+/*
 std::tr1::unordered_map<int, MessageProto*> batches;
 MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicScheduler* scheduler) {
   if (batches.count(batch_id) > 0) {
@@ -148,7 +151,9 @@ MessageProto* GetBatch(int batch_id, Connection* connection, DeterministicSchedu
     return NULL;
   }
 }
+*/
 
+/*
 void* DeterministicScheduler::RunUnpackingThread(void* arg) {
   	DeterministicScheduler* scheduler =
       	reinterpret_cast<DeterministicScheduler*>(arg);
@@ -188,7 +193,6 @@ void* DeterministicScheduler::RunUnpackingThread(void* arg) {
 				scheduler->txns_queue->Push(txn);
 			}
 		}
-
 		// Report throughput.
 		if (GetTime() > time + 1) {
 			now_committed = scheduler->committed;
@@ -210,6 +214,7 @@ void* DeterministicScheduler::RunUnpackingThread(void* arg) {
   }
   return NULL;
 }
+*/
 
 void* DeterministicScheduler::RunWorkerThread(void* arg) {
   	DeterministicScheduler* scheduler =
@@ -223,23 +228,35 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 
 	MessageProto message;
 	int sample_count = 0;
+	double time = GetTime();
+	int second = 0;
+	int abort_number = 0;
+	int last_committed = 0, now_committed = 0;
 
   	while (!scheduler->deconstructor_invoked_) {
   		if (txn == NULL){
   			if(scheduler->txns_queue->Pop(&txn)){
 			  // No remote read result found, start on next txn if one is waiting.
 			  // Create manager.
+  				LOG(txn->txn_id(), " started");
+                txn->set_start_time(GetUTime());
   				manager = new StorageManager(scheduler->configuration_,
 									scheduler->thread_connection_,
 									scheduler->storage_, txn);
 				if( scheduler->application_->Execute(txn, manager) == SUCCESS){
-					//LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
+					LOG(txn->txn_id(), " finished execution! "<<txn->txn_type());
 					if(txn->writers_size() == 0 || txn->writers(0) == this_node){
 	  					if (sample_count == 2){
 	  						int64 now_time = GetUTime();
-	  						scheduler->process_lat += (now_time - txn->start_time())/1000;
+                            if(txn->readers_size() == 1){
+                                scheduler->spt_process_lat += (now_time - txn->start_time())/1000;
+                                scheduler->spt_cnt += 1;
+                            }
+                            else{
+                                scheduler->mpt_process_lat += (now_time - txn->start_time())/1000;
+                                scheduler->mpt_cnt += 1;
+                            }
 	  						scheduler->total_lat += (now_time - txn->seed())/1000;
-	  						scheduler->latency_cnt += 1;
 	  						sample_count = 0;
 	  					}
 	  					++sample_count;
@@ -258,10 +275,11 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   				LOG(-1, " finished execution for "<<txn->txn_id());
   				if(txn->writers_size() == 0 || txn->writers(0) == this_node){
   					if (sample_count == 2){
+                        assert(txn->readers_size() >= 2);
   						int64 now_time = GetUTime();
-  						scheduler->process_lat += (now_time - txn->start_time())/1000;
+  						scheduler->mpt_process_lat += (now_time - txn->start_time())/1000;
   						scheduler->total_lat += (now_time - txn->seed())/1000;
-  						scheduler->latency_cnt += 1;
+  						scheduler->mpt_cnt += 1;
   						sample_count = 0;
   					}
   					++sample_count;
@@ -308,6 +326,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 		}
 
 		// Report throughput.
+        */
 		if (GetTime() > time + 1) {
 			now_committed = scheduler->committed;
 			double total_time = GetTime() - time;
@@ -325,7 +344,6 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 			abort_number = 0;
 			second++;
 		}
-        */
   }
   return NULL;
 }

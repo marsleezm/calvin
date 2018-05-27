@@ -47,23 +47,20 @@ send_mutex_ = new pthread_mutex_t[(int)config->all_nodes.size()];
     }
   }
 
-cpu_set_t cpuset;
-pthread_attr_t attr;
-pthread_attr_init(&attr);
-//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    /*
+    cpu_set_t cpuset;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
 
-CPU_ZERO(&cpuset);
-CPU_SET(0+config->this_node_id*5, &cpuset);
-//CPU_SET(4, &cpuset);
-//CPU_SET(5, &cpuset);
-//CPU_SET(6, &cpuset);
-//CPU_SET(7, &cpuset);
-    std::cout<<"Connection starts at 0"<<std::endl;
+    int thread = 2+config->this_node_id*atoi(ConfigReader::Value("num_threads").c_str());
+    CPU_ZERO(&cpuset);
+    CPU_SET(thread, &cpuset);
+    std::cout<<"Connection starts at "<<thread<<std::endl;
 pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
-
 
   // Start Multiplexer main loop running in background thread.
   pthread_create(&thread_, &attr, RunMultiplexer, reinterpret_cast<void*>(this));
+    */
 
   // Initialize mutex for future calls to NewConnection.
   pthread_mutex_init(&new_connection_mutex_, NULL);
@@ -120,7 +117,7 @@ Connection* ConnectionMultiplexer::NewConnection(const string& channel) {
 
   // Wait for the Run() loop to create the Connection object. (It will reset
   // new_connection_channel_ to NULL when the new connection has been created.
-  while (new_connection_channel_ != NULL) {}
+  while (new_connection_channel_ != NULL)  {}
 
   Connection* connection = new_connection_;
   new_connection_ = NULL;
@@ -164,7 +161,9 @@ Connection* ConnectionMultiplexer::NewConnection(const string& channel, AtomicQu
 
   // Wait for the Run() loop to create the Connection object. (It will reset
   // new_connection_channel_ to NULL when the new connection has been created.
-  while (new_connection_channel_ != NULL) {}
+  while (new_connection_channel_ != NULL) {
+      Run();
+  }
 
   Connection* connection = new_connection_;
   new_connection_ = NULL;
@@ -179,7 +178,7 @@ void ConnectionMultiplexer::Run() {
   MessageProto message;
   zmq::message_t msg;
 
-  while (!deconstructor_invoked_) {
+  //while(!deconstructor_invoked_){
     // Serve any pending NewConnection request.
     if (new_connection_channel_ != NULL) {
       if (inproc_out_.count(*new_connection_channel_) > 0) {
@@ -216,7 +215,6 @@ void ConnectionMultiplexer::Run() {
         undelivered_messages_.erase(*new_connection_channel_);
       }
 
-
       if ((new_connection_channel_->substr(0, 9) == "scheduler") && (new_connection_channel_->substr(9,1) != "_")) {
         link_unlink_queue_[*new_connection_channel_] = new AtomicQueue<MessageProto>();
       }
@@ -250,38 +248,33 @@ void ConnectionMultiplexer::Run() {
         Send(message);
     }
 
-   for (std::tr1::unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
-        it != link_unlink_queue_.end(); ++it) {
-      
-     MessageProto message;
-     bool got_it = it->second->Pop(&message);
-     if (got_it == true) {
-       if (message.type() == MessageProto::LINK_CHANNEL) {
-    	   //LOG(-1, " linking channel: "<<message.channel_request());
-    	   pthread_mutex_lock(&remote_result_mutex_);
-    	   remote_result_[message.channel_request()] = remote_result_[it->first];
-    	   pthread_mutex_unlock(&remote_result_mutex_);
-         // Forward on any messages sent to this channel before it existed.
-         vector<MessageProto>::iterator i;
-         for (i = undelivered_messages_[message.channel_request()].begin();
-              i != undelivered_messages_[message.channel_request()].end();
-              ++i) {
-           Send(*i);
+    if (link_unlink_queue_.size()){
+       for (std::tr1::unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
+            it != link_unlink_queue_.end(); ++it) {
+          
+         MessageProto message;
+         bool got_it = it->second->Pop(&message);
+         if (got_it == true) {
+           if (message.type() == MessageProto::LINK_CHANNEL) {
+               //LOG(-1, " linking channel: "<<message.channel_request());
+               pthread_mutex_lock(&remote_result_mutex_);
+               remote_result_[message.channel_request()] = remote_result_[it->first];
+               pthread_mutex_unlock(&remote_result_mutex_);
+             // Forward on any messages sent to this channel before it existed.
+             vector<MessageProto>::iterator i;
+             for (i = undelivered_messages_[message.channel_request()].begin();
+                  i != undelivered_messages_[message.channel_request()].end();
+                  ++i) {
+               Send(*i);
+             }
+             undelivered_messages_.erase(message.channel_request());
+           }
          }
-         undelivered_messages_.erase(message.channel_request());
        }
-//       else if (message.type() == MessageProto::UNLINK_CHANNEL) {
-//    	   pthread_mutex_lock(&remote_result_mutex_);
-//    	   //if(remote_result_[message.channel_request()] == remote_result_[it->first]){
-//    	   remote_result_.erase(message.channel_request());
-//    	   //}
-//		   pthread_mutex_unlock(&remote_result_mutex_);
-//		   //LOG(-1, " unlinking channel: "<<message.channel_request()<<" from "<<it->first);
-//       }
-     }
-   }
-       
-  }
+    }
+    //else
+        //std::this_thread::yield();
+  //}
 }
 
 // Function to call multiplexer->Run() in a new pthread.
@@ -374,7 +367,6 @@ void Connection::Send(const MessageProto& message) {
                      DeleteString,
                      message_string);
   // Send message.
-
   socket_out_->send(msg);
 }
 

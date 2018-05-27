@@ -73,6 +73,7 @@ class Sequencer {
   void output(DeterministicScheduler* scheduler);
 
   void WaitForStart(){ while(!started) ; }
+  void set_scheduler_connection(Connection* connection) { scheduler_connection_ = connection; }
 
  private:
   // Sequencer's main loops:
@@ -88,14 +89,15 @@ class Sequencer {
   //
   // Executes in a background thread created and started by the constructor.
   void RunWriter();
-  void RunPaxos();
-  void RunReader();
+  bool RunPaxos();
+  bool RunReader(MessageProto*& fetching_batch_message, int& batch_offset);
 
   // Functions to start the Multiplexor's main loops, called in new pthreads by
   // the Sequencer's constructor.
   static void* RunSequencerWriter(void *arg);
-  static void* RunSequencerPaxos(void *arg);
-  static void* RunSequencerReader(void *arg);
+
+
+  MessageProto* GetBatch(int batch_id, Connection* connection);
 
   // Sets '*nodes' to contain the node_id of every node participating in 'txn'.
   void FindParticipatingNodes(const TxnProto& txn, set<int>* nodes);
@@ -139,9 +141,9 @@ class Sequencer {
 
   // Connection for sending and receiving protocol messages.
   // Connection for sending and receiving protocol messages.
-  Connection* connection_;
 
   ConnectionMultiplexer* multiplexer_;
+  Connection* connection_;
 
   // Client from which to get incoming txns.
   Client* client_;
@@ -174,5 +176,12 @@ class Sequencer {
 
   AtomicQueue<TxnProto*>* txns_queue_;
   bool started = false;
+  Connection* scheduler_connection_;
+  queue<pair<int64, string>> paxos_msg;
+  int64 paxos_duration = atoi(ConfigReader::Value("paxos_delay").c_str())*1000;
+  map<int, MessageProto> batches;
+  int reader_batch_number;
+  int got_batch_number;
+  std::tr1::unordered_map<int, MessageProto*> batch_mpts;
 };
 #endif  // _DB_SEQUENCER_SEQUENCER_H_
