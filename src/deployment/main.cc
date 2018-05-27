@@ -346,12 +346,10 @@ int main(int argc, char** argv) {
 
   if (argv[2][0] == 't') {
       std::cout<<"TPC-C benchmark. No extra parameters."<<std::endl;
-      std::cout << "TPC-C benchmark" << std::endl;
       TPCC().InitializeStorage(storage, &config);
   }
   else if (argv[2][0] == 'r') {
       std::cout<<"RUBiS benchmark. No extra parameters."<<std::endl;
-      std::cout << "RUBiS benchmark" << std::endl;
       RUBIS().InitializeStorage(storage, &config);
   } else if((argv[2][0] == 'm')){
         std::cout<<"Micro benchmark. Parameters: "<<std::endl;
@@ -365,13 +363,8 @@ int main(int argc, char** argv) {
 
 
   int queue_mode;
-  if (argv[2][1] == 'n') {
+  assert(argv[2][1] == 'n');
 	queue_mode = NORMAL_QUEUE;
-  } else if(argv[2][1] == 's'){
-	queue_mode = SELF_QUEUE;
-  } else if(argv[2][1] == 'd'){
-	  queue_mode = DIRECT_QUEUE;
-  }
 
   // Initialize sequencer component and start sequencer thread running.
   Sequencer sequencer(&config, &multiplexer, client,

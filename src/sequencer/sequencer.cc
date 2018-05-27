@@ -70,7 +70,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_attr_init(&attr_writer);
 	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    int writer_core = conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str());
+    int writer_core = (conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()))%56;
 	CPU_ZERO(&cpuset);
 	CPU_SET(writer_core, &cpuset);
 	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
@@ -141,7 +141,6 @@ void Sequencer::RunWriter() {
     batches[it->first].set_type(MessageProto::TXN_BATCH);
   }
 
-  std::cout<<"Start sync"<<std::endl;
 
   // Synchronization loadgen start with other sequencers.
   MessageProto synchronization_message;
@@ -154,23 +153,15 @@ void Sequencer::RunWriter() {
       connection_->Send(synchronization_message);
   }
 
-  Spin(5);
   uint32 synchronization_counter = 1;
   set<int> not_received;
   for(int i = 0; i < (int)configuration_->all_nodes.size(); ++i){
       if (i != configuration_->this_node_id)
           not_received.insert(i);
   }
-  double start_time = GetTime();
-  bool showed = false;
   while (synchronization_counter < configuration_->all_nodes.size()) {
     multiplexer_->Run();
     synchronization_message.Clear();
-     if(GetTime() - start_time > 15 and showed == false){
-        showed = true;
-        for(auto n : not_received)
-            std::cout<<"Lacking "<<n<<std::endl;
-     }
     if (connection_->GetMessage(&synchronization_message)) {
       not_received.erase(synchronization_message.source_node());
       //std::cout<<"Gotta one msg "<<std::endl;
@@ -178,7 +169,7 @@ void Sequencer::RunWriter() {
       synchronization_counter++;
     }
   }
-  std::cout<<"Sync done "<<std::endl;
+  std::cout<<"Sync done"<<std::endl;
 
   started = true;
 
@@ -277,7 +268,7 @@ bool Sequencer::RunReader(MessageProto*& fetching_batch_message, int& batch_offs
 
     if(batch_string != ""){
         done_something = true;
-        LOG(got_batch_number, " unpacking batch!"); 
+        //LOG(got_batch_number, " unpacking batch!"); 
         batch_message.ParseFromString(batch_string);
         for (int i = 0; i < batch_message.data_size(); i++) {
           TxnProto txn;
@@ -304,7 +295,7 @@ bool Sequencer::RunReader(MessageProto*& fetching_batch_message, int& batch_offs
              it != batches.end(); ++it) {
             it->second.set_batch_number(reader_batch_number);
             //std::cout<<"Putting "<<batch_number<<" into queue at "<<GetUTime()<<std::endl;
-            LOG(0, " before sending batch message! Msg's dest is "<<it->second.destination_node()<<", "<<it->second.destination_channel());
+            //LOG(0, " before sending batch message! Msg's dest is "<<it->second.destination_node()<<", "<<it->second.destination_channel());
             pthread_mutex_lock(&mutex_);
             connection_->Send(it->second);
             pthread_mutex_unlock(&mutex_);
@@ -322,7 +313,7 @@ bool Sequencer::RunReader(MessageProto*& fetching_batch_message, int& batch_offs
         fetching_batch_message = GetBatch(got_batch_number, scheduler_connection_);
     }
 
-    LOG(got_batch_number, " after trying to get msg "<<reinterpret_cast<int64>(fetching_batch_message)<<", queue size is "<<txns_queue_->Size());
+    //LOG(got_batch_number, " after trying to get msg "<<reinterpret_cast<int64>(fetching_batch_message)<<", queue size is "<<txns_queue_->Size());
     // Current batch has remaining txns, grab up to 10.
     if (txns_queue_->Size() < 2000 && fetching_batch_message) {
         done_something = true;

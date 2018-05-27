@@ -90,8 +90,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     string channel("scheduler");
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
-
-    int exec_core = 1+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()); 
+    int exec_core = (1+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()))%56; 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	CPU_ZERO(&cpuset);
