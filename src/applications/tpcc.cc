@@ -45,10 +45,11 @@ void TPCC::NewTxn(int64 txn_id, int txn_type,
      do {
         remote_warehouse_id = rand() % num_warehouses;
         //LOG(txn->txn_id(), " trying warehosue "<<remote_warehouse_id);
-     } while (config->all_nodes.size() > 1 && remote_warehouse_id != my_warehouse); 
+     } while (config->all_nodes.size() > 1 && remote_warehouse_id == my_warehouse); 
      //LOG(txn->txn_id(), " remote warehouse is "<<remote_warehouse_id);
     
      remote_node = remote_warehouse_id*partition_per_warehouse;
+     //std::cout<<"Remote node is "<<remote_node<<", my node is "<<config->this_node_id<<", rw"<<remote_warehouse_id <<", my w "<<my_warehouse<<std::endl;
   }
   //LOG(txn->txn_id(), " remote");
 
@@ -901,7 +902,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 void TPCC::InitializeStorage(Storage* storage, Configuration* conf) {
   // We create and write out all of the warehouses
 	std::cout<<"Start populating TPC-C data"<<std::endl;
-  for (int i = 0; i < (int)(num_warehouses * conf->all_nodes.size()); i++) {
+  for (int i = 0; i < (int)num_warehouses; i++) {
     // First, we create a key for the warehouse
     char warehouse_key[128], warehouse_key_ytd[128];
     Value* warehouse_value = new Value();
