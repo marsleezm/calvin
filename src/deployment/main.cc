@@ -335,15 +335,12 @@ int main(int argc, char** argv) {
         storage = FetchingStorage::BuildStorage();
     }
     storage->Initmutex();
-	std::cout<<"General params: "<<std::endl;
-	std::cout<<"	Distribute txn percent: "<<ConfigReader::Value("distribute_percent")<<std::endl;
-	std::cout<<"	Dependent txn percent: "<<ConfigReader::Value("dependent_percent")<<std::endl;
-	std::cout<<"	Max batch size: "<<ConfigReader::Value("max_batch_size")<<std::endl;
-	std::cout<<"	Num of threads: "<<ConfigReader::Value("num_threads")<<std::endl;
+	std::cout<<"General params: Distribute txn percent: "<<ConfigReader::Value("distribute_percent")<<
+            "    Dependent txn percent: "<<ConfigReader::Value("dependent_percent")<<
+	        "	Max batch size: "<<ConfigReader::Value("max_batch_size")<<
+	        "	Num of threads: "<<ConfigReader::Value("num_threads")<<std::endl;
 
   if (argv[2][0] == 't') {
-      std::cout<<"TPC-C benchmark. No extra parameters."<<std::endl;
-      std::cout << "TPC-C benchmark" << std::endl;
       TPCC().InitializeStorage(storage, &config);
   }
   else if (argv[2][0] == 'r') {

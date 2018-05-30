@@ -81,7 +81,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     }
 
 
-    Spin(10);
+    Spin(20);
 
   // start lock manager thread
     cpu_set_t cpuset;
@@ -91,7 +91,7 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
     thread_connection_ = batch_connection_->multiplexer()->NewConnection(channel, &message_queue);
 
 
-    int exec_core = 1+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()); 
+    int exec_core = (1+conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()))%56; 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	CPU_ZERO(&cpuset);
@@ -295,6 +295,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
   			assert(message.type() == MessageProto::READ_RESULT);
   			buffered_messages[atoi(message.destination_channel().c_str())] = message;
   		}
+        else
+            std::this_thread::yield();
 
 
         /*

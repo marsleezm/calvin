@@ -795,7 +795,7 @@ int TPCC::DeliveryTransaction(StorageManager* storage) const {
 // through, indicating we should populate the database with fake data
 void TPCC::InitializeStorage(Storage* storage, Configuration* conf) {
   // We create and write out all of the warehouses
-	std::cout<<"Start populating TPC-C data"<<std::endl;
+	//std::cout<<"Start populating TPC-C data"<<std::endl;
   for (int i = 0; i < (int)(num_warehouses * conf->all_nodes.size()); i++) {
     // First, we create a key for the warehouse
     char warehouse_key[128], warehouse_key_ytd[128];
@@ -895,7 +895,7 @@ void TPCC::InitializeStorage(Storage* storage, Configuration* conf) {
     SetItem(string(item_key), item_value);
     delete item;
   }
-  std::cout<<"Finish populating TPC-C data"<<std::endl;
+  //std::cout<<"Finish populating TPC-C data"<<std::endl;
 }
 
 // The following method is a dumb constructor for the warehouse protobuffer

@@ -70,7 +70,7 @@ Sequencer::Sequencer(Configuration* conf, ConnectionMultiplexer* multiplexer,
 	pthread_attr_init(&attr_writer);
 	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    int writer_core = conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str());
+    int writer_core = (conf->this_node_id*atoi(ConfigReader::Value("num_threads").c_str()))%56;
 	CPU_ZERO(&cpuset);
 	CPU_SET(writer_core, &cpuset);
 	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
@@ -161,16 +161,9 @@ void Sequencer::RunWriter() {
       if (i != configuration_->this_node_id)
           not_received.insert(i);
   }
-  double start_time = GetTime();
-  bool showed = false;
   while (synchronization_counter < configuration_->all_nodes.size()) {
     multiplexer_->Run();
     synchronization_message.Clear();
-     if(GetTime() - start_time > 15 and showed == false){
-        showed = true;
-        for(auto n : not_received)
-            std::cout<<"Lacking "<<n<<std::endl;
-     }
     if (connection_->GetMessage(&synchronization_message)) {
       not_received.erase(synchronization_message.source_node());
       //std::cout<<"Gotta one msg "<<std::endl;
@@ -221,11 +214,12 @@ void Sequencer::RunWriter() {
 			  batch.add_data(txn_string);
 			  delete txn;
           }
+          else
+              std::this_thread::yield();
               //bool paxos_result = false, reader_result = false;
               //paxos_result = RunPaxos();
               //reader_result = RunReader(fetching_batch_message, batch_offset);
               //if(paxos_result == false and reader_result == false)
-              //   std::this_thread::yield();
 	  }
       batch.SerializeToString(&batch_string);
       paxos_queues->Push(batch_string);
