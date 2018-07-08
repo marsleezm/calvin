@@ -41,19 +41,12 @@ class TxnScheduler {
 			batches[batch_id] = batch_message;
 		}
 
-	private:
-		bool addSPT();
-		bool getBatch(int batch_id);
-
-
  	private:
 		int num_nodes;
         int batch_div;
         int this_node;
         int msg_idx;
         int batch_id;
-        bool need_spt = false;
-        int spt_idx;
         MessageProto** batch_msgs;
 
         int min_batch;

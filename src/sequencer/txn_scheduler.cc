@@ -46,10 +46,6 @@ bool TxnScheduler::getBatch(int batch_id){
 		MessageProto* batch = batches[batch_id];
 		batches.erase(batch_id);
 		batch_msgs[batch_id%num_nodes] = batch;
-		if(batch_id == min_batch + this_node){
-			batch_div = batch->num_spt()/max(1, 2*(num_nodes-1));
-			LOG(batch_id, " got SPT, data size "<<batch->data_size()<<", num SPT "<<batch->num_spt()<<", div "<<batch_div);
-		}
 		LOG(-1, batch_id<<" got batch from previous");
 		return true;
 	} else {
@@ -59,10 +55,6 @@ bool TxnScheduler::getBatch(int batch_id){
 			if (message->batch_number() == batch_id){
 				//LOG(message->batch_number(), " got from queue, addr "<<reinterpret_cast<int64>(message));
 				batch_msgs[batch_id%num_nodes] = message;
-				if(batch_id == min_batch + this_node){
-					LOG(message->batch_number(), " got SPT, data size "<<message->data_size()<<", num SPT "<<message->num_spt()<<", div "<<batch_div);
-					batch_div = message->num_spt()/max(1, 2*(num_nodes-1));
-				}
 				return true;
 			}
 			else if (message->batch_number() <= max_batch and message->batch_number() >= min_batch){
@@ -84,89 +76,25 @@ bool TxnScheduler::getBatch(int batch_id){
 }
 
 bool TxnScheduler::addTxn(){
-	//LOG(batch_id, " checking, addr is "<<reinterpret_cast<int64>(batch_msgs[batch_id%num_nodes]));
-	if (need_spt == false and (batch_msgs[batch_id%num_nodes] or getBatch(batch_id))){
-		//LOG(batch_id, " trying to add MPT");
-		if(batch_id == min_batch+this_node and txn_idx == 0){
-			txn_idx = batch_msgs[batch_id%num_nodes]->num_spt();
-		}
-		//else
-		LOG(batch_id, " txn_idx is "<<txn_idx<<", data size is "<<batch_msgs[batch_id%num_nodes]->data_size());
-		int64 prev_inv_node = -1;
-		//int prev_fetch = txn_idx;
-		// Add MPT
-		while(true){
-			if(txn_idx < batch_msgs[batch_id%num_nodes]->data_size()){
-				//LOG(batch_id, " txn_idx is "<<txn_idx<<", limit is "<<batch_msgs[batch_id%num_nodes]->data_size());
-				TxnProto* txn = new TxnProto();
-				txn->ParseFromString(batch_msgs[batch_id%num_nodes]->data(txn_idx));
-				if(batch_id != min_batch+this_node or (prev_inv_node == -1 or prev_inv_node == txn->involved_nodes())){
-					txn->set_local_txn_id(fetched_num++);
-					txn_queue->Push(txn);
-					prev_inv_node = txn->involved_nodes();
-					++txn_idx;
-				}
-				else{
-					LOG(batch_id, "prev "<<prev_inv_node<<", now "<<txn->involved_nodes());
-					delete txn;
-					break;
-				}
-			}
-			else
-				break;
-		}
-		LOG(batch_id, " add MPT from "<<prev_fetch<<" to "<<txn_idx);
-		if(txn_idx == batch_msgs[batch_id%num_nodes]->data_size()){
-			if(batch_id != min_batch+this_node){
-				delete batch_msgs[batch_id%num_nodes];
-				batch_msgs[batch_id%num_nodes] = NULL;
-			}
-			++batch_id;
-			txn_idx = 0;
-		}
-		need_spt = true;
-		return true;
-	}
-	else
-		return addSPT();
+    unordered_map<int64, set<MessageProto*>> txns_by_partition;
+    while(txn_idx < batch_msgs[batch_id%num_nodes]->data_size()){
+        //LOG(batch_id, " txn_idx is "<<txn_idx<<", limit is "<<batch_msgs[batch_id%num_nodes]->data_size());
+        TxnProto* txn = new TxnProto();
+        txn->ParseFromString(batch_msgs[batch_id%num_nodes]->data(txn_idx));
+        if (txn->involved_nodes() == 0) {
+            txn->set_local_txn_id(fetched_num++);
+            txn_queue->Push(txn);
+            delete txn;
+        } else {
+            txns_by_partition[txn->involved_nodes()].add(txn);
+        }
+        ++txn_idx;
+    }
+    for (set<TxnProto*> txns : txns_by_partition) {
+        for (TxnProto* txn : txns) {
+            txn->set_local_txn_id(fetched_num++);
+            txn_queue->Push(txn);
+            delete txn;
+        }
+    }
 }
-
-
-bool TxnScheduler::addSPT() {
-	//LOG(-1, " in addSPT, do I need?"<<need_spt);
-	if(need_spt and (batch_msgs[(min_batch+this_node)%num_nodes] != NULL or getBatch(min_batch+this_node))){
-		int spt_max;
-		if(batch_id == max_batch+1){
-			LOG(batch_id, " set SPT to end because max batch is "<<max_batch);
-			spt_max = batch_msgs[(min_batch+this_node)%num_nodes]->num_spt();
-		}
-		else{
-			LOG(batch_id, " set SPT normally, idx "<<spt_idx<<", div "<<batch_div);
-			spt_max = spt_idx + batch_div;
-		}
-		LOG(batch_id, " try to add SPT from "<<spt_idx<<" to "<<spt_max);
-		for (int i = spt_idx; i < spt_max; i++)
-		{
-			TxnProto* txn = new TxnProto();
-			txn->ParseFromString(batch_msgs[(min_batch+this_node)%num_nodes]->data(i));
-			txn->set_local_txn_id(fetched_num++);
-			txn_queue->Push(txn);
-		}
-		LOG(batch_id, " added SPT");
-		//LOG(batch_id, " fetched "<<fetched_num);
-		if(batch_id > max_batch) {
-			delete batch_msgs[(min_batch+this_node)%num_nodes];
-			batch_msgs[(min_batch+this_node)%num_nodes] = NULL;
-			spt_idx = 0;
-			min_batch = batch_id;
-			max_batch = batch_id + num_nodes - 1;
-		}
-		else
-			spt_idx = spt_max;
-		need_spt = false;
-		return true;
-	}
-	else
-		return false;
-}
-
