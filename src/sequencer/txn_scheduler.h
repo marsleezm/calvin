@@ -41,6 +41,8 @@ class TxnScheduler {
 			batches[batch_id] = batch_message;
 		}
 
+        int64 get_num_fetched() { return fetched_num; }
+
  	private:
 		int num_nodes;
         int batch_div;
@@ -52,7 +54,7 @@ class TxnScheduler {
         int min_batch;
         int max_batch;
         Connection* connection;
-        int fetched_num = 0;
+        int64 fetched_num = 0;
         TxnQueue* txn_queue;
         unordered_map<int, MessageProto*> batches;
 		int txn_idx = 0;

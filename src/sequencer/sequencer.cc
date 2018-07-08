@@ -356,7 +356,7 @@ void Sequencer::RunReader() {
 
   FetchMessage();
   double time = GetTime(), now_time;
-  int64_t last_committed;
+  int64_t last_fetched;
   // Set up batch messages for each system node.
   map<int, MessageProto> batches;
   for (map<int, Node*>::iterator it = configuration_->all_nodes.begin();
@@ -454,15 +454,15 @@ void Sequencer::RunReader() {
                 << batch_count << " batches, fetched"<< num_fetched_this_round
 				<< "txns \n" << std::flush;
 #endif
-      std::cout << " Completed " <<
-      		  (static_cast<double>(Sequencer::num_committed-last_committed) / (now_time- time))
-      			<< " txns/sec, "
+      std::cout << " fetched " <<
+              (static_cast<double>(txn_scheduler->get_num_fetched()-last_fetched) / (now_time- time))
+                << " txns/sec, "
       			<< (static_cast<double>(Sequencer::num_aborted_-last_aborted) / (now_time- time))
       			<< " txns/sec aborted, "
       			//<< test<< " for drop speed , "
       			//<< executing_txns << " executing, "
       			<< num_pend_txns_ << " pending, time is "<<second<<"\n" << std::flush;
-      throughput[second] = (Sequencer::num_committed-last_committed) / (now_time- time);
+      throughput[second] = (Sequencer::num_fetched-last_fetched) / (now_time- time);
       abort[second] = (Sequencer::num_aborted_-last_aborted) / (now_time- time);
 
       ++second;
@@ -490,7 +490,7 @@ void Sequencer::RunReader() {
       txn_count = 0;
       batch_count = 0;
       num_fetched_this_round = 0;
-      last_committed = Sequencer::num_committed;
+      last_fetched = Sequencer::num_fetched;
     }
   }
   Spin(1);

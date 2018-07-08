@@ -412,6 +412,13 @@ class TxnQueue {
     back_ = (back_ + 1) % size_;
   }
 
+  inline void FakePush(TxnProto*& item) {
+    Lock l(&back_mutex_);
+    // Check if the buffer has filled up. Acquire all locks and resize if so.
+    queue_[back_] = item;
+    back_ = (back_ + 1) % size_;
+  }
+
   // If the queue is non-empty, (atomically) sets '*result' equal to the front
   // element, pops the front element from the queue, and returns true,
   // otherwise returns false.

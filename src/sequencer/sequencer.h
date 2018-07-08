@@ -87,6 +87,7 @@ class Sequencer {
 
  public:
   static atomic<int64_t> num_committed;
+  static atomic<int64_t> num_fetched;
   //static int64_t num_c_txns_;
   //static int64_t max_commit_ts;
   static atomic<int64_t> num_pend_txns_;

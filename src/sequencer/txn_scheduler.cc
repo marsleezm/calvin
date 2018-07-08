@@ -83,7 +83,7 @@ bool TxnScheduler::addTxn(){
         txn->ParseFromString(batch_msgs[batch_id%num_nodes]->data(txn_idx));
         if (txn->involved_nodes() == 0) {
             txn->set_local_txn_id(fetched_num++);
-            txn_queue->Push(txn);
+            txn_queue->FakePush(txn);
             delete txn;
         } else {
             txns_by_partition[txn->involved_nodes()].add(txn);
@@ -93,7 +93,7 @@ bool TxnScheduler::addTxn(){
     for (set<TxnProto*> txns : txns_by_partition) {
         for (TxnProto* txn : txns) {
             txn->set_local_txn_id(fetched_num++);
-            txn_queue->Push(txn);
+            txn_queue->FakePush(txn);
             delete txn;
         }
     }
