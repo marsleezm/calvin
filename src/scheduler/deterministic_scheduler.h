@@ -45,10 +45,11 @@ class DeterministicScheduler : public Scheduler {
   DeterministicScheduler(Configuration* conf, Connection* batch_connection, Storage* storage,
 		  const Application* application, AtomicQueue<TxnProto*>* input_queue, Client* client, int queue_mode);
   virtual ~DeterministicScheduler();
-
+  
+ public:
+  static bool terminated_;
  private:
   // Function for starting main loops in a separate pthreads.
-  static void* RunWorkerThread(void* arg);
   
   static void* LockManagerThread(void* arg);
 
@@ -90,6 +91,11 @@ class DeterministicScheduler : public Scheduler {
   const Application* application_;
 
   AtomicQueue<TxnProto*>* to_lock_txns;
+
+  double local_latency = 0;
+  long local_cnt = 0;
+  double remote_latency = 0;
+  long remote_cnt = 0;
 
   // Client
   Client* client_;

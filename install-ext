@@ -6,7 +6,9 @@ mkdir ext
 cd ext
 
 #zookeeper
-wget http://apache.org/dist/zookeeper/zookeeper-3.4.6/zookeeper-3.4.6.tar.gz
+if [ 1 == 2 ]
+then
+wget https://archive.apache.org/dist/zookeeper/zookeeper-3.4.6/zookeeper-3.4.6.tar.gz 
 tar xzf zookeeper-3.4.6.tar.gz
 rm zookeeper-3.4.6.tar.gz
 mv zookeeper-3.4.6/src/c zookeeper
@@ -23,6 +25,7 @@ cd protobuf
 ./configure --prefix=$PWD
 make -j7
 cd ..
+fi
 
 # googletest
 wget http://pkgs.fedoraproject.org/repo/pkgs/gtest/gtest-1.6.0.zip/4577b49f2973c90bf9ba69aa8166b786/gtest-1.6.0.zip 

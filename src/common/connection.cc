@@ -53,7 +53,7 @@ pthread_attr_init(&attr);
 //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 CPU_ZERO(&cpuset);
-CPU_SET(5, &cpuset);
+CPU_SET(1, &cpuset);
 //CPU_SET(4, &cpuset);
 //CPU_SET(5, &cpuset);
 //CPU_SET(6, &cpuset);

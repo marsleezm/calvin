@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 #include <queue>
+#include "common/config_reader.h"
 #include "pthread.h"
 #include "common/utils.h"
 #include "proto/txn.pb.h"
@@ -141,6 +142,7 @@ class Sequencer {
   int queue_mode_;
 
   int fetched_txn_num_;
+  int max_batch_size;
 
   AtomicQueue<TxnProto*>* txns_queue_;
 };

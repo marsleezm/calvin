@@ -88,19 +88,6 @@ class TClient : public Client {
     string args_string;
     args.SerializeToString(&args_string);
 
-    // New order txn
-
-    int random_txn_type = rand() % 100;
-     // New order txn
-	if (random_txn_type < 45)  {
-	  *txn = tpcc.NewTxn(txn_id, TPCC::NEW_ORDER, args_string, config_);
-	} else if(random_txn_type < 88) {
-	  *txn = tpcc.NewTxn(txn_id, TPCC::PAYMENT, args_string, config_);
-	}  else {
-	  *txn = tpcc.NewTxn(txn_id, TPCC::STOCK_LEVEL, args_string, config_);
-	  args.set_multipartition(false);
-	}
-
    int random_txn_type = rand() % 100;
     // New order txn
     if (random_txn_type < 45)  {
@@ -151,10 +138,13 @@ int main(int argc, char** argv) {
   // Build connection context and start multiplexer thread running.
   ConnectionMultiplexer multiplexer(&config);
 
+  ConfigReader::Initialize("myconfig.conf");
+  int distribut_percent = atoi(ConfigReader::Value("distribute_percent").c_str());
+
   // Artificial loadgen clients.
   Client* client = (argv[2][0] == 't') ?
-		  reinterpret_cast<Client*>(new TClient(&config, atoi(argv[3]))) :
-		  reinterpret_cast<Client*>(new MClient(&config, atoi(argv[3])));
+		  reinterpret_cast<Client*>(new TClient(&config, distribut_percent)) :
+		  reinterpret_cast<Client*>(new MClient(&config, distribut_percent));
 
 // #ifdef PAXOS
 //  StartZookeeper(ZOOKEEPER_CONF);
@@ -212,7 +202,9 @@ involed_customers = new vector<Key>;
 									 client, queue_mode);
   }
 
-  Spin(180);
+  
+  Spin(30);
+  DeterministicScheduler::terminated_ = true;
   return 0;
 }
 

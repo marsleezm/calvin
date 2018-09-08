@@ -17,6 +17,7 @@ message MessageProto {
   // Channel from which the message originated.
   optional int32 source_channel = 4;
 
+  required int64 time = 5;
   // Every type of network message should get an entry here.
   enum MessageType {
     EMPTY = 0;

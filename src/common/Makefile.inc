@@ -5,7 +5,8 @@ UPPERC_DIR := COMMON
 LOWERC_DIR := common
 
 COMMON_SRCS := common/configuration.cc \
-               common/connection.cc
+               common/connection.cc \
+               common/config_reader.cc
 
 SRC_LINKED_OBJECTS :=
 TEST_LINKED_OBJECTS := $(PROTO_OBJS)

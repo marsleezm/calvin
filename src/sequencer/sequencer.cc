@@ -58,26 +58,15 @@ void* Sequencer::RunSequencerLoader(void *arg) {
 
 Sequencer::Sequencer(Configuration* conf, Connection* connection,
                      Client* client, Storage* storage, int queue_mode)
-    : epoch_duration_(0.01), configuration_(conf), connection_(connection),
+    : configuration_(conf), connection_(connection),
       client_(client), storage_(storage), deconstructor_invoked_(false), queue_mode_(queue_mode), fetched_txn_num_(0) {
+   max_batch_size = atoi(ConfigReader::Value("max_batch_size").c_str());
+   epoch_duration_ = std::stof(ConfigReader::Value("epoch_duration").c_str());
   pthread_mutex_init(&mutex_, NULL);
   // Start Sequencer main loops running in background thread.
 
 cpu_set_t cpuset;
 
-if(queue_mode == DIRECT_QUEUE){
-	CPU_ZERO(&cpuset);
-	CPU_SET(7, &cpuset);
-	std::cout << "Sequencer reader starts at core 7"<<std::endl;
-	pthread_attr_t simple_loader;
-	pthread_attr_init(&simple_loader);
-	pthread_attr_setaffinity_np(&simple_loader, sizeof(cpu_set_t), &cpuset);
-
-	pthread_create(&reader_thread_, &simple_loader, RunSequencerLoader,
-		  reinterpret_cast<void*>(this));
-	txns_queue_ = new AtomicQueue<TxnProto*>();
-}
-else{
 	pthread_attr_t attr_writer;
 	pthread_attr_init(&attr_writer);
 	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -85,29 +74,26 @@ else{
 	CPU_ZERO(&cpuset);
 	//CPU_SET(4, &cpuset);
 	//CPU_SET(5, &cpuset);
-	CPU_SET(6, &cpuset);
+	CPU_SET(0, &cpuset);
 	//CPU_SET(7, &cpuset);
 	pthread_attr_setaffinity_np(&attr_writer, sizeof(cpu_set_t), &cpuset);
-	std::cout << "Sequencer writer starts at core 6"<<std::endl;
+	std::cout << "Sequencer writer starts at core 0"<<std::endl;
 
-
-
-	  pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
+	pthread_create(&writer_thread_, &attr_writer, RunSequencerWriter,
 		  reinterpret_cast<void*>(this));
 
 	CPU_ZERO(&cpuset);
 	//CPU_SET(4, &cpuset);
 	//CPU_SET(5, &cpuset);
 	//CPU_SET(6, &cpuset);
-	CPU_SET(7, &cpuset);
+	CPU_SET(1, &cpuset);
 	pthread_attr_t attr_reader;
 	pthread_attr_init(&attr_reader);
 	pthread_attr_setaffinity_np(&attr_reader, sizeof(cpu_set_t), &cpuset);
-	std::cout << "Sequencer reader starts at core 7"<<std::endl;
+	std::cout << "Sequencer reader starts at core 1"<<std::endl;
 
 	  pthread_create(&reader_thread_, &attr_reader, RunSequencerReader,
 		  reinterpret_cast<void*>(this));
-	}
 }
 
 Sequencer::~Sequencer() {
@@ -155,16 +141,9 @@ double PrefetchAll(Storage* storage, TxnProto* txn) {
 void Sequencer::RunWriter() {
   Spin(1);
 
-#ifdef PAXOS
-  Paxos paxos(ZOOKEEPER_CONF, false);
-#endif
-
-#ifdef PREFETCHING
-  multimap<double, TxnProto*> fetching_txns;
-#endif
-
   // Synchronization loadgen start with other sequencers.
   MessageProto synchronization_message;
+  synchronization_message.set_time(0);
   synchronization_message.set_type(MessageProto::EMPTY);
   synchronization_message.set_destination_channel("sequencer");
   for (uint32 i = 0; i < configuration_->all_nodes.size(); i++) {
@@ -188,82 +167,50 @@ void Sequencer::RunWriter() {
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
 
+  double count = GetTime();
+  long populated = 0;
   for (int batch_number = configuration_->this_node_id;
        !deconstructor_invoked_;
        batch_number += configuration_->all_nodes.size()) {
     // Begin epoch.
     double epoch_start = GetTime();
+	batch.set_time(epoch_start);
     batch.set_batch_number(batch_number);
     batch.clear_data();
-
-#ifdef PREFETCHING
-    // Include txn requests from earlier that have now had time to prefetch.
-    while (!deconstructor_invoked_ &&
-           GetTime() < epoch_start + epoch_duration_) {
-      multimap<double, TxnProto*>::iterator it = fetching_txns.begin();
-      if (it == fetching_txns.end() || it->first > GetTime() ||
-          batch.data_size() >= MAX_BATCH_SIZE) {
-        break;
-      }
-      TxnProto* txn = it->second;
-      fetching_txns.erase(it);
-      string txn_string;
-      txn->SerializeToString(&txn_string);
-      batch.add_data(txn_string);
-      delete txn;
-    }
-#endif
 
     // Collect txn requests for this epoch.
     int txn_id_offset = 0;
     while (!deconstructor_invoked_ &&
            GetTime() < epoch_start + epoch_duration_) {
       // Add next txn request to batch.
-      if (batch.data_size() < MAX_BATCH_SIZE) {
+      if (batch.data_size() < max_batch_size) {
         TxnProto* txn;
         string txn_string;
-        client_->GetTxn(&txn, batch_number * MAX_BATCH_SIZE + txn_id_offset);
-#ifdef LATENCY_TEST
-        if (txn->txn_id() % SAMPLE_RATE == 0) {
-          sequencer_recv[txn->txn_id() / SAMPLE_RATE] =
-              epoch_start
-            + epoch_duration_ * (static_cast<double>(rand()) / RAND_MAX);
-        }
-#endif
-#ifdef PREFETCHING
-        double wait_time = PrefetchAll(storage_, txn);
-        if (wait_time > 0) {
-          fetching_txns.insert(std::make_pair(epoch_start + wait_time, txn));
-        } else {
-          txn->SerializeToString(&txn_string);
-          batch.add_data(txn_string);
-          txn_id_offset++;
-          delete txn;
-        }
-#else
+        client_->GetTxn(&txn, batch_number * max_batch_size + txn_id_offset);
         if(txn->txn_id() == -1) {
           delete txn;
           continue;
         }
 
-
         txn->SerializeToString(&txn_string);
         batch.add_data(txn_string);
         txn_id_offset++;
         delete txn;
-#endif
       }
     }
 
     // Send this epoch's requests to Paxos service.
+	populated += batch.data_size();
     batch.SerializeToString(&batch_string);
-#ifdef PAXOS
-    paxos.SubmitBatch(batch_string);
-#else
     pthread_mutex_lock(&mutex_);
     batch_queue_.push(batch_string);
     pthread_mutex_unlock(&mutex_);
-#endif
+
+	if (GetTime() - count > 1) {
+		std::cout<<"Populate "<<1.0*populated/(GetTime() - count)<<", batch number is "<<batch_number<<std::endl;
+		count = GetTime();
+		populated = 0;
+	}	
   }
 
   Spin(1);
@@ -297,9 +244,6 @@ void Sequencer::RunReader() {
     // Get batch from Paxos service.
     string batch_string;
     MessageProto batch_message;
-#ifdef PAXOS
-    paxos.GetNextBatchBlocking(&batch_string);
-#else
     bool got_batch = false;
     do {
       pthread_mutex_lock(&mutex_);
@@ -312,7 +256,6 @@ void Sequencer::RunReader() {
       if (!got_batch)
         Spin(0.001);
     } while (!got_batch);
-#endif
     batch_message.ParseFromString(batch_string);
     for (int i = 0; i < batch_message.data_size(); i++) {
       TxnProto txn;
@@ -358,6 +301,8 @@ void Sequencer::RunReader() {
     for (map<int, MessageProto>::iterator it = batches.begin();
          it != batches.end(); ++it) {
       it->second.set_batch_number(batch_number);
+	  it->second.set_time(batch_message.time());
+	  //std::cout<<batch_number<<" Time is "<<batch_message.time() <<std::endl;
       connection_->Send(it->second);
       it->second.clear_data();
     }
