@@ -4,6 +4,7 @@
 #include "common/connection.h"
 
 #include <cstdio>
+#include <thread>
 #include <iostream>
 
 #include "common/configuration.h"
@@ -53,7 +54,7 @@ pthread_attr_init(&attr);
 //pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 CPU_ZERO(&cpuset);
-CPU_SET(1, &cpuset);
+CPU_SET(0, &cpuset);
 //CPU_SET(4, &cpuset);
 //CPU_SET(5, &cpuset);
 //CPU_SET(6, &cpuset);
@@ -184,62 +185,28 @@ void ConnectionMultiplexer::Run() {
         undelivered_messages_.erase(*new_connection_channel_);
       }
 
-
       if ((new_connection_channel_->substr(0, 9) == "scheduler") && (new_connection_channel_->substr(9,1) != "_")) {
         link_unlink_queue_[*new_connection_channel_] = new AtomicQueue<MessageProto>();
       }
       // Reset request variable.
       new_connection_channel_ = NULL;
-      
-    }
-
-    // Serve any pending (valid) connection deletion request.
-    if (delete_connection_channel_ != NULL &&
-        inproc_out_.count(*delete_connection_channel_) > 0) {
+    } else if (delete_connection_channel_ != NULL && inproc_out_.count(*delete_connection_channel_) > 0) {
       delete inproc_out_[*delete_connection_channel_];
       inproc_out_.erase(*delete_connection_channel_);
       delete_connection_channel_ = NULL;
       // TODO(alex): Should we also be emptying deleted channels of messages
       // and storing them in 'undelivered_messages_' in case the channel is
       // reopened/relinked? Probably.
-    }
-
-    // Forward next message from a remote node (if any).
-    if (remote_in_->recv(&msg, ZMQ_NOBLOCK)) {
+    } else if (remote_in_->recv(&msg, ZMQ_NOBLOCK)) {
       message.ParseFromArray(msg.data(), msg.size());
       Send(message);
-    }
-
-    // Forward next message from a local component (if any), intercepting
-    // local Link/UnlinkChannel requests.
-    if (inproc_in_->recv(&msg, ZMQ_NOBLOCK)) {
-      message.ParseFromArray(msg.data(), msg.size());
+    } else if (inproc_in_->recv(&msg, ZMQ_NOBLOCK)) {
+      	message.ParseFromArray(msg.data(), msg.size());
         // Normal message. Forward appropriately.
         Send(message);
-    }
-
-   for (unordered_map<string, AtomicQueue<MessageProto>*>::iterator it = link_unlink_queue_.begin();
-        it != link_unlink_queue_.end(); ++it) {
-      
-     MessageProto message;
-     bool got_it = it->second->Pop(&message);
-     if (got_it == true) {
-       if (message.type() == MessageProto::LINK_CHANNEL) {
-         remote_result_[message.channel_request()] = remote_result_[it->first];
-         // Forward on any messages sent to this channel before it existed.
-         vector<MessageProto>::iterator i;
-         for (i = undelivered_messages_[message.channel_request()].begin();
-              i != undelivered_messages_[message.channel_request()].end();
-              ++i) {
-           Send(*i);
-         }
-         undelivered_messages_.erase(message.channel_request());
-       } else if (message.type() == MessageProto::UNLINK_CHANNEL) {
-         remote_result_.erase(message.channel_request());
-       }
-     }
-   }
-       
+    } else {
+		std::this_thread::yield();
+	}
   }
 }
 

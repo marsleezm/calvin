@@ -11,6 +11,7 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <thread>
 #include <set>
 #include <utility>
 
@@ -167,7 +168,6 @@ void Sequencer::RunWriter() {
   string batch_string;
   batch.set_type(MessageProto::TXN_BATCH);
 
-  double count = GetTime();
   long populated = 0;
   for (int batch_number = configuration_->this_node_id;
        !deconstructor_invoked_;
@@ -196,7 +196,9 @@ void Sequencer::RunWriter() {
         batch.add_data(txn_string);
         txn_id_offset++;
         delete txn;
-      }
+      } else {
+		  std::this_thread::yield();
+	  }
     }
 
     // Send this epoch's requests to Paxos service.
@@ -206,11 +208,13 @@ void Sequencer::RunWriter() {
     batch_queue_.push(batch_string);
     pthread_mutex_unlock(&mutex_);
 
+	/*
 	if (GetTime() - count > 1) {
 		std::cout<<"Populate "<<1.0*populated/(GetTime() - count)<<", batch number is "<<batch_number<<std::endl;
 		count = GetTime();
 		populated = 0;
 	}	
+	*/
   }
 
   Spin(1);
@@ -245,7 +249,6 @@ void Sequencer::RunReader() {
     string batch_string;
     MessageProto batch_message;
     bool got_batch = false;
-    do {
       pthread_mutex_lock(&mutex_);
       if (batch_queue_.size()) {
         batch_string = batch_queue_.front();
@@ -253,80 +256,66 @@ void Sequencer::RunReader() {
         got_batch = true;
       }
       pthread_mutex_unlock(&mutex_);
-      if (!got_batch)
-        Spin(0.001);
-    } while (!got_batch);
-    batch_message.ParseFromString(batch_string);
-    for (int i = 0; i < batch_message.data_size(); i++) {
-      TxnProto txn;
-      txn.ParseFromString(batch_message.data(i));
+	  if (got_batch) {
+			batch_message.ParseFromString(batch_string);
+			for (int i = 0; i < batch_message.data_size(); i++) {
+			  TxnProto txn;
+			  txn.ParseFromString(batch_message.data(i));
 
-#ifdef LATENCY_TEST
-      if (txn.txn_id() % SAMPLE_RATE == 0)
-        watched_txn = txn.txn_id();
-#endif
+			  // Compute readers & writers; store in txn proto.
+			  set<int> readers;
+			  set<int> writers;
+			  for (int i = 0; i < txn.read_set_size(); i++)
+				readers.insert(configuration_->LookupPartition(txn.read_set(i)));
+			  for (int i = 0; i < txn.write_set_size(); i++)
+				writers.insert(configuration_->LookupPartition(txn.write_set(i)));
+			  for (int i = 0; i < txn.read_write_set_size(); i++) {
+				writers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
+				readers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
+			  }
 
-      // Compute readers & writers; store in txn proto.
-      set<int> readers;
-      set<int> writers;
-      for (int i = 0; i < txn.read_set_size(); i++)
-        readers.insert(configuration_->LookupPartition(txn.read_set(i)));
-      for (int i = 0; i < txn.write_set_size(); i++)
-        writers.insert(configuration_->LookupPartition(txn.write_set(i)));
-      for (int i = 0; i < txn.read_write_set_size(); i++) {
-        writers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
-        readers.insert(configuration_->LookupPartition(txn.read_write_set(i)));
-      }
+			  for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
+				txn.add_readers(*it);
+			  for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
+				txn.add_writers(*it);
 
-      for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
-        txn.add_readers(*it);
-      for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
-        txn.add_writers(*it);
+			  bytes txn_data;
+			  txn.SerializeToString(&txn_data);
 
-      bytes txn_data;
-      txn.SerializeToString(&txn_data);
+			  // Compute union of 'readers' and 'writers' (store in 'readers').
+			  for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
+				readers.insert(*it);
 
-      // Compute union of 'readers' and 'writers' (store in 'readers').
-      for (set<int>::iterator it = writers.begin(); it != writers.end(); ++it)
-        readers.insert(*it);
+			  // Insert txn into appropriate batches.
+			  for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
+				batches[*it].add_data(txn_data);
 
-      // Insert txn into appropriate batches.
-      for (set<int>::iterator it = readers.begin(); it != readers.end(); ++it)
-        batches[*it].add_data(txn_data);
+			  txn_count++;
+			}
 
-      txn_count++;
-    }
+			// Send this epoch's requests to all schedulers.
+			for (map<int, MessageProto>::iterator it = batches.begin();
+				 it != batches.end(); ++it) {
+			  it->second.set_batch_number(batch_number);
+			  it->second.set_time(batch_message.time());
+			  //std::cout<<batch_number<<" Time is "<<batch_message.time() <<std::endl;
+			  connection_->Send(it->second);
+			  it->second.clear_data();
+			}
+			batch_number += configuration_->all_nodes.size();
+			batch_count++;
 
-    // Send this epoch's requests to all schedulers.
-    for (map<int, MessageProto>::iterator it = batches.begin();
-         it != batches.end(); ++it) {
-      it->second.set_batch_number(batch_number);
-	  it->second.set_time(batch_message.time());
-	  //std::cout<<batch_number<<" Time is "<<batch_message.time() <<std::endl;
-      connection_->Send(it->second);
-      it->second.clear_data();
-    }
-    batch_number += configuration_->all_nodes.size();
-    batch_count++;
-
-#ifdef LATENCY_TEST
-    if (watched_txn != -1) {
-      sequencer_send[watched_txn] = GetTime();
-      watched_txn = -1;
-    }
-#endif
-
-    // Report output.
-    if (GetTime() > time + 1) {
-#ifdef VERBOSE_SEQUENCER
-      std::cout << "Submitted " << txn_count << " txns in "
-                << batch_count << " batches,\n" << std::flush;
-#endif
-      // Reset txn count.
-      time = GetTime();
-      txn_count = 0;
-      batch_count = 0;
-    }
+			// Report output.
+			if (GetTime() > time + 1) {
+			  // Reset txn count.
+			  time = GetTime();
+			  txn_count = 0;
+			  batch_count = 0;
+			}
+		else {
+			std::this_thread::yield();
+		}
+	}
   }
   Spin(1);
 }

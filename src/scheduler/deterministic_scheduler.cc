@@ -19,6 +19,7 @@
 #include <utility>
 #include <sched.h>
 #include <map>
+#include <thread>
 
 #include "applications/application.h"
 #include "common/utils.h"
@@ -144,7 +145,8 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
   MessageProto message;
   MessageProto* batch_message = NULL;
   int batch_number = 0;
-  double start = GetTime(), time;
+  long prev_local_cnt, prev_remote_cnt;
+  double start = GetTime(), time, last_output = GetTime();
   while (!terminated_) {
       // Have we run out of txns in our batch? Let's get some new ones.
       	time = GetTime();
@@ -161,27 +163,26 @@ void* DeterministicScheduler::LockManagerThread(void* arg) {
 			//}
 			++batch_number;
         	delete batch_message;
+			if (GetTime() > last_output + 2) {
+			  double total_time = GetTime() - last_output;
+			  std::cout << "Local " << (1.0*(scheduler->local_cnt - prev_local_cnt) / total_time)
+						<< " txns/sec, "
+						<< "remote " << (1.0*(scheduler->remote_cnt - prev_remote_cnt) / total_time)
+						<< " txns/sec, "
+						<< scheduler->local_latency / std::max(scheduler->local_cnt, (long)1) << " local_latency, "
+						<< scheduler->remote_latency / std::max(scheduler->remote_cnt, (long)1) << " remote_latency \n"
+						<< std::flush;
+			  prev_local_cnt = scheduler->local_cnt;
+			  prev_remote_cnt = scheduler->remote_cnt;
+			  last_output = GetTime();
+			}
+		} else {
+			std::this_thread::yield();
 		}
 
-    // Report throughput.
-	/*
-    if (GetTime() > time + 1) {
-      double total_time = GetTime() - time;
-      std::cout << "Local " << (1.0*(scheduler->local_cnt - prev_local_cnt) / total_time)
-                << " txns/sec, "
-      			<< "remote " << (1.0*(scheduler->remote_cnt - prev_remote_cnt) / total_time)
-                << " txns/sec, "
-                << scheduler->local_latency / std::max(scheduler->local_cnt, (long)1) << " local_latency, "
-                << scheduler->remote_latency / std::max(scheduler->remote_cnt, (long)1) << " remote_latency \n"
-                << std::flush;
-      // Reset txn count.
-	  prev_local_cnt = scheduler->local_cnt;
-	  prev_remote_cnt = scheduler->remote_cnt;
-    }
-	*/
   }
       double total_time = GetTime() - start;
-      std::cout << "Batch number is "<< batch_number
+      std::cout << "FINAL: "
       			<< "Local " << (1.0*scheduler->local_cnt / total_time)
                 << " txns/sec, "
       			<< "remote " << (1.0*scheduler->remote_cnt / total_time)
