@@ -89,6 +89,7 @@ class LockedVersionedStorage {
   virtual void PutObject(const Key& key, Value* value);
   virtual void Unlock(const Key& key, int64 txn_id, bool new_object);
   virtual void RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64>* aborted_txs);
+  virtual void CleanReadDep(const Key& key, int64 txn_id);
   inline bool DeleteObject(const Key& key) { 
     /*
         if(key[0] == 'w')

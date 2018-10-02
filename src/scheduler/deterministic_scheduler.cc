@@ -476,6 +476,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     TxnProto* current_tx = NULL;
     bool enable_batch = atoi(ConfigReader::Value("read_batch").c_str());
     bool total_order = atoi(ConfigReader::Value("total_order").c_str());
+    bool clean_read_dep = atoi(ConfigReader::Value("clean_read_dep").c_str());
     pair<int64, int64>* latency_array = scheduler->latency[thread];
 	vector<MessageProto> buffered_msgs;
 	set<int64> finalized_uncertain;
@@ -627,7 +628,7 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
                   CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
               }
               StorageManager* manager = new StorageManager(scheduler->configuration_, scheduler->thread_connections_[thread],
-                    scheduler->storage_, &abort_queue, &waiting_queue, current_tx, thread);
+                    scheduler->storage_, &abort_queue, &waiting_queue, current_tx, thread, clean_read_dep);
               scheduler->sc_txn_list[current_tx->local_txn_id()%sc_array_size] = MyFour<int64, int64, int64, StorageManager*>(NO_TXN, current_tx->local_txn_id(), current_tx->txn_id(), manager);
             
               if(total_order == false){

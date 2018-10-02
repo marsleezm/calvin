@@ -53,11 +53,11 @@ class StorageManager {
   // TODO(alex): Document this class correctly.
   StorageManager(Configuration* config, Connection* connection,
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-				 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn, int thread);
+				 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn, int thread, bool clean_read_dep);
 
   StorageManager(Configuration* config, Connection* connection,
 		  LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-		  	  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, int thread);
+		  	  AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, int thread, bool clean_read_dep);
 
     inline void InitUnconfirmMsg(MessageProto* msg){
         msg->clear_received_num_aborted();
@@ -405,10 +405,11 @@ class StorageManager {
   Key suspended_key;
   bool first_read_txn = false;
 
+  int thread;
+  bool clean_read_dep;
   /****** For statistics ********/
   std::atomic<bool> has_confirmed = ATOMIC_FLAG_INIT;
   bool in_list = false;
-    int thread;
 };
 
 #endif  // _DB_BACKEND_STORAGE_MANAGER_H_

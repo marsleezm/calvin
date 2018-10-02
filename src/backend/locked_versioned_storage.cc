@@ -578,6 +578,24 @@ ValuePair LockedVersionedStorage::SafeRead(const Key& key, int64 txn_id, bool ne
     return value_pair;
 }
 
+void LockedVersionedStorage::CleanReadDep(const Key& key, int64 txn_id) {
+    KeyEntry* entry;
+    Table::accessor result;
+    table.find(result, key);
+    entry = result->second;
+
+	vector<ReadFromEntry>* read_from_list = entry->read_from_list;
+	vector<ReadFromEntry>::iterator it = read_from_list->begin();
+
+	while(it != entry->read_from_list->end()) {
+	    if (it->my_tx_id_ == txn_id) {
+	        it = read_from_list->erase(it);
+	    } else {
+            ++it;
+        }
+	}
+}
+
 void LockedVersionedStorage::RemoveValue(const Key& key, int64 txn_id, bool new_object, vector<int64_t>* aborted_txs) {
 	//LOG(txn_id, " unlock "<<key);
     KeyEntry* entry;

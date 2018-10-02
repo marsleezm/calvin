@@ -15,10 +15,11 @@
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		LockedVersionedStorage* actual_storage,  AtomicQueue<pair<int64_t, int>>* abort_queue,
-								 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, int thread)
+								 AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, int thread, bool if_clean)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), 
-	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_executed_(0), local_aborted_(0), suspended_key(""), thread(thread){
+	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_executed_(0), local_aborted_(0), suspended_key(""), thread(thread), clean_read_dep(if_clean) {
+    clean_read_dep = true;
 	txn_ = NULL;
     sc_list = NULL;
     ca_list = NULL;
@@ -28,10 +29,10 @@ StorageManager::StorageManager(Configuration* config, Connection* connection,
 
 StorageManager::StorageManager(Configuration* config, Connection* connection,
 		LockedVersionedStorage* actual_storage, AtomicQueue<pair<int64_t, int>>* abort_queue,
-			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn, int thread)
+			AtomicQueue<MyTuple<int64_t, int, ValuePair>>* pend_queue, TxnProto* txn, int thread, bool if_clean)
     : configuration_(config), connection_(connection), actual_storage_(actual_storage),
 	  txn_(txn), exec_counter_(0), max_counter_(0), abort_queue_(abort_queue), pend_queue_(pend_queue), 
-	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_executed_(0), local_aborted_(0), suspended_key(""), thread(thread){
+	   is_suspended_(false), spec_committed_(false), abort_bit_(0), num_executed_(0), local_aborted_(0), suspended_key(""), thread(thread), clean_read_dep(if_clean) {
 	if (txn->multipartition()){
 		connection->LinkChannel(IntToString(txn->txn_id()));
 
@@ -584,6 +585,13 @@ StorageManager::~StorageManager() {
 		}
 		connection_->UnlinkChannel(IntToString(txn_->txn_id()));
 	}
+
+    if (clean_read_dep) {
+        for (tr1::unordered_map<Key, ValuePair>::iterator it = read_set_.begin(); it != read_set_.end(); ++it)
+        {
+            actual_storage_->CleanReadDep(it->first, txn_->local_txn_id());
+        }
+    }
 
 	delete[] sc_list;
 	delete[] ca_list;
