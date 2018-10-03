@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#cores="1 4 5 8 10 20 30 40 50"
-cores="1"
+cores="1 4 5 8 10 20 30 40 50"
+#cores="1"
 read_deps="1"
 total_orders="1"
 update_percent="90"
@@ -25,7 +25,8 @@ do
                 sed -e '/LATENCY/,$d' 0output.txt  > haha
                 tail -n +4 haha > haha2
                 throughput=`awk -F ',' '{sum+=$1;line+=1}END{print sum/line}' haha2` 
-                echo $C , $throughput >> bench_test/${up}/hi_con_result_rd${rd}_to${to}_rp${rp}
+                abort=`awk -F ',' '{sum+=$2;line+=1}END{print sum/line}' haha2` 
+                echo $C , $throughput, $abort >> bench_test/${up}/hi_con_result_rd${rd}_to${to}_rp${rp}
             done
         done
     done
