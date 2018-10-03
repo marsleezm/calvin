@@ -554,7 +554,7 @@ StorageManager::~StorageManager() {
 	//LOG(txn_->txn_id(), " deleting");
 	//LOCKLOG(txn_->txn_id(), " committing and cleaning");
 	if (message_){
-		if(has_confirmed==false and in_list==false and writer_id != -1){
+		if(has_confirmed==false and writer_id != -1){
 			LOG(txn_->txn_id(), " sending confirm when committing");
 			MessageProto msg;
 			msg.set_type(MessageProto::READ_CONFIRM);
@@ -705,7 +705,7 @@ Value* StorageManager::ReadLock(const Key& key, int& read_state, bool new_object
 				ValuePair result = actual_storage_->ReadLock(key, txn_->local_txn_id(), &abort_bit_, &local_aborted_,
 									num_executed_, abort_queue_, pend_queue_, new_object, aborted_txs);
 				if(result.first == SUSPEND){
-					LOCKLOG(txn_->txn_id(), " suspend when read&lock "<<key<<", max counter"<<max_counter_);//<<", abort bit is"<<abort_bit_<<", num a"<<num_executed_);
+					//LOCKLOG(txn_->txn_id(), " suspend when read&lock "<<key<<", max counter"<<max_counter_);//<<", abort bit is"<<abort_bit_<<", num a"<<num_executed_);
 					read_state = SPECIAL;
 					suspended_key = key;
 					read_set_[key].first = WRITE | new_object;

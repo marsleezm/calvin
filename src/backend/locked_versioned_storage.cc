@@ -120,7 +120,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, std::at
 			//Try to abort this transaction
 			//LOG(txn_id, " trying to abort "<<entry->lock.tx_id_);//<<", org value is "<<entry->lock.num_aborted_);
             //if(key.back() == 'y')
-			    LOG(txn_id, " steal lock of "<<key<<" from "<<entry->lock.tx_id_<<", its na "<<entry->lock.num_aborted_);
+			 //LOG(txn_id, " steal lock of "<<key<<" from "<<entry->lock.tx_id_<<", its na "<<entry->lock.num_aborted_);
 			bool result = std::atomic_compare_exchange_strong(entry->lock.abort_bit_,
 					&entry->lock.num_aborted_, entry->lock.num_aborted_+1);
 
@@ -136,7 +136,7 @@ ValuePair LockedVersionedStorage::ReadLock(const Key& key, int64 txn_id, std::at
 		}
         else{
             //if(key.back() == 'y')
-			    LOG(txn_id, " obtained lock on "<<key);//<<", org value is "<<entry->lock.num_aborted_);
+			    //LOG(txn_id, " obtained lock on "<<key);//<<", org value is "<<entry->lock.num_aborted_);
         }
 		entry->lock = LockEntry(txn_id, abort_bit, local_aborted, num_aborted, abort_queue);
        //LOG(txn_id, key<<"'s holder is "<<entry->lock.tx_id_);

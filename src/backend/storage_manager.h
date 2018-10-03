@@ -185,6 +185,7 @@ class StorageManager {
 
   // Can commit, if the transaction is read-only or has spec-committed.
   inline int CanSCToCommit() {
+      LOG(txn_->txn_id(), " checking, "<<num_executed_<<", abort is "<<abort_bit_<<", spec comm "<<spec_committed_<<", read only "<<ReadOnly());
 	  if (ReadOnly())
 		  return SUCCESS;
 	  else if (txn_->uncertain() and writer_id == -1)
@@ -244,7 +245,7 @@ class StorageManager {
       if(max_counter_ == 0 and suspended_key == "")
           num_executed_ = abort_bit_;
       suspended_key = "";
-      LOG(txn_->txn_id(), " init, type is "<<txn_->txn_type()<<", max counter:"<<max_counter_);
+      //LOG(txn_->txn_id(), " init, type is "<<txn_->txn_type()<<", committed is "<<DeterministicScheduler::num_lc_txns_);
   	  if (message_ && suspended_key!=""){
   		  LOG(txn_->txn_id(), "Adding suspended key to msg: "<<suspended_key);
   		  message_->add_keys(suspended_key);
@@ -288,8 +289,6 @@ class StorageManager {
   inline TxnProto* get_txn(){ return txn_; }
   inline TPCCArgs* get_args() { return tpcc_args;}
   inline void set_args() {  tpcc_args = new TPCCArgs(); tpcc_args->ParseFromString(txn_->arg()); }
-  inline void put_inlist() { in_list = true; }
-  inline bool if_inlist() { return in_list;}
 
   void Abort();
   bool ApplyChange(bool is_committing);
@@ -409,7 +408,6 @@ class StorageManager {
   bool clean_read_dep;
   /****** For statistics ********/
   std::atomic<bool> has_confirmed = ATOMIC_FLAG_INIT;
-  bool in_list = false;
 };
 
 #endif  // _DB_BACKEND_STORAGE_MANAGER_H_

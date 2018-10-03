@@ -36,13 +36,14 @@
 //#define SC_ARRAY_SIZE (NUM_SC_TXNS+NUM_THREADS*2)
 
 using std::deque;
+using std::tr1::unordered_map;
 
 namespace zmq {
 class socket_t;
 class message_t;
 }
 using zmq::socket_t;
-using namespace std;
+//using namespace std;
 
 class Configuration;
 class Connection;
@@ -65,7 +66,6 @@ class DeterministicScheduler : public Scheduler {
 		  LockedVersionedStorage* storage, TxnQueue* txns_queue,
 						 Client* client, const Application* application);
   virtual ~DeterministicScheduler();
-  bool TryToFindId(MessageProto& msg, int& i, int64& bl, int64& g_id, int64& base_r_local, int64 base);
   void static terminate() { terminated_ = true; }
 
  public:
@@ -83,7 +83,7 @@ class DeterministicScheduler : public Scheduler {
       array[idx].second += 1;
   }
 
-  bool ExecuteTxn(StorageManager* manager, int thread);
+  bool ExecuteTxn(StorageManager* manager, int thread, std::tr1::unordered_map<int64_t, StorageManager*>& active_l_tids);
   bool ExecuteCommitTxn(StorageManager* manager, int thread);
   //StorageManager* ExecuteTxn(StorageManager* manager, int thread);
 
@@ -138,8 +138,7 @@ class DeterministicScheduler : public Scheduler {
   int pc_buffer_size;
   int multi_parts;
   int max_sc;
-  int sc_array_size;
-  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair>* to_sc_txns_;
+  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair>** to_sc_txns_;
   priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
 
   pair<int64, int64>** latency;
