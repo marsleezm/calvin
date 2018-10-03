@@ -137,16 +137,15 @@ DeterministicScheduler::DeterministicScheduler(Configuration* conf,
 	thread_connections_ = new Connection*[num_threads+1];
     max_sc = atoi(ConfigReader::Value("max_sc").c_str());
 	sc_array_size = max_sc+num_threads*MULTI_POP_NUM;
-	to_sc_txns_ = new pair<int64, StorageManager*>*[num_threads];
+	//to_sc_txns_ = new pair<int64, StorageManager*>*[num_threads];
+    to_sc_txns_ = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair>[num_threads];
 
 	for (int i = 0; i < num_threads; i++) {
 		latency[i] = new pair<int64, int64>[LATENCY_SIZE];
 		message_queues[i] = new AtomicQueue<MessageProto>();
 		//abort_queues[i] = new AtomicQueue<pair<int64_t, int>>();
 		//waiting_queues[i] = new AtomicQueue<MyTuple<int64_t, int, ValuePair>>();
-        to_sc_txns_[i] = new pair<int64, StorageManager*>[sc_array_size];
-        for(int j = 0; j<sc_array_size; ++j)
-            to_sc_txns_[i][j] = pair<int64, StorageManager*>(NO_TXN, NULL);
+        to_sc_txns_[i] = new priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair>();
 
 		block_time[i] = 0;
 		sc_block[i] = 0;
@@ -464,6 +463,8 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
     pair<int64, StorageManager*>* local_sc_txns= scheduler->to_sc_txns_[thread];
     AtomicQueue<pair<int64_t, int>> abort_queue;// = scheduler->abort_queues[thread];
     AtomicQueue<MyTuple<int64_t, int, ValuePair>> waiting_queue;// = scheduler->waiting_queues[thread];
+    priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair >* my_to_sc_txns
+      = scheduler->to_sc_txns_[thread];
 
     // Begin main loop.
     MessageProto message;
@@ -482,26 +483,48 @@ void* DeterministicScheduler::RunWorkerThread(void* arg) {
 	set<int64> finalized_uncertain;
 
     while (!terminated_) {
-      if (total_order and scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first == num_lc_txns_ and pthread_mutex_trylock(&scheduler->commit_tx_mutex) == 0){
-            //LOG(-1, " Got lock! nlc "<<num_lc_txns_);
-            int tx_index=num_lc_txns_%sc_array_size;
-            MyFour<int64_t, int64_t, int64_t, StorageManager*> first_tx = scheduler->sc_txn_list[tx_index];
-            StorageManager* mgr=NULL;
+        if (!my_to_sc_txns->empty()){
+            //END_BLOCK(if_blocked, scheduler->block_time[thread], last_blocked);
+            to_sc_txn = my_to_sc_txns->top();
+            if (to_sc_txn.second == Sequencer::num_lc_txns_){
+                mgr = active_l_tids[to_sc_txn.second];
+                if (!mgr->CanSCToCommit()){
+                    LOCKLOG(to_sc_txn.first, " tid is "<<to_sc_txn.second<<", "<<reinterpret_cast<int64>(mgr)<<" is popped out of sc, values are "<<mgr->spec_committed_<<", "
+                          <<mgr->abort_bit_<<", "<<mgr->num_restarted_);
+                    my_to_sc_txns->pop();
+                }
+                else{
+                    LOG(to_sc_txn.first,  " committed! Max commit ts is "<<Sequencer::num_lc_txns_);
+                    ++Sequencer::num_lc_txns_;
+                    if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
+                        ++Sequencer::num_committed;
 
-            while(first_tx.first == num_lc_txns_ and first_tx.fourth->CanSCToCommit() == SUCCESS){
-                mgr = first_tx.fourth;
-                LOG(first_tx.first, first_tx.fourth->txn_->txn_id()<<" comm, nlc:"<<num_lc_txns_);
-                if(mgr->get_txn()->writers_size() == 0 || mgr->get_txn()->writers(0) == this_node)
-                    ++Sequencer::num_committed;
-                scheduler->sc_txn_list[tx_index].third = NO_TXN;
-                if (mgr->get_txn()->seed() % SAMPLE_RATE == 0 and (mgr->get_txn()->txn_type() & READONLY_MASK))
-                   AddLatency(latency_array, 2, mgr->get_txn()->start_time(), GetUTime()); 
-                ++num_lc_txns_;
-                tx_index = (tx_index+1)%sc_array_size; 
-                first_tx = scheduler->sc_txn_list[tx_index];
+                    if(mgr->ReadOnly())
+                        scheduler->application_->ExecuteReadOnly(mgr);
+
+                    active_g_tids.erase(to_sc_txn.first);
+                    active_l_tids.erase(to_sc_txn.second);
+                    if (mgr->get_txn()->seed() % SAMPLE_RATE == 0){ \
+                        AddLatency(latency_array, 0, mgr->get_txn()->start_time(), mgr->spec_commit_time); \
+                        AddLatency(latency_array, 1, mgr->get_txn()->start_time(), GetUTime()); \
+                    }
+                    delete mgr;
+                    my_to_sc_txns->pop();
+                    if (my_to_sc_txns->size()){
+                        LOG(my_to_sc_txns->top().first, " is the first after popping up "<<to_sc_txn.first);
+                    }
+                    continue;
+                }
             }
-            pthread_mutex_unlock(&scheduler->commit_tx_mutex);
-      }
+            else if (to_sc_txn.second < Sequencer::num_lc_txns_)
+                my_to_sc_txns->pop();
+            else{
+                if(last_sc != to_sc_txn.first){
+                    LOG(-1, ", can not do anything, my sc is first is "<<to_sc_txn.first<<", second is "<<to_sc_txn.second<<", num lc is "<<Sequencer::num_lc_txns_);
+                    last_sc = to_sc_txn.first;
+                }
+            }
+        }
       //LOG(scheduler->sc_txn_list[num_lc_txns_%sc_array_size].first, " first transaction, num lc "<<num_lc_txns_<<", idx "<<num_lc_txns_%sc_array_size);
       CLEANUP_TXN(local_gc, local_sc_txns, sc_array_size, latency_array, scheduler->sc_txn_list);
 

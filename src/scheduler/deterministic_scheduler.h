@@ -123,7 +123,7 @@ class DeterministicScheduler : public Scheduler {
   int num_threads;
 
   // Transactions that can be committed if all its previous txns have been local-committed
-  pair<int64, StorageManager*>** to_sc_txns_;
+  //pair<int64, StorageManager*>** to_sc_txns_;
 
   // Transactions that can only resume execution after all its previous txns have been local-committed
 
@@ -139,6 +139,7 @@ class DeterministicScheduler : public Scheduler {
   int multi_parts;
   int max_sc;
   int sc_array_size;
+  priority_queue<pair<int64_t,int64_t>, vector<pair<int64_t,int64_t>>, ComparePair>* to_sc_txns_;
   priority_queue<MyTuple<int64_t, int, int>, vector<MyTuple<int64_t, int, int>>, CompareTuple<int64_t, int,int>> pending_ca;
 
   pair<int64, int64>** latency;
