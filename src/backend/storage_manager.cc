@@ -190,6 +190,7 @@ void StorageManager::Abort(){
 			}
 			else if(it->second.first & IS_COPY)
 				delete it->second.second;
+            actual_storage_->CleanReadDep(it->first, txn_->local_txn_id());
 		}
 	}
 	else{
@@ -200,6 +201,7 @@ void StorageManager::Abort(){
 				//LOG(txn_->txn_id(), " removing "<<it->first);
 				actual_storage_->RemoveValue(it->first, txn_->local_txn_id(), it->second.first & NEW_MASK, aborted_txs);
 			}
+            actual_storage_->CleanReadDep(it->first, txn_->local_txn_id());
 		}
 	}
 
