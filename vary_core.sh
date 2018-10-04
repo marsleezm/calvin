@@ -1,6 +1,7 @@
 #!/bin/bash
 
-cores="1 4 5 8 10 20 30 40 50"
+#cores="1 4 5 8 10 20 30 40 50"
+cores="10 10 10"
 #cores="1"
 read_deps="1"
 total_orders="1"
@@ -26,7 +27,7 @@ do
                 tail -n +4 haha > haha2
                 throughput=`awk -F ',' '{sum+=$1;line+=1}END{print sum/line}' haha2` 
                 abort=`awk -F ',' '{sum+=$2;line+=1}END{print sum/line}' haha2` 
-                echo $C , $throughput, $abort >> bench_test/${up}/hi_con_result_rd${rd}_to${to}_rp${rp}
+                echo $C , $throughput, $abort >> bench_test/${up}/hi_con_dist_result_sc200
             done
         done
     done
