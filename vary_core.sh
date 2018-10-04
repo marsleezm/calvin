@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cores="1 4 5 8 10 20 30 40 50"
+cores="5 8 10 20 30 40 50"
 #cores="1"
 read_deps="1"
 total_orders="1"
@@ -21,13 +21,13 @@ do
             for C in $cores
             do
                 sed -i "s/num_threads =.*/num_threads = $C/g" myconfig.conf
-                sed -i "s/num_warehouses =.*/num_warehouses = $C/g" myconfig.conf
+                #sed -i "s/num_warehouses =.*/num_warehouses = $C/g" myconfig.conf
                 ./bin/deployment/db 0 tn 0
                 sed -e '/LATENCY/,$d' 0output.txt  > haha
                 tail -n +4 haha > haha2
                 throughput=`awk -F ',' '{sum+=$1;line+=1}END{print sum/line}' haha2` 
                 abort=`awk -F ',' '{sum+=$2;line+=1}END{print sum/line}' haha2` 
-                echo $C , $throughput, $abort >> bench_test/${up}/locon_remove_read_result_rd${rd}_to${to}_rp${rp}
+                echo $C , $throughput, $abort >> bench_test/${up}/locon_remove_read_result_sc200
             done
         done
     done
